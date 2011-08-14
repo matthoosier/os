@@ -1,0 +1,5 @@
+.*.depends
+*.i
+*.s
+*.o
+.*.swp
