@@ -8,7 +8,7 @@ preproc_temps = $(patsubst %.c, %.i, $(c_files))
 
 CROSS_COMPILE = arm-none-eabi
 
-CFLAGS += -Wall -Werror -save-temps -g
+CFLAGS += -Wall -Werror -save-temps -g -march=armv6
 LDFLAGS += -Wl,-T,kernel.ldscript
 
 CC = $(CROSS_COMPILE)-gcc
@@ -29,6 +29,6 @@ debug: kernel
 	$(CROSS_COMPILE)-gdb kernel --eval="target remote :1234"
 
 run: kernel
-	qemu-system-arm -s -S -kernel kernel
+	qemu-system-arm -s -S -kernel kernel -cpu arm1136
 
 .PHONY: clean debug run
