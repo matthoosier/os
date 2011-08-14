@@ -1,35 +1,29 @@
+    .include "arm-defs.inc"
     .section "vectors"
 
-/* Processor reset */
-reset:
+vector:
+    /* Processor reset. Serviced in svc mode. */
     b reset_handler
 
-/* Illegal instruction */
-undef: 
+    /* Undefined instruction. Serviced in und mode. */
     b undef_handler
 
-/* Software interrupt */
-swi:
+    /* Software interrupt. Serviced in svc mode. */
     b swi_handler
 
-/* Instruction stream prefetch abort */
-pabt:
+    /* Instruction fetch memory abort. Serviced in abt mode. */
     b pabt_handler
 
-/* Data abort */
-dabt:
+    /* Data access memory abort. Serviced in abt mode. */
     b dabt_handler
 
-/* Reserved for future use */
-reserved:
+    /* Reserved for future use. */
     b reserved_handler
 
-/* General-purpose interrupt */
-irq:
+    /* General-purpose interrupt. Serviced in irq mode. */
     b irq_handler
 
-/* Fast interrupt */
-fiq:
+    /* Fast interrupt. Serviced in fiq mode. */
     b fiq_handler
 
     .text
@@ -41,6 +35,7 @@ _start:
     ARM stacks grow down, so set the initial stack pointer to the "high"
     end of the chunk of memory designated for our initialization stack.
     */
+    cps #svc
     ldr sp, =init_stack_ceiling
 
     bl init

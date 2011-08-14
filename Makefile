@@ -23,9 +23,12 @@ kernel: $(objs)
 	$(LD) $(LDFLAGS) -nostdlib -o $@ $(objs)
 
 clean:
-	rm -f $(objs) $(asm_temps) $(preproc_temps)
+	rm -f $(objs) $(asm_temps) $(preproc_temps) kernel
 
-debug:
+debug: kernel
 	$(CROSS_COMPILE)-gdb kernel --eval="target remote :1234"
 
-.PHONY: clean debug
+run: kernel
+	qemu-system-arm -s -S -kernel kernel
+
+.PHONY: clean debug run
