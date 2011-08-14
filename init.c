@@ -1,18 +1,17 @@
+#include <stdlib.h>
+
+#include "array.h"
 #include "arch.h"
 #include "init.h"
 #include "mmu.h"
 #include "scheduler.h"
 #include "thread.h"
-
-#include <stdlib.h>
+#include "vm.h"
 
 uint8_t init_stack[PAGE_SIZE]
     __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
 
-uint8_t * init_stack_ceiling = &init_stack[PAGE_SIZE];
-
-uint8_t page_pool[1024 * 1024 * 512]
-    __attribute__ ((aligned (PAGE_SIZE)));
+uint8_t * init_stack_ceiling = &init_stack[N_ELEMENTS(init_stack)];
 
 /* Retroactively filled in */
 static struct thread first_thread;

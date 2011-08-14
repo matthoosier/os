@@ -22,7 +22,7 @@ int arch_get_version (void)
         :
     );
 
-    if (!testbit(cp15_r1, 19)) {
+    if (!TESTBIT(cp15_r1, 19)) {
         uint32_t bits_12_15 = (cp15_r1 >> 12) & 0b1111;
 
         if (bits_12_15 == 0x0) {

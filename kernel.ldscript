@@ -6,23 +6,43 @@ ENTRY(_start)
 SEARCH_DIR("/opt/local/arm-none-eabi/lib");
 SECTIONS
 {
-    . = 0x00000000;
+    __KernelStart = 3 * 1024 * 1024 * 1024;
 
-    .vectors : { *(vectors) }
+    . = 0x0;
 
-    . = 0x00008000;
+    .early.text :
+        {
+        early-*.o(.text)
+        }
 
-    .text : {
-        *(.text) *(fib)
-    }
+    .early.data :
+        {
+        early-*.o(.data .data.*)
+        early-*.o(.bss .bss.*)
+        }
 
-    . = ALIGN(CONSTANT (MAXPAGESIZE)) + (. & (CONSTANT (MAXPAGESIZE) - 1));
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
+    begin_high = .;
 
-    .data : {
-        *(.data)
-    }
+    .text (begin_high + 3 * 1024 * 1024 * 1024) : AT(begin_high)
+        ALIGN(CONSTANT(MAXPAGESIZE))
+        {
+            *(.text)
+        }
 
-    .bss : {
-        *(.bss)
-    }
+    .data :
+        ALIGN(CONSTANT(MAXPAGESIZE))
+        {
+            *(.data)
+            *(.rodata)
+        }
+
+    .bss :
+        ALIGN(CONSTANT(MAXPAGESIZE))
+        {
+            *(.bss)
+        }
+
+    heap_start = ALIGN(CONSTANT(MAXPAGESIZE));
+    ram_end = ((3 * 1024 + 256) * 1024 * 1024);
 }

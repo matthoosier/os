@@ -24,7 +24,7 @@ int mmu_get_enabled (void)
         :
     );
 
-    return testbit(cp15_r1, ARM_MMU_ENABLED_BIT);
+    return TESTBIT(cp15_r1, ARM_MMU_ENABLED_BIT);
 }
 
 void mmu_set_enabled (int enable)
@@ -38,7 +38,7 @@ void mmu_set_enabled (int enable)
         :
     );
 
-    cp15_r1 |= setbit(ARM_MMU_ENABLED_BIT);
+    cp15_r1 |= SETBIT(ARM_MMU_ENABLED_BIT);
 
     asm volatile(
         "mcr p15, 0, %0, c1, c0"
@@ -46,4 +46,13 @@ void mmu_set_enabled (int enable)
         : "r"(cp15_r1)
         :
     );
+}
+
+physaddr_t mmu_get_pagetable_base (void)
+{
+    return 0;
+}
+
+void mmu_set_pagetable_base (physaddr_t newbase)
+{
 }

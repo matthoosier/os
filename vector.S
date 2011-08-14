@@ -1,6 +1,3 @@
-    .include "arm-defs.inc"
-    .section "vectors"
-
 vector:
     /* Processor reset. Serviced in svc mode. */
     b reset_handler
@@ -25,23 +22,6 @@ vector:
 
     /* Fast interrupt. Serviced in fiq mode. */
     b fiq_handler
-
-    .text
-    .align 4
-    .global _start
-
-_start:
-    /*
-    ARM stacks grow down, so set the initial stack pointer to the "high"
-    end of the chunk of memory designated for our initialization stack.
-    */
-    cps #svc
-    ldr sp, =init_stack_ceiling
-
-    bl init
-
-0:
-    b 0b
 
 reset_handler:
     b reset_handler
