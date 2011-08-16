@@ -7,6 +7,7 @@ SEARCH_DIR("/opt/local/arm-none-eabi/lib");
 SECTIONS
 {
     __KernelStart = 3 * 1024 * 1024 * 1024;
+    __PhysicalRamSize = 256 * 1024 * 1024;
 
     . = 0x0;
 
@@ -24,7 +25,7 @@ SECTIONS
     . = ALIGN(CONSTANT(MAXPAGESIZE));
     begin_high = .;
 
-    .text (begin_high + 3 * 1024 * 1024 * 1024) : AT(begin_high)
+    .text (begin_high + __KernelStart) : AT(begin_high)
         ALIGN(CONSTANT(MAXPAGESIZE))
         {
             *(.text)
@@ -44,5 +45,5 @@ SECTIONS
         }
 
     heap_start = ALIGN(CONSTANT(MAXPAGESIZE));
-    ram_end = ((3 * 1024 + 256) * 1024 * 1024);
+    ram_end = __KernelStart + __PhysicalRamSize;
 }
