@@ -42,7 +42,16 @@ extern void * __KernelStart[];
 #define P2V(_physaddr) ((_physaddr) + KERNEL_MODE_OFFSET)
 
 #define VIRTUAL_HEAP_START ((vmaddr_t)&heap_start)
-#define HEAP_SIZE ((vmaddr_t)(VIRTUAL_HEAP_START - (vmaddr_t)&ram_end))
+#define HEAP_SIZE ((size_t)(VIRTUAL_HEAP_START - (vmaddr_t)&ram_end))
+
+/* Initialize page allocator mechanism */
+extern void vm_init();
+
+/* Returns back the virtual memory address of a newly allocated page */
+extern void * vm_page_alloc ();
+
+/* Release the page starting at virtual memory address 'page_address' */
+extern void vm_page_free (void * page_address);
 
 END_DECLS
 

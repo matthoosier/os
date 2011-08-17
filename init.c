@@ -36,6 +36,8 @@ void init (void)
     int mmu_enabled;
     int arch_version;
 
+    vm_init();
+
     /*
     Record the important static bits about this thread. The rest will
     be filled in automatically the first time we context switch.

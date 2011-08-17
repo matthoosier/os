@@ -4,8 +4,6 @@
 #include <stdint.h>
 #include "decls.h"
 
-#define PAGE_SIZE 4096
-
 BEGIN_DECLS
 
 extern uint8_t init_stack[];

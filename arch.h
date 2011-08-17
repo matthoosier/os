@@ -5,7 +5,10 @@
 #include "decls.h"
 
 #ifdef __arm__
-    #define REGISTER_COUNT (16 + 1)
+    #define PAGE_SHIFT          12          /* One page is 2 ** 12 bytes */
+    #define PAGE_MASK           0xfffff000  /* The 20 most sig. bits */
+
+    #define REGISTER_COUNT      (16 + 1)
 
     #define REGISTER_INDEX_R0   0
     #define REGISTER_INDEX_SP   13
@@ -15,6 +18,9 @@
 #else
     #error
 #endif
+
+#define PAGE_SIZE                   (1 << PAGE_SHIFT)
+#define PAGE_COUNT_FROM_SIZE(_sz)   ((_sz) >> PAGE_SHIFT)
 
 BEGIN_DECLS
 
