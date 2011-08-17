@@ -44,6 +44,6 @@ SECTIONS
             *(.bss)
         }
 
-    heap_start = ALIGN(CONSTANT(MAXPAGESIZE));
-    ram_end = __KernelStart + __PhysicalRamSize;
+    __HeapStart = ALIGN(CONSTANT(MAXPAGESIZE));
+    __RamEnd = __KernelStart + __PhysicalRamSize;
 }

@@ -7,10 +7,10 @@
 BEGIN_DECLS
 
 /* Don't use this directly. Use VIRTUAL_HEAP_START and HEAP_SIZE */
-extern char heap_start;
+extern char __HeapStart;
 
 /* Don't use this directly. Use VIRTUAL_HEAP_START and HEAP_SIZE */
-extern char ram_end;
+extern char __RamEnd;
 
 typedef uintptr_t physaddr_t;
 typedef uintptr_t vmaddr_t;
@@ -41,8 +41,8 @@ extern void * __KernelStart[];
  */
 #define P2V(_physaddr) ((_physaddr) + KERNEL_MODE_OFFSET)
 
-#define VIRTUAL_HEAP_START ((vmaddr_t)&heap_start)
-#define HEAP_SIZE ((size_t)(VIRTUAL_HEAP_START - (vmaddr_t)&ram_end))
+#define VIRTUAL_HEAP_START ((vmaddr_t)&__HeapStart)
+#define HEAP_SIZE ((size_t)(VIRTUAL_HEAP_START - (vmaddr_t)&__RamEnd))
 
 /* Initialize page allocator mechanism */
 extern void vm_init();
