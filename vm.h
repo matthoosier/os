@@ -2,6 +2,7 @@
 #define __VM_H__
 
 #include <stdint.h>
+#include <sys/types.h>
 #include "decls.h"
 
 BEGIN_DECLS
@@ -44,14 +45,21 @@ extern void * __KernelStart[];
 #define VIRTUAL_HEAP_START ((vmaddr_t)&__HeapStart)
 #define HEAP_SIZE ((size_t)((vmaddr_t)&__RamEnd) - VIRTUAL_HEAP_START)
 
+struct page
+{
+    vmaddr_t    base_address;
+    size_t      length;
+    uint8_t     in_use;
+};
+
 /* Initialize page allocator mechanism */
 extern void vm_init();
 
 /* Returns back the virtual memory address of a newly allocated page */
-extern void * vm_page_alloc ();
+extern struct page * vm_page_alloc ();
 
 /* Release the page starting at virtual memory address 'page_address' */
-extern void vm_page_free (void * page_address);
+extern void vm_page_free (struct page * page);
 
 END_DECLS
 
