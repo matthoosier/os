@@ -148,6 +148,23 @@ void early_setup_dual_memory_map (void)
         early_table[virt_i] = early_table[i];
     }
 
+    /* Set up high mappings alone for all memory not statically allocated */
+    for (i = first_unused_phys_mb; i < N_ELEMENTS(early_table) - (KERNEL_MODE_OFFSET >> BITS_PER_MEGABYTE); i++) {
+        /*
+        The loop counter already tells us what physical megabyte offset
+        should be mapped for the the i+(KERNEL_MODE_OFFSET/1MB)th
+        translation table element. Just put the loop counter into the top
+        12 bits of the TT entry.
+        */
+        uintptr_t virt_i = i + (KERNEL_MODE_OFFSET >> BITS_PER_MEGABYTE);
+
+        early_table[virt_i] =
+            PT_FIRSTLEVEL_MAPTYPE_SECTION |
+            (DOMAIN_DEFAULT << PT_FIRSTLEVEL_DOMAIN_SHIFT) |
+            PT_FIRSTLEVEL_SECTION_AP_FULL |
+            (i << PT_FIRSTLEVEL_SECTION_BASE_ADDR_SHIFT);
+    }
+
     _install_pagetable();
     _enable_mmu();
 }
