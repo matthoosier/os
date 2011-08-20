@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include "decls.h"
+#include "list.h"
 
 BEGIN_DECLS
 
@@ -47,9 +48,17 @@ extern void * __KernelStart[];
 
 struct page
 {
+    /* Always a multiple of @length. */
     vmaddr_t    base_address;
+
+    /* Always evenly divisible by some power of two. */
     size_t      length;
-    uint8_t     in_use;
+
+    /*
+    Used internally by VM to keep list of free pages, and allowed for
+    external use by holders of allocated pages to track the ownership.
+    */
+    struct list_head list_link;
 };
 
 /* Initialize page allocator mechanism */

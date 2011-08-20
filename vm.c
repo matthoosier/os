@@ -1,11 +1,14 @@
 #include <stdlib.h>
 #include "arch.h"
 #include "bits.h"
+#include "list.h"
 #include "vm.h"
 
 static unsigned int     num_pages;
 static struct page *    page_structs;
 static vmaddr_t         pages_base;
+
+struct list_head        freelist_head = LIST_HEAD_INIT(freelist_head);
 
 static void ensure_init ()
 {
@@ -36,7 +39,9 @@ static void ensure_init ()
     for (i = 0; i < num_pages; i++) {
         page_structs[i].base_address    = pages_base + (i * PAGE_SIZE);
         page_structs[i].length          = PAGE_SIZE;
-        page_structs[i].in_use          = 0;
+
+        INIT_LIST_HEAD(&page_structs[i].list_link);
+        list_add_tail(&page_structs[i].list_link, &freelist_head);
     }
 }
 
@@ -47,19 +52,23 @@ void vm_init()
 
 struct page * vm_page_alloc ()
 {
-    unsigned int i;
+    struct page * result;
 
-    for (i = 0; i < num_pages; i++) {
-        if (!page_structs[i].in_use) {
-            page_structs[i].in_use = 1;
-            return &page_structs[i];
-        }
+    if (list_empty(&freelist_head)) {
+        return NULL;
     }
 
-    return NULL;
+    /* This will always find an entry on the first iteration. */
+    result = list_first_entry(&freelist_head, struct page, list_link);
+
+    /* Remove the selected page from the free-list. */
+    list_del_init(&result->list_link);
+
+    return result;
 }
 
 void vm_page_free (struct page * page)
 {
-    page->in_use = 0;
+    /* Avoid unnecessary internal fragmentation.  */
+    list_add(&page->list_link, &freelist_head);
 }
