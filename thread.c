@@ -61,7 +61,7 @@ void thread_create (struct thread *                     descriptor,
 
     descriptor->stack.ceiling = args->stack.ceiling;
     descriptor->stack.base = args->stack.base;
-    descriptor->next = NULL;
+    INIT_LIST_HEAD(&descriptor->queue_link);
     descriptor->state = THREAD_STATE_READY;
 
     /* Initially only the program and stack counter matter. */

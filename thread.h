@@ -3,6 +3,7 @@
 
 #include "decls.h"
 #include "arch.h"
+#include "list.h"
 
 BEGIN_DECLS
 
@@ -28,7 +29,7 @@ struct thread
     thread_state state;
 
     /* For use in scheduling queues. */
-    struct thread * next;
+    struct list_head queue_link;
 };
 
 struct thread_create_args

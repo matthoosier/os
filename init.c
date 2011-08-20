@@ -45,7 +45,8 @@ void init (void)
     first_thread.stack.ceiling  = init_stack_ceiling;
     first_thread.stack.base     = &init_stack[0];
     first_thread.state          = THREAD_STATE_RUNNING;
-    first_thread.next           = NULL;
+    INIT_LIST_HEAD(&first_thread.queue_link);
+
     current                     = &first_thread;
 
     mmu_enabled = mmu_get_enabled();
