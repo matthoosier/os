@@ -1,3 +1,5 @@
+    .section .text.vector
+
 vector:
     /* Processor reset. Serviced in svc mode. */
     b reset_handler

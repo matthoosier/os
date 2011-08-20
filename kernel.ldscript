@@ -46,4 +46,11 @@ SECTIONS
 
     __HeapStart = ALIGN(CONSTANT(MAXPAGESIZE));
     __RamEnd = __KernelStart + __PhysicalRamSize;
+
+    .vector 0xffff0000 : AT(ALIGN(LOADADDR(.bss) + SIZEOF(.bss), 65536))
+        {
+            __VectorStartPhysical = LOADADDR(.vector);
+            *(.text.vector)
+            __VectorEndPhysical = . - (ADDR(.vector) - LOADADDR(.vector));
+        }
 }
