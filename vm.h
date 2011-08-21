@@ -48,11 +48,8 @@ extern void * __KernelStart[];
 
 struct page
 {
-    /* Always a multiple of @length. */
+    /* Always a multiple of PAGE_SIZE. */
     vmaddr_t    base_address;
-
-    /* Always evenly divisible by some power of two. */
-    size_t      length;
 
     /*
     Used internally by VM to keep list of free pages, and allowed for

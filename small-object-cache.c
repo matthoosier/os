@@ -52,7 +52,7 @@ static void small_object_cache_allocate_slab (struct object_cache * cache)
     init_slab(new_slab);
     new_slab->page = new_page;
 
-    objs_in_slab = (new_page->length - sizeof(*new_slab))/ cache->element_size;
+    objs_in_slab = (PAGE_SIZE - sizeof(*new_slab))/ cache->element_size;
 
     /* Carve out (PAGE_SIZE / element_size) individual buffers. */
     for (i = 0; i < objs_in_slab; ++i) {

@@ -38,7 +38,6 @@ static void ensure_init ()
 
     for (i = 0; i < num_pages; i++) {
         page_structs[i].base_address    = pages_base + (i * PAGE_SIZE);
-        page_structs[i].length          = PAGE_SIZE;
 
         INIT_LIST_HEAD(&page_structs[i].list_link);
         list_add_tail(&page_structs[i].list_link, &freelist_head);
