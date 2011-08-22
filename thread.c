@@ -68,6 +68,9 @@ void thread_create (struct thread *                     descriptor,
     descriptor->registers[REGISTER_INDEX_PC] = (uint32_t)args->body;
     descriptor->registers[REGISTER_INDEX_SP] = (uint32_t)descriptor->stack.ceiling;
 
+    /* Set up the argument value */
+    descriptor->registers[REGISTER_INDEX_R0] = (uint32_t)args->param;
+
     scheduler_queue_insert(THREAD_STATE_READY, descriptor);
     scheduler_yield();
 }

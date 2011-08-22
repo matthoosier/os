@@ -22,7 +22,7 @@ static struct thread second_thread;
 static uint8_t second_thread_stack[PAGE_SIZE]
     __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
 
-void second_thread_body (void)
+void second_thread_body (void * param)
 {
     while (1) {
         scheduler_yield();
@@ -58,6 +58,7 @@ void init (void)
     args.stack.ceiling = &second_thread_stack[sizeof(second_thread_stack) / sizeof(second_thread_stack[0])];
     args.stack.base = &second_thread_stack[0];
     args.body = second_thread_body;
+    args.param = "Foo!";
 
     thread_create(&second_thread, &args);
 

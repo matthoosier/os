@@ -40,7 +40,8 @@ struct thread_create_args
         void *  base;
     } stack;
 
-    void (*body) (void);
+    void (*body) (void * param);
+    void * param;
 };
 
 extern void thread_create (struct thread *                      descriptor,
