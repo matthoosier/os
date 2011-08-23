@@ -17,7 +17,7 @@ void scheduler_yield (void)
         struct thread * outgoing;
         struct thread * next;
 
-        outgoing = current;
+        outgoing = THREAD_CURRENT();
         outgoing->state = THREAD_STATE_READY;
         list_add_tail(&outgoing->queue_link, &READY_QUEUE);
 

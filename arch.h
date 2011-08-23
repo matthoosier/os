@@ -15,12 +15,23 @@
     #define REGISTER_INDEX_LR   14
     #define REGISTER_INDEX_PC   15
     #define REGISTER_INDEX_PSR  16
+
+    #define CURRENT_STACK_POINTER()                     \
+        ({                                              \
+        uint32_t sp;                                    \
+        asm volatile("mov %[sp], sp": [sp]"=r"(sp));    \
+        sp;                                             \
+        })
+
 #else
     #error
 #endif
 
 #define PAGE_SIZE                   (1 << PAGE_SHIFT)
 #define PAGE_COUNT_FROM_SIZE(_sz)   ((_sz) >> PAGE_SHIFT)
+
+#define ALIGN(_val, _pow)                                       \
+        ((((_val) + ((1 << (_pow)) - 1)) >> (_pow)) << (_pow))
 
 BEGIN_DECLS
 

@@ -3,22 +3,15 @@
 #include "arch.h"
 #include "scheduler.h"
 #include "thread.h"
+#include "vm.h"
 
-struct thread * current = NULL;
+static void thread_trampoline ();
 
 void thread_switch (struct thread * outgoing,
                     struct thread * incoming)
 {
     uint32_t next_pc = next_pc;
     uint32_t cpsr_temp = cpsr_temp;
-
-    /*
-    Remember to switch this _before_ the assembly statement!
-
-    Afterward won't happen until after the 'outgoing' thread
-    gets scheduled again sometime in the future.
-    */
-    current = incoming;
 
     asm volatile(
         "                                               \n"
@@ -49,28 +42,54 @@ void thread_switch (struct thread * outgoing,
     );
 }
 
-void thread_create (struct thread *                     descriptor,
-                    const struct thread_create_args *   args)
+struct thread * thread_create (thread_func body, void * param)
 {
-    int i;
+    unsigned int    i;
+    struct page *   stack_page;
+    struct thread * descriptor;
+
+    stack_page = vm_page_alloc();
+
+    if (!stack_page) {
+        /* No memory available to allocate stack */
+        return NULL;
+    }
+
+    /*
+    Carve the thread struct out of the beginning (high addresses)
+    of the kernel stack.
+    */
+    descriptor = THREAD_STRUCT_FROM_SP(stack_page->base_address);
 
     for (i = 0; i < sizeof(descriptor->registers) / sizeof(descriptor->registers[0]); ++i)
     {
         descriptor->registers[i] = 0;
     }
 
-    descriptor->stack.ceiling = args->stack.ceiling;
-    descriptor->stack.base = args->stack.base;
+    descriptor->kernel_stack.ceiling = descriptor;
+    descriptor->kernel_stack.base = (void *)stack_page->base_address;
+    descriptor->kernel_stack.page = stack_page;
     INIT_LIST_HEAD(&descriptor->queue_link);
     descriptor->state = THREAD_STATE_READY;
 
     /* Initially only the program and stack counter matter. */
-    descriptor->registers[REGISTER_INDEX_PC] = (uint32_t)args->body;
-    descriptor->registers[REGISTER_INDEX_SP] = (uint32_t)descriptor->stack.ceiling;
+    descriptor->registers[REGISTER_INDEX_PC] = (uint32_t)body;
+    descriptor->registers[REGISTER_INDEX_SP] = (uint32_t)descriptor->kernel_stack.ceiling;
 
     /* Set up the argument value */
-    descriptor->registers[REGISTER_INDEX_R0] = (uint32_t)args->param;
+    descriptor->registers[REGISTER_INDEX_R0] = (uint32_t)param;
+
+    /* Install trampoline in case the thread returns. */
+    descriptor->registers[REGISTER_INDEX_LR] = (uint32_t)thread_trampoline;
 
     scheduler_queue_insert(THREAD_STATE_READY, descriptor);
     scheduler_yield();
+
+    return descriptor;
+}
+
+static void thread_trampoline ()
+{
+    while (1) {
+    }
 }
