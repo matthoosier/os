@@ -12,12 +12,20 @@ BEGIN_DECLS
 /* One-eighth of a page (right-shift by three is same as divide by 8) */
 #define MAX_SMALL_OBJECT_SIZE (PAGE_SIZE >> 3)
 
-/*
-Used by large-object caches to get bufctl's not hosted inside the slab
-storage. Prevents terrible space waste for large (>= PAGE_SIZE / 2)
-objects.
-*/
-extern struct object_cache butctls_cache;
+struct slab;
+
+struct object_cache_ops
+{
+    void (*static_init) (void);
+    void (*constructor) (struct object_cache * cache);
+    void (*destructor) (struct object_cache * cache);
+    struct slab * (*try_allocate_slab) (struct object_cache * cache);
+    void (*try_free_slab) (struct object_cache * cache, struct slab * slab);
+    struct slab * (*map_bufctl_to_slab) (struct object_cache * cache, void * bufctl_addr);
+};
+
+extern const struct object_cache_ops small_objects_ops;
+extern const struct object_cache_ops large_objects_ops;
 
 struct bufctl
 {
@@ -29,7 +37,7 @@ struct bufctl
 };
 
 /* Enforce that the bufctl's don't grow larger than 1/8 of a page */
-COMPILER_ASSERT(3 * 8 <= PAGE_SIZE);
+COMPILER_ASSERT(sizeof(struct bufctl) << 3 <= PAGE_SIZE);
 
 struct slab
 {
@@ -46,10 +54,8 @@ struct slab
     struct list_head cache_link;
 };
 
-void init_slab (struct slab * slab);
-
-void * small_object_cache_alloc (struct object_cache * cache);
-void small_object_cache_free (struct object_cache * cache, void * element);
+extern void init_slab (struct slab * slab);
+extern void init_bufctl (struct bufctl * bufctl);
 
 END_DECLS
 

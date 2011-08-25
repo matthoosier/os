@@ -3,20 +3,27 @@
 #include "object-cache-internal.h"
 #include "vm.h"
 
-static inline struct slab * slab_from_bufctl (void * bufctl_addr)
+static void static_init (void)
+{
+}
+
+static void constructor (struct object_cache * cache)
+{
+}
+
+static void destructor (struct object_cache * cache)
+{
+}
+
+static struct slab * small_objects_slab_from_bufctl (
+        struct object_cache * cache,
+        void * bufctl_addr
+        )
 {
     return (struct slab *)(((vmaddr_t)bufctl_addr & PAGE_MASK) + PAGE_SIZE - sizeof(struct slab));
 }
 
-static void init_bufctl (struct bufctl * bufctl)
-{
-    /* When not allocated to user, the object itself is freelist element */
-    bufctl->buf = (void *)bufctl;
-
-    INIT_LIST_HEAD(&bufctl->freelist_link);
-}
-
-static void small_object_cache_try_reclaim_slab (struct object_cache * cache, struct slab * slab)
+static void small_objects_free_slab (struct object_cache * cache, struct slab * slab)
 {
     if (slab->refcount == 0) {
         /*
@@ -35,7 +42,7 @@ static void small_object_cache_try_reclaim_slab (struct object_cache * cache, st
     }
 }
 
-static void small_object_cache_allocate_slab (struct object_cache * cache)
+static struct slab * small_objects_try_allocate_slab (struct object_cache * cache)
 {
     struct page *   new_page;
     struct slab *   new_slab;
@@ -45,10 +52,10 @@ static void small_object_cache_allocate_slab (struct object_cache * cache)
     new_page = vm_page_alloc();
 
     if (!new_page) {
-        return;
+        return NULL;
     }
 
-    new_slab = slab_from_bufctl((void *)new_page->base_address);
+    new_slab = cache->ops->map_bufctl_to_slab(cache, (void *)new_page->base_address);
     init_slab(new_slab);
     new_slab->page = new_page;
 
@@ -67,60 +74,14 @@ static void small_object_cache_allocate_slab (struct object_cache * cache)
         list_add_tail(&new_bufctl->freelist_link, &new_slab->freelist_head);
     }
 
-    /* Finally insert the slab itself into the cache's records */
-    list_add(&new_slab->cache_link, &cache->slab_head);
+    return new_slab;
 }
 
-void * small_object_cache_alloc (struct object_cache * cache)
-{
-    struct slab * slab_cursor;
-    struct bufctl * bufctl;
-
-    list_for_each_entry (slab_cursor, &cache->slab_head, cache_link) {
-        if (!list_empty(&slab_cursor->freelist_head)) {
-            bufctl = list_first_entry(&slab_cursor->freelist_head, struct bufctl, freelist_link);
-            slab_cursor->refcount++;
-            list_del_init(&bufctl->freelist_link);
-            return bufctl;
-        }
-    }
-
-    /* If control gets here, we're out of objects. Try to make more. */
-    small_object_cache_allocate_slab(cache);
-
-    /* If a new slab was successfully added, it would be at the front */
-    if (!list_empty(&cache->slab_head)) {
-        slab_cursor = list_entry(cache->slab_head.next, struct slab, cache_link);
-        if (!list_empty(&slab_cursor->freelist_head)) {
-            bufctl = list_first_entry(&slab_cursor->freelist_head, struct bufctl, freelist_link);
-            slab_cursor->refcount++;
-            list_del_init(&bufctl->freelist_link);
-            return bufctl;
-        }
-    }
-
-    return NULL;
-}
-
-void small_object_cache_free (struct object_cache * cache, void * element)
-{
-    struct bufctl * reclaimed_bufctl;
-    struct slab *   slab;
-
-    /*
-    Take back over the payload of the object as our internal
-    free-list representation.
-    */
-    reclaimed_bufctl = (struct bufctl *)element;
-    init_bufctl(reclaimed_bufctl);
-
-    slab = slab_from_bufctl(reclaimed_bufctl);
-
-    /*
-    Stick on head of freelist to promote reuse of objects from slab
-    that already had some allocations made.
-    */
-    list_add(&reclaimed_bufctl->freelist_link, &slab->freelist_head);
-    slab->refcount--;
-    small_object_cache_try_reclaim_slab(cache, slab);
-}
+const struct object_cache_ops small_objects_ops = {
+    .static_init = static_init,
+    .constructor = constructor,
+    .destructor = destructor,
+    .try_allocate_slab = small_objects_try_allocate_slab,
+    .try_free_slab = small_objects_free_slab,
+    .map_bufctl_to_slab = small_objects_slab_from_bufctl,
+};
