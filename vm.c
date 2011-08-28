@@ -2,6 +2,7 @@
 #include "arch.h"
 #include "bits.h"
 #include "list.h"
+#include "once.h"
 #include "vm.h"
 
 static unsigned int     num_pages;
@@ -10,7 +11,9 @@ static vmaddr_t         pages_base;
 
 struct list_head        freelist_head = LIST_HEAD_INIT(freelist_head);
 
-static void ensure_init ()
+static once_t           init_control = ONCE_INIT;
+
+static void ensure_init (void * ignored)
 {
     unsigned int array_size;
     unsigned int i;
@@ -44,14 +47,11 @@ static void ensure_init ()
     }
 }
 
-void vm_init()
-{
-    ensure_init();
-}
-
 struct page * vm_page_alloc ()
 {
     struct page * result;
+
+    once(&init_control, ensure_init, NULL);
 
     if (list_empty(&freelist_head)) {
         return NULL;
@@ -68,6 +68,8 @@ struct page * vm_page_alloc ()
 
 void vm_page_free (struct page * page)
 {
+    once(&init_control, ensure_init, NULL);
+
     /* Avoid unnecessary internal fragmentation.  */
     list_add(&page->list_link, &freelist_head);
 }

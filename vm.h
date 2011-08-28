@@ -58,9 +58,6 @@ struct page
     struct list_head list_link;
 };
 
-/* Initialize page allocator mechanism */
-extern void vm_init();
-
 /* Returns back the virtual memory address of a newly allocated page */
 extern struct page * vm_page_alloc ();
 
