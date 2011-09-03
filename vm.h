@@ -64,6 +64,9 @@ extern struct page * vm_page_alloc ();
 /* Release the page starting at virtual memory address 'page_address' */
 extern void vm_page_free (struct page * page);
 
+/* Returns back the virtual memory address of a block of contiguous pages */
+extern struct page * vm_pages_alloc (unsigned int order);
+
 END_DECLS
 
 #endif /* __VM_H__ */
