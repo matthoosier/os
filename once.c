@@ -1,10 +1,18 @@
 #include "once.h"
+#include "spinlock.h"
 
 void once (once_t * control, once_func func, void * param)
 {
-    if (*control == ONCE_INIT)
+    if (!control->done)
     {
-        *control = !ONCE_INIT;
-        func(param);
+        spinlock_lock(&control->lock);
+
+        if (!control->done)
+        {
+            control->done = true;
+            func(param);
+        }
+
+        spinlock_unlock(&control->lock);
     }
 }

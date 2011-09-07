@@ -1,9 +1,16 @@
 #ifndef __ONCE_H__
 #define __ONCE_H__
 
-typedef int once_t;
+#include <stdbool.h>
+#include "spinlock.h"
 
-#define ONCE_INIT 0
+typedef struct
+{
+    spinlock_t  lock;
+    bool        done;
+} once_t;
+
+#define ONCE_INIT { SPINLOCK_INIT, false }
 
 typedef void (*once_func) (void * param);
 
