@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include "arch.h"
+#include "assert.h"
 #include "list.h"
 #include "object-cache-internal.h"
 #include "once.h"
@@ -90,6 +91,7 @@ static struct slab * large_objects_try_allocate_slab (struct object_cache * cach
 
         /* Record controlling slab's location in auxiliary map */
         tree_map_insert(cache->bufctl_to_slab_map, new_bufctl, new_slab);
+        assert(tree_map_lookup(cache->bufctl_to_slab_map, new_bufctl) == new_slab);
 
         /* Now insert into freelist */
         list_add_tail(&new_bufctl->freelist_link, &new_slab->freelist_head);
@@ -115,7 +117,11 @@ static void large_objects_free_slab (struct object_cache * cache, struct slab * 
         entry for each bufctl.
         */
         list_for_each_entry (bufctl_cursor, &slab->freelist_head, freelist_link) {
-            tree_map_remove(cache->bufctl_to_slab_map, bufctl_cursor);
+            
+            struct slab * removed;
+
+            removed = tree_map_remove(cache->bufctl_to_slab_map, bufctl_cursor);
+            assert(removed != NULL);
         }
 
         /* Release the page that stored the user buffers */
