@@ -1,6 +1,7 @@
-#include "tree-map.h"
+#include "assert.h"
 #include "object-cache.h"
 #include "once.h"
+#include "tree-map.h"
 
 static once_t init_control = ONCE_INIT;
 
@@ -16,6 +17,7 @@ struct _internal_node;
 struct tree_map
 {
     struct _internal_node * root;
+    unsigned int size;
 
     tree_map_compare_func comparator;
 };
@@ -29,7 +31,10 @@ typedef struct _internal_node
     tree_map_value_t   value;
 } internal_node;
 
-static unsigned int internal_node_height (internal_node * node);
+/* Needs to be signed integer to avoid wraparound when comparing results */
+static int height (
+        internal_node * node
+        );
 
 static internal_node * internal_insert (
         struct tree_map * tree,
@@ -57,6 +62,35 @@ static void internal_free_node (
         internal_node * node
         );
 
+static internal_node * internal_rebalance (
+        internal_node * node
+        );
+
+static internal_node * rotate_with_left_child (
+        internal_node * k2
+        );
+
+static internal_node * double_with_left_child (
+        internal_node * k3
+        );
+
+static internal_node * rotate_with_right_child (
+        internal_node * k1
+        );
+
+static internal_node * double_with_right_child (
+        internal_node * k1
+        );
+
+typedef void (*foreach_func) (
+        internal_node * node
+        );
+
+static void internal_foreach (
+        internal_node * node,
+        foreach_func func
+        );
+
 /**
  * One-time initialization before any trees can be created.
  */
@@ -75,8 +109,7 @@ struct tree_map * tree_map_alloc (tree_map_compare_func comparator)
     result = object_cache_alloc(&tree_map_cache);
     result->root = NULL;
     result->comparator = comparator;
-
-    internal_node_height(result->root);
+    result->size = 0;
 
     return result;
 }
@@ -85,6 +118,15 @@ void tree_map_free (struct tree_map * tree)
 {
     internal_free_node(tree, tree->root);
     object_cache_free(&tree_map_cache, tree);
+}
+
+static void check_subtree_balance (
+        internal_node * node
+        )
+{
+    int balance = height(node->left) - height(node->right);
+
+    assert(balance >= -1 && balance <= 1);
 }
 
 tree_map_value_t tree_map_insert (
@@ -96,6 +138,11 @@ tree_map_value_t tree_map_insert (
     tree_map_value_t prev_value = NULL;
 
     tree->root = internal_insert(tree, tree->root, key, value, &prev_value);
+    internal_foreach(tree->root, check_subtree_balance);
+
+    if (!prev_value) {
+        tree->size++;
+    }
 
     return prev_value;
 }
@@ -108,6 +155,10 @@ tree_map_value_t tree_map_remove (
     tree_map_value_t prev_value = NULL;
 
     tree->root = internal_remove(tree, tree->root, key, &prev_value);
+
+    if (prev_value) {
+        tree->size--;
+    }
 
     return prev_value;
 }
@@ -150,15 +201,16 @@ static internal_node * internal_insert (
         else if (compare_val > 0) {
             /* New key is greater than this node. */
             node->right = internal_insert(tree, node->right, key, value, prev_value);
+            node = internal_rebalance(node);
+            internal_foreach(node->right, check_subtree_balance);
 
-            // XXX: rebalance
             return node;
         }
         else {
             /* New key is less than this node. */
             node->left = internal_insert(tree, node->left, key, value, prev_value);
-
-            // XXX: rebalance
+            node = internal_rebalance(node);
+            internal_foreach(node->left, check_subtree_balance);
             return node;
         }
     }
@@ -173,6 +225,13 @@ static internal_node * internal_insert (
 
         return new_node;
     }
+}
+
+unsigned int tree_map_size (
+        struct tree_map * tree
+        )
+{
+    return tree->size;
 }
 
 static internal_node * internal_remove (
@@ -231,6 +290,9 @@ static internal_node * internal_remove (
             // XXX: rebalance
             result = node;
         }
+
+        /* Some of the cases above might have resulted in an imbalance. */
+        result = internal_rebalance(result);
     }
     else {
         *prev_value = NULL;
@@ -253,15 +315,25 @@ static internal_node * internal_unlink_max (
         )
 {
     if (node->right) {
+        /* A right child exists. It'll be larger than this node. */
         node->right = internal_unlink_max(tree, node->right, max);
+
+        /* It's possible that the left was already one higher than right */
+        node = internal_rebalance(node);
         return node;
     }
     else if (node->left) {
+        /* No right child exists. This node is maximal; promote left child. */
         *max = node;
+
+        /* No possibility of imbalance. There's was no right child. */
         return node->left;
     }
     else {
+        /* No children exist. This node's vacuously maximal. */
         *max = node;
+
+        /* No possibility of imbalance. There were no children at all. */
         return NULL;
     }
 }
@@ -278,15 +350,97 @@ static void internal_free_node (
     }
 }
 
-static unsigned int internal_node_height (internal_node * node)
+static int height (internal_node * node)
 {
     if (!node) {
         return 0;
     }
     else {
-        unsigned int left_height = internal_node_height(node->left);
-        unsigned int right_height = internal_node_height(node->right);
+        unsigned int left_height = height(node->left);
+        unsigned int right_height = height(node->right);
 
         return (left_height < right_height ? right_height : left_height) + 1;
+    }
+}
+
+static internal_node * internal_rebalance (
+        internal_node * node
+        )
+{
+    if (node) {
+
+        int left_height = height(node->left);
+        int right_height = height(node->right);
+
+        if (right_height - left_height > 1) {
+            /* Height discrepancy too much. Need to rebalance. */
+            if (height(node->right->right) > height(node->right->left)) {
+                node = rotate_with_right_child(node);
+            }
+            else {
+                node = double_with_right_child(node);
+            }
+        }
+        else if (left_height - right_height > 1) {
+            /* Height discrepancy too much. Need to rebalance. */
+            if (height(node->left->left) > height(node->left->right)) {
+                node = rotate_with_left_child(node);
+            }
+            else {
+                node = double_with_left_child(node);
+            }
+        }
+    }
+
+    return node;
+}
+
+static internal_node * rotate_with_left_child (
+        internal_node * k2
+        )
+{
+    internal_node * k1 = k2->left;
+    k2->left = k1->right;
+    k1->right = k2;
+    return k1;
+}
+
+static internal_node * double_with_left_child (
+        internal_node * k3
+        )
+{
+    k3->left = rotate_with_right_child(k3->left);
+    return rotate_with_left_child(k3);
+}
+
+static internal_node * rotate_with_right_child (
+        internal_node * k1
+        )
+{
+    internal_node * k2 = k1->right;
+    k1->right = k2->left;
+    k2->left = k1;
+    return k2;
+}
+
+static internal_node * double_with_right_child (
+        internal_node * k1
+        )
+{
+    k1->right = rotate_with_left_child(k1->right);
+    return rotate_with_right_child(k1);
+}
+
+static void internal_foreach (
+        internal_node * node,
+        foreach_func func
+        )
+{
+    if (node->left) {
+        internal_foreach(node->left, func);
+    }
+    func(node);
+    if (node->right) {
+        internal_foreach(node->right, func);
     }
 }

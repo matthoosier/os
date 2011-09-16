@@ -68,4 +68,11 @@ extern tree_map_value_t tree_map_lookup (
         tree_map_key_t key
         );
 
+/**
+ * Returns number of entries in the map
+ */
+extern unsigned int tree_map_size (
+        struct tree_map * tree
+        );
+
 #endif /* __TREE_MAP__ */
