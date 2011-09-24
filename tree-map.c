@@ -3,6 +3,13 @@
 #include "once.h"
 #include "tree-map.h"
 
+#define max(_a, _b)     \
+    ({                  \
+    typeof(_a) a = _a;  \
+    typeof(_b) b = _b;  \
+    a > b ? a : b;      \
+    })
+
 static once_t init_control = ONCE_INIT;
 
 /* Allocates internal_node's */
@@ -26,6 +33,7 @@ typedef struct _internal_node
 {
     struct _internal_node * left;
     struct _internal_node * right;
+    int                     height;
 
     tree_map_key_t     key;
     tree_map_value_t   value;
@@ -219,6 +227,7 @@ static internal_node * internal_insert (
 
         new_node->left = NULL;
         new_node->right = NULL;
+        new_node->height = 0;
         new_node->key = key;
         new_node->value = value;
         *prev_value = NULL;
@@ -327,7 +336,13 @@ static internal_node * internal_unlink_max (
         *max = node;
 
         /* No possibility of imbalance. There's was no right child. */
-        return node->left;
+        node = node->left;
+
+        max[0]->left = NULL;
+        max[0]->right = NULL;
+        max[0]->height = 0;
+
+        return node;
     }
     else {
         /* No children exist. This node's vacuously maximal. */
@@ -353,13 +368,10 @@ static void internal_free_node (
 static int height (internal_node * node)
 {
     if (!node) {
-        return 0;
+        return -1;
     }
     else {
-        unsigned int left_height = height(node->left);
-        unsigned int right_height = height(node->right);
-
-        return (left_height < right_height ? right_height : left_height) + 1;
+        return node->height;
     }
 }
 
@@ -400,6 +412,8 @@ static internal_node * internal_rebalance (
                 node = rotate_with_left_child(node);
             }
         }
+
+        node->height = max(height(node->left), height(node->right)) + 1;
     }
 
     return node;
@@ -412,6 +426,10 @@ static internal_node * rotate_with_left_child (
     internal_node * k1 = k2->left;
     k2->left = k1->right;
     k1->right = k2;
+
+    k2->height = max(height(k2->left), height(k2->right)) + 1;
+    k1->height = max(height(k1->left), height(k1->right)) + 1;
+
     return k1;
 }
 
@@ -430,6 +448,10 @@ static internal_node * rotate_with_right_child (
     internal_node * k2 = k1->right;
     k1->right = k2->left;
     k2->left = k1;
+
+    k1->height = max(height(k1->left), height(k1->right)) + 1;
+    k2->height = max(height(k2->left), height(k2->right)) + 1;
+
     return k2;
 }
 
