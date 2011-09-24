@@ -373,21 +373,31 @@ static internal_node * internal_rebalance (
         int right_height = height(node->right);
 
         if (right_height - left_height > 1) {
+            assert(node->right != NULL);
             /* Height discrepancy too much. Need to rebalance. */
             if (height(node->right->right) > height(node->right->left)) {
                 node = rotate_with_right_child(node);
             }
-            else {
+            else if (height(node->right->right) < height(node->right->left)) {
                 node = double_with_right_child(node);
+            }
+            else {
+                /* This case happens only during removal. */
+                node = rotate_with_right_child(node);
             }
         }
         else if (left_height - right_height > 1) {
+            assert(node->left != NULL);
             /* Height discrepancy too much. Need to rebalance. */
             if (height(node->left->left) > height(node->left->right)) {
                 node = rotate_with_left_child(node);
             }
-            else {
+            else if (height(node->left->left) < height(node->left->right)) {
                 node = double_with_left_child(node);
+            }
+            else {
+                /* This case happens only during removal. */
+                node = rotate_with_left_child(node);
             }
         }
     }
