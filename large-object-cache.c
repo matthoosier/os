@@ -29,24 +29,7 @@ static void static_init ()
 
 static void constructor (struct object_cache * cache)
 {
-    int compare_func (tree_map_key_t left, tree_map_key_t right)
-    {
-        uintptr_t left_ptr = (uintptr_t)left;
-        uintptr_t right_ptr = (uintptr_t)right;
-
-        /* Explicit comparisons to avoid wraparound on uint math */
-        if (left_ptr < right_ptr) {
-            return -1;
-        }
-        else if (left_ptr > right_ptr) {
-            return 1;
-        }
-        else {
-            return 0;
-        }
-    }
-
-    cache->bufctl_to_slab_map = tree_map_alloc(compare_func);
+    cache->bufctl_to_slab_map = tree_map_alloc(tree_map_address_compare_func);
 }
 
 static void destructor (struct object_cache * cache)
