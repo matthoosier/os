@@ -476,3 +476,27 @@ static void internal_foreach (
         internal_foreach(node->right, func);
     }
 }
+
+static int address_compare_func (
+        tree_map_key_t left,
+        tree_map_key_t right)
+{
+    uintptr_t left_addr = (uintptr_t)left;
+    uintptr_t right_addr = (uintptr_t)right;
+
+    /* Doing explicit comparisons to avoid wraparound on uint math */
+    if (left_addr < right_addr) {
+        return -1;
+    }
+    else if (left_addr > right_addr) {
+        return 1;
+    }
+    else {
+        return 0;
+    }
+}
+
+/**
+ * Public API name for 'address_compare_func'
+ */
+tree_map_compare_func tree_map_address_compare_func = &address_compare_func;

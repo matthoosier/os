@@ -28,6 +28,12 @@ typedef int (*tree_map_compare_func) (
         );
 
 /**
+ * Canned key-comparision function suitable for comparing
+ * keys that are virtual memory addresses.
+ */
+extern tree_map_compare_func tree_map_address_compare_func;
+
+/**
  * Make a tree instance
  */
 extern struct tree_map * tree_map_alloc (
