@@ -4,12 +4,12 @@
 
 _start_high:
     /*
-    ARM stacks grow down, so set the initial stack pointer to the "high"
-    end of the chunk of memory designated for our initialization stack.
+    Continue using the same stack, but adjust the stack pointer to refer
+    to it from high-memory addresses.
     */
     cps #svc
-    ldr r0, =init_stack_ceiling
-    ldr sp, [r0, #0]
+    ldr r0, =__KernelStart
+    add sp, sp, r0
 
     bl init
 
