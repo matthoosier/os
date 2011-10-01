@@ -31,7 +31,15 @@ extern void * __KernelStart[];
  * to prevent a symbol (which would live only in one mode or the other's
  * addressing scheme) from being generated.
  */
-#define V2P(_vmaddr) ((_vmaddr) - KERNEL_MODE_OFFSET)
+#ifdef __GNUC__
+    #define V2P(_vmaddr)            \
+            ({                      \
+            vmaddr_t a = (_vmaddr); \
+            a - KERNEL_MODE_OFFSET; \
+            })
+#else
+    #define V2P(_vmaddr) ((_vmaddr) - KERNEL_MODE_OFFSET)
+#endif
 
 /*
  * Translate a physical address to a kernel virtual address.
@@ -41,7 +49,15 @@ extern void * __KernelStart[];
  * to prevent a symbol (which would live only in one mode or the other's
  * addressing scheme) from being generated.
  */
-#define P2V(_physaddr) ((_physaddr) + KERNEL_MODE_OFFSET)
+#ifdef __GNUC__
+    #define P2V(_physaddr)              \
+            ({                          \
+            physaddr_t a = (_physaddr); \
+            a + KERNEL_MODE_OFFSET;     \
+            })
+#else
+    #define P2V(_physaddr) ((_physaddr) + KERNEL_MODE_OFFSET)
+#endif
 
 #define VIRTUAL_HEAP_START ((vmaddr_t)&__HeapStart)
 #define HEAP_SIZE ((size_t)((vmaddr_t)&__RamEnd) - VIRTUAL_HEAP_START)
