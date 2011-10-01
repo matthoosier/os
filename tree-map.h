@@ -27,6 +27,12 @@ typedef int (*tree_map_compare_func) (
         tree_map_key_t right
         );
 
+typedef void (*tree_map_foreach_func) (
+        tree_map_key_t key,
+        tree_map_value_t value,
+        void * user_data
+        );
+
 /**
  * Canned key-comparision function suitable for comparing
  * keys that are virtual memory addresses.
@@ -79,6 +85,15 @@ extern tree_map_value_t tree_map_lookup (
  */
 extern unsigned int tree_map_size (
         struct tree_map * tree
+        );
+
+/**
+ * Visit each key/value pair current stored in the map
+ */
+extern void tree_map_foreach (
+        struct tree_map * tree,
+        tree_map_foreach_func func,
+        void * user_data
         );
 
 #endif /* __TREE_MAP__ */

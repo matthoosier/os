@@ -91,12 +91,14 @@ static internal_node * double_with_right_child (
         );
 
 typedef void (*foreach_func) (
-        internal_node * node
+        internal_node * node,
+        void * user_data
         );
 
 static void internal_foreach (
         internal_node * node,
-        foreach_func func
+        foreach_func func,
+        void * user_data
         );
 
 /**
@@ -129,7 +131,8 @@ void tree_map_free (struct tree_map * tree)
 }
 
 static void check_subtree_balance (
-        internal_node * node
+        internal_node * node,
+        void * user_data
         )
 {
     int balance = height(node->left) - height(node->right);
@@ -146,7 +149,7 @@ tree_map_value_t tree_map_insert (
     tree_map_value_t prev_value = NULL;
 
     tree->root = internal_insert(tree, tree->root, key, value, &prev_value);
-    internal_foreach(tree->root, check_subtree_balance);
+    internal_foreach(tree->root, check_subtree_balance, NULL);
 
     if (!prev_value) {
         tree->size++;
@@ -190,6 +193,39 @@ tree_map_value_t tree_map_lookup (
     return node ? node->value : NULL;
 }
 
+unsigned int tree_map_size (
+        struct tree_map * tree
+        )
+{
+    return tree->size;
+}
+
+void tree_map_foreach (
+        struct tree_map * tree,
+        tree_map_foreach_func func,
+        void * user_data
+        )
+{
+    struct closure
+    {
+        tree_map_foreach_func user_func;
+        void * user_data;
+    };
+
+    void user_data_visitor (internal_node * node, void * user_data)
+    {
+        struct closure * closure = (struct closure *)user_data;
+
+        if (node) {
+            closure->user_func(node->key, node->value, closure->user_data);
+        }
+    }
+
+    struct closure c = { func, user_data };
+
+    internal_foreach(tree->root, user_data_visitor, &c);
+}
+
 static internal_node * internal_insert (
         struct tree_map * tree,
         internal_node * node,
@@ -210,7 +246,7 @@ static internal_node * internal_insert (
             /* New key is greater than this node. */
             node->right = internal_insert(tree, node->right, key, value, prev_value);
             node = internal_rebalance(node);
-            internal_foreach(node->right, check_subtree_balance);
+            internal_foreach(node->right, check_subtree_balance, NULL);
 
             return node;
         }
@@ -218,7 +254,7 @@ static internal_node * internal_insert (
             /* New key is less than this node. */
             node->left = internal_insert(tree, node->left, key, value, prev_value);
             node = internal_rebalance(node);
-            internal_foreach(node->left, check_subtree_balance);
+            internal_foreach(node->left, check_subtree_balance, NULL);
             return node;
         }
     }
@@ -234,13 +270,6 @@ static internal_node * internal_insert (
 
         return new_node;
     }
-}
-
-unsigned int tree_map_size (
-        struct tree_map * tree
-        )
-{
-    return tree->size;
 }
 
 static internal_node * internal_remove (
@@ -465,15 +494,16 @@ static internal_node * double_with_right_child (
 
 static void internal_foreach (
         internal_node * node,
-        foreach_func func
+        foreach_func func,
+        void * user_data
         )
 {
     if (node->left) {
-        internal_foreach(node->left, func);
+        internal_foreach(node->left, func, user_data);
     }
-    func(node);
+    func(node, user_data);
     if (node->right) {
-        internal_foreach(node->right, func);
+        internal_foreach(node->right, func, user_data);
     }
 }
 
