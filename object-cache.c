@@ -1,3 +1,4 @@
+#include "assert.h"
 #include "object-cache.h"
 #include "object-cache-internal.h"
 
@@ -71,6 +72,7 @@ void object_cache_free (struct object_cache * cache, void * element)
     init_bufctl(reclaimed_bufctl);
 
     slab = cache->ops->map_bufctl_to_slab(cache, reclaimed_bufctl);
+    assert(slab != NULL);
 
     /*
     Stick on head of freelist to promote reuse of objects from slab

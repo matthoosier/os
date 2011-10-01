@@ -1,15 +1,11 @@
 #include <stdint.h>
 
+#include "arch.h"
 #include "array.h"
 #include "bits.h"
 #include "mmu.h"
 #include "vm.h"
 
-/* Some kind of optimization for TLB stuff. Don't care for now. */
-#define DOMAIN_DEFAULT          0
-#define DOMAIN_ACCESS_MANAGER   0b11
-
-#define BITS_PER_MEGABYTE 20
 #define ARM_MMU_ENABLED_BIT 0
 
 /*
@@ -78,7 +74,7 @@ static void _enable_mmu()
     CP15, Register 3 controls these. Each of the 16 domains gets two bits
     of configuration.
     */
-    cp15_r3 = DOMAIN_ACCESS_MANAGER << (2 * DOMAIN_DEFAULT);
+    cp15_r3 = PT_DOMAIN_ACCESS_LEVEL_ALL << (2 * PT_DOMAIN_DEFAULT);
     asm volatile (
         "mcr p15, 0, %[cp15_r3], c3, c0, 0\n"
         :
@@ -119,10 +115,10 @@ void early_setup_dual_memory_map (void)
 
     /* Now round up to nearest megabyte */
     first_unused_phys_mb += (1024 * 1024) - 1;
-    first_unused_phys_mb &= 0xfff00000;
+    first_unused_phys_mb &= MEGABYTE_MASK;
 
     /* Now smash this down so that it represents the number of megabytes */
-    first_unused_phys_mb = first_unused_phys_mb >> BITS_PER_MEGABYTE;
+    first_unused_phys_mb = first_unused_phys_mb >> MEGABYTE_SHIFT;
 
     /* Now go set up dual mappings for actually occupied pages */
     for (i = 0; i < first_unused_phys_mb; i++) {
@@ -137,32 +133,32 @@ void early_setup_dual_memory_map (void)
         */
         early_table[i] =
                 PT_FIRSTLEVEL_MAPTYPE_SECTION |
-                (DOMAIN_DEFAULT << PT_FIRSTLEVEL_DOMAIN_SHIFT) |
+                (PT_DOMAIN_DEFAULT << PT_FIRSTLEVEL_DOMAIN_SHIFT) |
                 PT_FIRSTLEVEL_SECTION_AP_FULL |
-                (i << PT_FIRSTLEVEL_SECTION_BASE_ADDR_SHIFT);
+                ((i << MEGABYTE_SHIFT) & PT_FIRSTLEVEL_SECTION_BASE_ADDR_MASK);
 
         /* Do the same as above, but for the virtual memory address... */
-        uintptr_t virt_i = i + (KERNEL_MODE_OFFSET >> BITS_PER_MEGABYTE);
+        uintptr_t virt_i = i + (KERNEL_MODE_OFFSET >> MEGABYTE_SHIFT);
 
         /* The bit pattern in the high mapping is the same, just copy it. */
         early_table[virt_i] = early_table[i];
     }
 
     /* Set up high mappings alone for all memory not statically allocated */
-    for (i = first_unused_phys_mb; i < N_ELEMENTS(early_table) - (KERNEL_MODE_OFFSET >> BITS_PER_MEGABYTE); i++) {
+    for (i = first_unused_phys_mb; i < N_ELEMENTS(early_table) - (KERNEL_MODE_OFFSET >> MEGABYTE_SHIFT); i++) {
         /*
         The loop counter already tells us what physical megabyte offset
         should be mapped for the the i+(KERNEL_MODE_OFFSET/1MB)th
         translation table element. Just put the loop counter into the top
         12 bits of the TT entry.
         */
-        uintptr_t virt_i = i + (KERNEL_MODE_OFFSET >> BITS_PER_MEGABYTE);
+        uintptr_t virt_i = i + (KERNEL_MODE_OFFSET >> MEGABYTE_SHIFT);
 
         early_table[virt_i] =
             PT_FIRSTLEVEL_MAPTYPE_SECTION |
-            (DOMAIN_DEFAULT << PT_FIRSTLEVEL_DOMAIN_SHIFT) |
+            (PT_DOMAIN_DEFAULT << PT_FIRSTLEVEL_DOMAIN_SHIFT) |
             PT_FIRSTLEVEL_SECTION_AP_FULL |
-            (i << PT_FIRSTLEVEL_SECTION_BASE_ADDR_SHIFT);
+            ((i << MEGABYTE_SHIFT) & PT_FIRSTLEVEL_SECTION_BASE_ADDR_MASK);
     }
 
     _install_pagetable();

@@ -8,6 +8,8 @@
     #define PAGE_SHIFT          12          /* One page is 2 ** 12 bytes */
     #define PAGE_MASK           0xfffff000  /* The 20 most sig. bits */
 
+    #define SECTION_SIZE        (1 << MEGABYTE_SHIFT)
+
     #define REGISTER_COUNT      (16 + 1)
 
     #define REGISTER_INDEX_R0   0
@@ -29,6 +31,9 @@
 
 #define PAGE_SIZE                   (1 << PAGE_SHIFT)
 #define PAGE_COUNT_FROM_SIZE(_sz)   ((_sz) >> PAGE_SHIFT)
+
+#define MEGABYTE_SHIFT              20
+#define MEGABYTE_MASK               0xfff00000
 
 #define ALIGN(_val, _pow)                                       \
         ((((_val) + ((1 << (_pow)) - 1)) >> (_pow)) << (_pow))
