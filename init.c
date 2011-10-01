@@ -93,6 +93,16 @@ void install_kernel_memory_map ()
         assert(success);
     }
 
+    /* Really just a marker from the linker script */
+    extern char __VectorStartPhysical;
+
+    bool success = translation_table_map_page(
+                kernel_tt,
+                0xffff0000,
+                (physaddr_t)&__VectorStartPhysical
+                );
+    assert(success);
+
     /*
     Yes, it's actually already on from our crude original setup.
     But there was some additional setup work (like configuring exceptions)

@@ -44,13 +44,18 @@ SECTIONS
             *(.bss)
         }
 
-    __HeapStart = ALIGN(CONSTANT(MAXPAGESIZE));
-    __RamEnd = __KernelStart + __PhysicalRamSize;
-
-    .vector 0xffff0000 : AT(ALIGN(LOADADDR(.bss) + SIZEOF(.bss), 65536))
+    /* Hop forward in virtual memory to the ARM high vector table address */
+    .vector 0xffff0000 : AT(ALIGN(LOADADDR(.bss) + SIZEOF(.bss), CONSTANT(COMMONPAGESIZE)))
         {
             __VectorStartPhysical = LOADADDR(.vector);
             *(.text.vector)
-            __VectorEndPhysical = . - (ADDR(.vector) - LOADADDR(.vector));
         }
+
+    /* Reset VMA counter as though .vector had been in normal kernel range */
+    . = ADDR(.bss)
+            + (LOADADDR(.vector) - LOADADDR(.bss))  /* Padded sizeof(.bss) */
+            + SIZEOF(.vector);
+
+    __HeapStart = ALIGN(CONSTANT(MAXPAGESIZE));
+    __RamEnd = __KernelStart + __PhysicalRamSize;
 }
