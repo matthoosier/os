@@ -142,3 +142,17 @@ void signed_divide (
         );
     }
 #endif
+
+#include <string.h>
+
+void * memset (void *b, int c, size_t len)
+{
+    char * ptr;
+    char * bound = ((char *)b) + len;
+
+    for (ptr = (char *)b; ptr < bound; ptr++) {
+        *ptr = (char)c;
+    }
+
+    return b;
+}
