@@ -32,7 +32,9 @@ undef_handler:
     b undef_handler
 
 swi_handler:
-    b swi_handler
+    /* Echo the arg0 back as result */
+    mov r0, r1
+    movs pc, lr
 
 pabt_handler:
     b pabt_handler

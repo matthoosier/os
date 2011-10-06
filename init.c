@@ -8,6 +8,7 @@
 #include "mmu.h"
 #include "object-cache.h"
 #include "scheduler.h"
+#include "syscall.h"
 #include "thread.h"
 #include "vm.h"
 
@@ -124,17 +125,20 @@ void second_thread_body (void * param)
 {
     uint32_t saved_cpsr = saved_cpsr;
 
-    asm volatile(
-        ".include \"arm-defs.inc\"      \n"
-        "mrs %[saved_cpsr], cpsr        \n"
-        "cps #irq                       \n"
-        "cps #und                       \n"
-        "cps #svc                       \n"
-        "msr cpsr, %[saved_cpsr]        \n"
-        : [saved_cpsr]"+r"(saved_cpsr)
-    );
-
     while (true) {
+
+        asm volatile(
+            ".include \"arm-defs.inc\"      \n"
+            "mrs %[saved_cpsr], cpsr        \n"
+            "cps #irq                       \n"
+            "cps #und                       \n"
+            "cps #svc                       \n"
+            "msr cpsr, %[saved_cpsr]        \n"
+            : [saved_cpsr]"+r"(saved_cpsr)
+        );
+
+        assert(syscall1(0, 37) == 37);
+
         scheduler_yield();
     }
 }
