@@ -1,9 +1,10 @@
 #include <stdlib.h>
 
 #include "arch.h"
-#include "scheduler.h"
 #include "thread.h"
 #include "vm.h"
+
+static LIST_HEAD(ready_queue);
 
 static void thread_trampoline ();
 
@@ -82,8 +83,8 @@ struct thread * thread_create (thread_func body, void * param)
     /* Install trampoline in case the thread returns. */
     descriptor->registers[REGISTER_INDEX_LR] = (uint32_t)thread_trampoline;
 
-    scheduler_queue_insert(THREAD_STATE_READY, descriptor);
-    scheduler_yield();
+    list_add_tail(&descriptor->queue_link, &ready_queue);
+    thread_yield();
 
     return descriptor;
 }
@@ -91,5 +92,23 @@ struct thread * thread_create (thread_func body, void * param)
 static void thread_trampoline ()
 {
     while (1) {
+    }
+}
+
+void thread_yield (void)
+{
+    /* No-op if no threads are ready to run. */
+    if (!list_empty(&ready_queue)) {
+        struct thread * outgoing;
+        struct thread * next;
+
+        outgoing = THREAD_CURRENT();
+        outgoing->state = THREAD_STATE_READY;
+        list_add_tail(&outgoing->queue_link, &ready_queue);
+
+        next = list_first_entry(&ready_queue, struct thread, queue_link);
+        list_del_init(&next->queue_link);
+        next->state = THREAD_STATE_RUNNING;
+        thread_switch(outgoing, next);
     }
 }

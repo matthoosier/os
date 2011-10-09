@@ -69,6 +69,8 @@ extern struct thread * thread_create (thread_func body, void * param);
 extern void thread_switch (struct thread *  outgoing,
                            struct thread *  incoming);
 
+extern void thread_yield (void);
+
 END_DECLS
 
 #endif /* __THREAD_H__ */

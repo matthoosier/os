@@ -7,7 +7,6 @@
 #include "init.h"
 #include "mmu.h"
 #include "object-cache.h"
-#include "scheduler.h"
 #include "syscall.h"
 #include "thread.h"
 #include "vm.h"
@@ -139,7 +138,7 @@ void second_thread_body (void * param)
 
         assert(syscall1(0, 37) == 37);
 
-        scheduler_yield();
+        thread_yield();
     }
 }
 
@@ -167,6 +166,6 @@ void run_first_thread ()
     second_thread = thread_create(second_thread_body, "Foo!");
 
     while (true) {
-        scheduler_yield();
+        thread_yield();
     }
 }
