@@ -8,8 +8,8 @@ static LIST_HEAD(ready_queue);
 
 static void thread_trampoline ();
 
-void thread_switch (struct thread * outgoing,
-                    struct thread * incoming)
+void ThreadSwitch (struct Thread * outgoing,
+                   struct Thread * incoming)
 {
     uint32_t next_pc = next_pc;
     uint32_t cpsr_temp = cpsr_temp;
@@ -43,13 +43,13 @@ void thread_switch (struct thread * outgoing,
     );
 }
 
-struct thread * thread_create (thread_func body, void * param)
+struct Thread * ThreadCreate (ThreadFunc body, void * param)
 {
     unsigned int    i;
-    struct page *   stack_page;
-    struct thread * descriptor;
+    struct Page *   stack_page;
+    struct Thread * descriptor;
 
-    stack_page = vm_page_alloc();
+    stack_page = VmPageAlloc();
 
     if (!stack_page) {
         /* No memory available to allocate stack */
@@ -84,7 +84,7 @@ struct thread * thread_create (thread_func body, void * param)
     descriptor->registers[REGISTER_INDEX_LR] = (uint32_t)thread_trampoline;
 
     list_add_tail(&descriptor->queue_link, &ready_queue);
-    thread_yield();
+    ThreadYield();
 
     return descriptor;
 }
@@ -95,20 +95,20 @@ static void thread_trampoline ()
     }
 }
 
-void thread_yield (void)
+void ThreadYield (void)
 {
     /* No-op if no threads are ready to run. */
     if (!list_empty(&ready_queue)) {
-        struct thread * outgoing;
-        struct thread * next;
+        struct Thread * outgoing;
+        struct Thread * next;
 
         outgoing = THREAD_CURRENT();
         outgoing->state = THREAD_STATE_READY;
         list_add_tail(&outgoing->queue_link, &ready_queue);
 
-        next = list_first_entry(&ready_queue, struct thread, queue_link);
+        next = list_first_entry(&ready_queue, struct Thread, queue_link);
         list_del_init(&next->queue_link);
         next->state = THREAD_STATE_RUNNING;
-        thread_switch(outgoing, next);
+        ThreadSwitch(outgoing, next);
     }
 }

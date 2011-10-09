@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-static inline bool atomic_compare_and_exchange (
+static inline bool AtomicCompareAndExchange (
         uint32_t *ptr,
         uint32_t oldval,
         uint32_t newval

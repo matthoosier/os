@@ -24,38 +24,38 @@
 
 #define PT_DOMAIN_ACCESS_LEVEL_ALL  0b11
 
-extern int mmu_get_enabled (void);
-extern void mmu_set_enabled ();
+extern int MmuGetEnabled (void);
+extern void MmuSetEnabled ();
 
-extern void mmu_flush_tlb (void);
+extern void MmuFlushTlb (void);
 
 typedef uint32_t pt_firstlevel_t;
 typedef uint32_t pt_secondlevel_t;
 
-struct translation_table;
+struct TranslationTable;
 
-extern struct translation_table * translation_table_alloc (void);
-extern void translation_table_free (struct translation_table * table);
+extern struct TranslationTable * TranslationTableAlloc (void);
+extern void TranslationTableFree (struct TranslationTable * table);
 
-extern struct translation_table * mmu_get_translation_table ();
-extern void mmu_set_translation_table (struct translation_table *);
+extern struct TranslationTable * MmuGetTranslationTable ();
+extern void MmuSetTranslationTable (struct TranslationTable *);
 
-extern bool translation_table_map_page (
-        struct translation_table * table,
-        vmaddr_t virt,
-        physaddr_t phys
+extern bool TranslationTableMapPage (
+        struct TranslationTable * table,
+        VmAddr_t virt,
+        PhysAddr_t phys
         );
 
-extern bool translation_table_map_section (
-        struct translation_table * table,
-        vmaddr_t virt,
-        physaddr_t phys
+extern bool TranslationTableMapSection (
+        struct TranslationTable * table,
+        VmAddr_t virt,
+        PhysAddr_t phys
         );
 
-struct translation_table
+struct TranslationTable
 {
     /* Provides the storage pointed at by 'translation_base' below */
-    struct page * firstlevel_ptes_pages;
+    struct Page * firstlevel_ptes_pages;
 
     /*
      * Points to a pt_firstlevel_t[4096].
@@ -66,7 +66,7 @@ struct translation_table
 
     /*
      * Sparse map of beginning virtual address of each section
-     * to the secondlevel_table instance that fills in the individual
+     * to the SecondlevelTable instance that fills in the individual
      * pages for that section.
      *
      * Each struct contained in this list controls the mappings for
@@ -75,16 +75,16 @@ struct translation_table
      * A sample couple entries in this map might be:
      *
      *    First section (0x00000000 - 0x000fffff):
-     *        0x00000000 -> (secondlevel_table *)<struct address>
+     *        0x00000000 -> (SecondlevelTable *)<struct address>
      *    ...
      *
      *    Fifteenth section (0x00e00000 - 0x00efffff)
-     *        0x00e00000 -> (secondlevel_table *)<struct address>
+     *        0x00e00000 -> (SecondlevelTable *)<struct address>
      */
-    struct tree_map * sparse_secondlevel_map;
+    struct TreeMap * sparse_secondlevel_map;
 };
 
-struct secondlevel_table
+struct SecondlevelTable
 {
     /*
      * The array of individual pagetable entries used by the MMU.
@@ -92,7 +92,7 @@ struct secondlevel_table
      * Allocated separately because of strict 1KB alignment-boundary
      * requirements. Logically it's just part of this data structure
      */
-    struct secondlevel_ptes * ptes;
+    struct SecondlevelPtes * ptes;
 
     /*
      * Utility field for inserting into whatever list is needed
@@ -100,7 +100,7 @@ struct secondlevel_table
     struct list_head link;
 };
 
-struct secondlevel_ptes
+struct SecondlevelPtes
 {
     /*
     Each element describes one 4KB page.

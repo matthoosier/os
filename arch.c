@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-int arch_get_version (void)
+int ArchGetVersion (void)
 {
     uint32_t cp15_r1;
 

@@ -30,17 +30,17 @@ _count:     number of bytes
 
 BEGIN_DECLS
 
-static inline void bitmap_set (uint8_t * bitmap_base, unsigned int index)
+static inline void BitmapSet (uint8_t * bitmap_base, unsigned int index)
 {
     bitmap_base[index >> 3] |= SETBIT(index & 0x7);
 }
 
-static inline void bitmap_clear (uint8_t * bitmap_base, unsigned int index)
+static inline void BitmapClear (uint8_t * bitmap_base, unsigned int index)
 {
     bitmap_base[index >> 3] &= ~((uint8_t)SETBIT(index & 0x7));
 }
 
-static inline bool bitmap_get (uint8_t * bitmap_base, unsigned int index)
+static inline bool BitmapGet (uint8_t * bitmap_base, unsigned int index)
 {
     return TESTBIT(bitmap_base[index >> 3], index & 0x7) != 0;
 }

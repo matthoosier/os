@@ -15,13 +15,13 @@
 #define ARM_MMU_ENABLED_BIT             0
 #define ARM_MMU_EXCEPTION_VECTOR_BIT    13
 
-static physaddr_t get_pagetable_base (void) __attribute__((used));
-static void set_pagetable_base (physaddr_t newbase);
+static PhysAddr_t GetPagetableBase (void) __attribute__((used));
+static void SetPagetableBase (PhysAddr_t newbase);
 
-static struct secondlevel_table * secondlevel_table_alloc ();
-static void secondlevel_table_free (struct secondlevel_table *);
+static struct SecondlevelTable * secondlevel_table_alloc ();
+static void SecondlevelTableFree (struct SecondlevelTable *);
 
-int mmu_get_enabled (void)
+int MmuGetEnabled (void)
 {
     uint32_t cp15_r1;
 
@@ -43,7 +43,7 @@ int mmu_get_enabled (void)
     return TESTBIT(cp15_r1, ARM_MMU_ENABLED_BIT);
 }
 
-void mmu_set_enabled ()
+void MmuSetEnabled ()
 {
     /* Control Register */
     uint32_t cp15_r1;
@@ -79,12 +79,12 @@ void mmu_set_enabled ()
     );
 }
 
-static physaddr_t get_pagetable_base (void)
+static PhysAddr_t GetPagetableBase (void)
 {
     return 0;
 }
 
-static void set_pagetable_base (physaddr_t newbase)
+static void SetPagetableBase (PhysAddr_t newbase)
 {
     uint32_t ttb0;
 
@@ -115,39 +115,39 @@ static void set_pagetable_base (physaddr_t newbase)
 }
 
 /* Allocates translation_table's */
-struct object_cache translation_table_cache;
+struct ObjectCache translation_table_cache;
 
 /* Allocates secondlevel_table's */
-struct object_cache secondlevel_table_cache;
+struct ObjectCache secondlevel_table_cache;
 
 /* Allocates secondlevel_ptes's */
-struct object_cache secondlevel_ptes_cache;
+struct ObjectCache secondlevel_ptes_cache;
 
-static once_t mmu_init_control = ONCE_INIT;
+static Once_t mmu_init_control = ONCE_INIT;
 
 static void mmu_static_init (void * ignored)
 {
-    object_cache_init(&translation_table_cache, sizeof(struct translation_table));
-    object_cache_init(&secondlevel_table_cache, sizeof(struct secondlevel_table));
-    object_cache_init(&secondlevel_ptes_cache, sizeof(struct secondlevel_ptes));
+    ObjectCacheInit(&translation_table_cache, sizeof(struct TranslationTable));
+    ObjectCacheInit(&secondlevel_table_cache, sizeof(struct SecondlevelTable));
+    ObjectCacheInit(&secondlevel_ptes_cache, sizeof(struct SecondlevelPtes));
 }
 
-static struct secondlevel_table * secondlevel_table_alloc ()
+static struct SecondlevelTable * secondlevel_table_alloc ()
 {
-    struct secondlevel_table * table;
+    struct SecondlevelTable * table;
 
-    table = object_cache_alloc(&secondlevel_table_cache);
+    table = ObjectCacheAlloc(&secondlevel_table_cache);
 
     if (table)
     {
         unsigned int i;
 
         INIT_LIST_HEAD(&table->link);
-        table->ptes = object_cache_alloc(&secondlevel_ptes_cache);
+        table->ptes = ObjectCacheAlloc(&secondlevel_ptes_cache);
 
         if (!table->ptes)
         {
-            object_cache_free(&secondlevel_table_cache, table);
+            ObjectCacheFree(&secondlevel_table_cache, table);
             table = NULL;
         }
 
@@ -161,17 +161,17 @@ static struct secondlevel_table * secondlevel_table_alloc ()
     return table;
 }
 
-static void secondlevel_table_free (struct secondlevel_table * table)
+static void SecondlevelTableFree (struct SecondlevelTable * table)
 {
     if (!list_empty(&table->link)) {
         list_del(&table->link);
     }
 
-    object_cache_free(&secondlevel_ptes_cache, &table->ptes);
-    object_cache_free(&secondlevel_table_cache, table);
+    ObjectCacheFree(&secondlevel_ptes_cache, &table->ptes);
+    ObjectCacheFree(&secondlevel_table_cache, table);
 }
 
-struct translation_table * translation_table_alloc (void)
+struct TranslationTable * TranslationTableAlloc (void)
 {
     enum {
         /**
@@ -191,19 +191,19 @@ struct translation_table * translation_table_alloc (void)
 
     COMPILER_ASSERT(TRANSLATION_TABLE_SIZE == 4096 * 4);
 
-    struct translation_table * table;
+    struct TranslationTable * table;
     unsigned int i;
 
-    once(&mmu_init_control, mmu_static_init, NULL);
+    Once(&mmu_init_control, mmu_static_init, NULL);
 
-    table = object_cache_alloc(&translation_table_cache);
+    table = ObjectCacheAlloc(&translation_table_cache);
 
     if (!table) {
         return NULL;
     }
 
     /* Translation table is 16-KB aligned and 4 pages long. */
-    table->firstlevel_ptes_pages = vm_pages_alloc(TRANSLATION_TABLE_PAGES_ORDER);
+    table->firstlevel_ptes_pages = VmPagesAlloc(TRANSLATION_TABLE_PAGES_ORDER);
 
     if (!table->firstlevel_ptes_pages) {
         goto cleanup_table;
@@ -211,7 +211,7 @@ struct translation_table * translation_table_alloc (void)
 
     table->firstlevel_ptes = (pt_firstlevel_t *)table->firstlevel_ptes_pages->base_address;
 
-    table->sparse_secondlevel_map = tree_map_alloc(tree_map_address_compare_func);
+    table->sparse_secondlevel_map = TreeMapAlloc(TreeMapAddressCompareFunc);
 
     if (!table->sparse_secondlevel_map) {
         goto cleanup_pages;
@@ -227,19 +227,19 @@ struct translation_table * translation_table_alloc (void)
 
     /* Failure cases */
 cleanup_pages:
-    vm_page_free(table->firstlevel_ptes_pages);
+    VmPageFree(table->firstlevel_ptes_pages);
 
 cleanup_table:
-    object_cache_free(&translation_table_cache, table);
+    ObjectCacheFree(&translation_table_cache, table);
     return NULL;
 }
 
-void translation_table_free (struct translation_table * table)
+void TranslationTableFree (struct TranslationTable * table)
 {
     /* Aggregates any individual secondlevel_table's that need freed */
     struct list_head head;
 
-    once(&mmu_init_control, mmu_static_init, NULL);
+    Once(&mmu_init_control, mmu_static_init, NULL);
 
     /* Clean out any individual second-level translation tables */
     INIT_LIST_HEAD(&head);
@@ -248,13 +248,13 @@ void translation_table_free (struct translation_table * table)
     Use a foreach on the tree to collect any existing nodes into a
     list, then blow away the list's elements afterward.
     */
-    void func (tree_map_key_t key, tree_map_value_t value, void * user_data)
+    void func (TreeMapKey_t key, TreeMapValue_t value, void * user_data)
     {
         struct list_head *          head;
-        struct secondlevel_table *  secondlevel_table;
+        struct SecondlevelTable *  secondlevel_table;
 
         head                = (struct list_head *)user_data;
-        secondlevel_table   = (struct secondlevel_table *)value;
+        secondlevel_table   = (struct SecondlevelTable *)value;
 
         list_add(&secondlevel_table->link, head);
     }
@@ -262,40 +262,40 @@ void translation_table_free (struct translation_table * table)
     /* Deallocate everything we found in there */
     while (!list_empty(&head))
     {
-        struct secondlevel_table * secondlevel_table = list_first_entry(
+        struct SecondlevelTable * secondlevel_table = list_first_entry(
                 &head,
-                struct secondlevel_table,
+                struct SecondlevelTable,
                 link
                 );
 
-        secondlevel_table_free(secondlevel_table);
+        SecondlevelTableFree(secondlevel_table);
     }
 
-    tree_map_foreach(table->sparse_secondlevel_map, func, &head);
+    TreeMapForeach(table->sparse_secondlevel_map, func, &head);
 
     table->firstlevel_ptes = NULL;
-    tree_map_free(table->sparse_secondlevel_map);
-    vm_page_free(table->firstlevel_ptes_pages);
-    object_cache_free(&translation_table_cache, table);
+    TreeMapFree(table->sparse_secondlevel_map);
+    VmPageFree(table->firstlevel_ptes_pages);
+    ObjectCacheFree(&translation_table_cache, table);
 }
 
-static struct translation_table * current_translation_table = NULL;
+static struct TranslationTable * current_translation_table = NULL;
 
-struct translation_table * mmu_get_translation_table ()
+struct TranslationTable * MmuGetTranslationTable ()
 {
     return current_translation_table;
 }
 
-void mmu_set_translation_table (struct translation_table * table)
+void MmuSetTranslationTable (struct TranslationTable * table)
 {
     current_translation_table = table;
-    set_pagetable_base(V2P((vmaddr_t)&table->firstlevel_ptes[0]));
+    SetPagetableBase(V2P((VmAddr_t)&table->firstlevel_ptes[0]));
 }
 
-bool translation_table_map_section (
-        struct translation_table * table,
-        vmaddr_t virt,
-        physaddr_t phys
+bool TranslationTableMapSection (
+        struct TranslationTable * table,
+        VmAddr_t virt,
+        PhysAddr_t phys
         )
 {
     unsigned int virt_idx;
@@ -322,10 +322,10 @@ bool translation_table_map_section (
     return true;
 }
 
-bool translation_table_map_page (
-        struct translation_table * table,
-        vmaddr_t virt,
-        physaddr_t phys
+bool TranslationTableMapPage (
+        struct TranslationTable * table,
+        VmAddr_t virt,
+        PhysAddr_t phys
         )
 {
     /* VM address rounded down to nearest megabyte */
@@ -335,7 +335,7 @@ bool translation_table_map_page (
     uintptr_t virt_pg_idx;
 
     /* Data structure representing secondlevel table */
-    struct secondlevel_table * secondlevel_table = NULL;
+    struct SecondlevelTable * secondlevel_table = NULL;
 
     assert(virt % PAGE_SIZE == 0);
     assert(phys % PAGE_SIZE == 0);
@@ -357,9 +357,9 @@ bool translation_table_map_page (
 
         case PT_FIRSTLEVEL_MAPTYPE_COARSE:
         {
-            secondlevel_table = tree_map_lookup(
+            secondlevel_table = TreeMapLookup(
                     table->sparse_secondlevel_map,
-                    (tree_map_key_t)virt_mb_rounded
+                    (TreeMapKey_t)virt_mb_rounded
                     );
 
             if (!secondlevel_table) {
@@ -391,15 +391,15 @@ bool translation_table_map_page (
             return false;
         }
 
-        tree_map_insert(
+        TreeMapInsert(
                 table->sparse_secondlevel_map,
-                (tree_map_key_t)virt_mb_rounded,
+                (TreeMapKey_t)virt_mb_rounded,
                 secondlevel_table);
 
         table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] =
                 PT_FIRSTLEVEL_MAPTYPE_COARSE |
                 (PT_DOMAIN_DEFAULT << PT_FIRSTLEVEL_DOMAIN_SHIFT) |
-                (V2P((vmaddr_t)&secondlevel_table->ptes->ptes[0]) & PT_FIRSTLEVEL_COARSE_BASE_ADDR_MASK);
+                (V2P((VmAddr_t)&secondlevel_table->ptes->ptes[0]) & PT_FIRSTLEVEL_COARSE_BASE_ADDR_MASK);
     }
 
     /* Insert the new page into the secondlevel TT */

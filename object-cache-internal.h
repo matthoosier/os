@@ -12,22 +12,22 @@ BEGIN_DECLS
 /* One-eighth of a page (right-shift by three is same as divide by 8) */
 #define MAX_SMALL_OBJECT_SIZE (PAGE_SIZE >> 3)
 
-struct slab;
+struct Slab;
 
-struct object_cache_ops
+struct ObjectCacheOps
 {
-    void (*static_init) (void);
-    void (*constructor) (struct object_cache * cache);
-    void (*destructor) (struct object_cache * cache);
-    struct slab * (*try_allocate_slab) (struct object_cache * cache);
-    void (*try_free_slab) (struct object_cache * cache, struct slab * slab);
-    struct slab * (*map_bufctl_to_slab) (struct object_cache * cache, void * bufctl_addr);
+    void (*StaticInit) (void);
+    void (*Constructor) (struct ObjectCache * cache);
+    void (*Destructor) (struct ObjectCache * cache);
+    struct Slab * (*TryAllocateSlab) (struct ObjectCache * cache);
+    void (*TryFreeSlab) (struct ObjectCache * cache, struct Slab * slab);
+    struct Slab * (*MapBufctlToSlab) (struct ObjectCache * cache, void * bufctl_addr);
 };
 
-extern const struct object_cache_ops small_objects_ops;
-extern const struct object_cache_ops large_objects_ops;
+extern const struct ObjectCacheOps small_objects_ops;
+extern const struct ObjectCacheOps large_objects_ops;
 
-struct bufctl
+struct Bufctl
 {
     /* Links in the free-list chain */
     struct list_head freelist_link;
@@ -37,12 +37,12 @@ struct bufctl
 };
 
 /* Enforce that the bufctl's don't grow larger than 1/8 of a page */
-COMPILER_ASSERT(sizeof(struct bufctl) << 3 <= PAGE_SIZE);
+COMPILER_ASSERT(sizeof(struct Bufctl) << 3 <= PAGE_SIZE);
 
-struct slab
+struct Slab
 {
     /* Descriptor for the raw virtual memory used by this slab. */
-    struct page * page;
+    struct Page * page;
 
     /* How many objects from this slab are still held by users. */
     unsigned int refcount;
@@ -54,8 +54,8 @@ struct slab
     struct list_head cache_link;
 };
 
-extern void init_slab (struct slab * slab);
-extern void init_bufctl (struct bufctl * bufctl);
+extern void InitSlab (struct Slab * slab);
+extern void InitBufctl (struct Bufctl * bufctl);
 
 END_DECLS
 

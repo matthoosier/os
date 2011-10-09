@@ -10,23 +10,23 @@
     a > b ? a : b;      \
     })
 
-static once_t init_control = ONCE_INIT;
+static Once_t init_control = ONCE_INIT;
 
 /* Allocates internal_node's */
-struct object_cache internal_node_cache;
+struct ObjectCache internal_node_cache;
 
 /* Allocates tree_map's */
-struct object_cache tree_map_cache;
+struct ObjectCache tree_map_cache;
 
 /* Forward declaration */
 struct _internal_node;
 
-struct tree_map
+struct TreeMap
 {
     struct _internal_node * root;
     unsigned int size;
 
-    tree_map_compare_func comparator;
+    TreeMapCompareFunc comparator;
 };
 
 typedef struct _internal_node
@@ -35,8 +35,8 @@ typedef struct _internal_node
     struct _internal_node * right;
     int                     height;
 
-    tree_map_key_t     key;
-    tree_map_value_t   value;
+    TreeMapKey_t     key;
+    TreeMapValue_t   value;
 } internal_node;
 
 /* Needs to be signed integer to avoid wraparound when comparing results */
@@ -45,28 +45,28 @@ static int height (
         );
 
 static internal_node * internal_insert (
-        struct tree_map * tree,
+        struct TreeMap * tree,
         internal_node * node,
-        tree_map_key_t key,
-        tree_map_value_t value,
-        tree_map_value_t * prev_value
+        TreeMapKey_t key,
+        TreeMapValue_t value,
+        TreeMapValue_t * prev_value
         );
 
 static internal_node * internal_remove (
-        struct tree_map * tree,
+        struct TreeMap * tree,
         internal_node * node,
-        tree_map_key_t key,
-        tree_map_value_t * prev_value
+        TreeMapKey_t key,
+        TreeMapValue_t * prev_value
         );
 
 static internal_node * internal_unlink_max (
-        struct tree_map * tree,
+        struct TreeMap * tree,
         internal_node * node,
         internal_node ** max
         );
 
 static void internal_free_node (
-        struct tree_map * tree,
+        struct TreeMap * tree,
         internal_node * node
         );
 
@@ -106,17 +106,17 @@ static void internal_foreach (
  */
 static void tree_map_static_init (void * param)
 {
-    object_cache_init(&internal_node_cache, sizeof(internal_node));
-    object_cache_init(&tree_map_cache, sizeof(struct tree_map));
+    ObjectCacheInit(&internal_node_cache, sizeof(internal_node));
+    ObjectCacheInit(&tree_map_cache, sizeof(struct TreeMap));
 }
 
-struct tree_map * tree_map_alloc (tree_map_compare_func comparator)
+struct TreeMap * TreeMapAlloc (TreeMapCompareFunc comparator)
 {
-    struct tree_map * result;
+    struct TreeMap * result;
 
-    once(&init_control, tree_map_static_init, NULL);
+    Once(&init_control, tree_map_static_init, NULL);
 
-    result = object_cache_alloc(&tree_map_cache);
+    result = ObjectCacheAlloc(&tree_map_cache);
     result->root = NULL;
     result->comparator = comparator;
     result->size = 0;
@@ -124,10 +124,10 @@ struct tree_map * tree_map_alloc (tree_map_compare_func comparator)
     return result;
 }
 
-void tree_map_free (struct tree_map * tree)
+void TreeMapFree (struct TreeMap * tree)
 {
     internal_free_node(tree, tree->root);
-    object_cache_free(&tree_map_cache, tree);
+    ObjectCacheFree(&tree_map_cache, tree);
 }
 
 static void check_subtree_balance (
@@ -140,13 +140,13 @@ static void check_subtree_balance (
     assert(balance >= -1 && balance <= 1);
 }
 
-tree_map_value_t tree_map_insert (
-        struct tree_map * tree,
-        tree_map_key_t key,
-        tree_map_value_t value
+TreeMapValue_t TreeMapInsert (
+        struct TreeMap * tree,
+        TreeMapKey_t key,
+        TreeMapValue_t value
         )
 {
-    tree_map_value_t prev_value = NULL;
+    TreeMapValue_t prev_value = NULL;
 
     tree->root = internal_insert(tree, tree->root, key, value, &prev_value);
     internal_foreach(tree->root, check_subtree_balance, NULL);
@@ -158,12 +158,12 @@ tree_map_value_t tree_map_insert (
     return prev_value;
 }
 
-tree_map_value_t tree_map_remove (
-        struct tree_map * tree,
-        tree_map_key_t key
+TreeMapValue_t TreeMapRemove (
+        struct TreeMap * tree,
+        TreeMapKey_t key
         )
 {
-    tree_map_value_t prev_value = NULL;
+    TreeMapValue_t prev_value = NULL;
 
     tree->root = internal_remove(tree, tree->root, key, &prev_value);
 
@@ -174,9 +174,9 @@ tree_map_value_t tree_map_remove (
     return prev_value;
 }
 
-tree_map_value_t tree_map_lookup (
-        struct tree_map * tree,
-        tree_map_key_t key
+TreeMapValue_t TreeMapLookup (
+        struct TreeMap * tree,
+        TreeMapKey_t key
         )
 {
     internal_node * node;
@@ -194,21 +194,21 @@ tree_map_value_t tree_map_lookup (
 }
 
 unsigned int tree_map_size (
-        struct tree_map * tree
+        struct TreeMap * tree
         )
 {
     return tree->size;
 }
 
-void tree_map_foreach (
-        struct tree_map * tree,
-        tree_map_foreach_func func,
+void TreeMapForeach (
+        struct TreeMap * tree,
+        TreeMapForeachFunc func,
         void * user_data
         )
 {
     struct closure
     {
-        tree_map_foreach_func user_func;
+        TreeMapForeachFunc user_func;
         void * user_data;
     };
 
@@ -227,11 +227,11 @@ void tree_map_foreach (
 }
 
 static internal_node * internal_insert (
-        struct tree_map * tree,
+        struct TreeMap * tree,
         internal_node * node,
-        tree_map_key_t key,
-        tree_map_value_t value,
-        tree_map_value_t * prev_value
+        TreeMapKey_t key,
+        TreeMapValue_t value,
+        TreeMapValue_t * prev_value
         )
 {
     if (node) {
@@ -259,7 +259,7 @@ static internal_node * internal_insert (
         }
     }
     else {
-        internal_node * new_node = object_cache_alloc(&internal_node_cache);
+        internal_node * new_node = ObjectCacheAlloc(&internal_node_cache);
 
         new_node->left = NULL;
         new_node->right = NULL;
@@ -273,10 +273,10 @@ static internal_node * internal_insert (
 }
 
 static internal_node * internal_remove (
-        struct tree_map * tree,
+        struct TreeMap * tree,
         internal_node * node,
-        tree_map_key_t key,
-        tree_map_value_t * prev_value
+        TreeMapKey_t key,
+        TreeMapValue_t * prev_value
         )
 {
     internal_node * result;
@@ -290,18 +290,18 @@ static internal_node * internal_remove (
 
             if (!node->left && !node->right) {
                 /* Both subtrees are empty */
-                object_cache_free(&internal_node_cache, node);
+                ObjectCacheFree(&internal_node_cache, node);
                 result = NULL;
             }
             else if (node->left && !node->right) {
                 /* Only left subtree is nonempty */
                 result = node->left;
-                object_cache_free(&internal_node_cache, node);
+                ObjectCacheFree(&internal_node_cache, node);
             }
             else if (!node->left && node->right) {
                 /* Only right subtree is nonempty */
                 result = node->right;
-                object_cache_free(&internal_node_cache, node);
+                ObjectCacheFree(&internal_node_cache, node);
             }
             else {
                 /*
@@ -311,7 +311,7 @@ static internal_node * internal_remove (
                 node->left = internal_unlink_max(tree, node->left, &result);
                 result->left = node->left;
                 result->right = node->right;
-                object_cache_free(&internal_node_cache, node);
+                ObjectCacheFree(&internal_node_cache, node);
             }
         }
         else if (compare_val > 0) {
@@ -347,7 +347,7 @@ static internal_node * internal_remove (
  * which @node formerly occupied.
  */
 static internal_node * internal_unlink_max (
-        struct tree_map * tree,
+        struct TreeMap * tree,
         internal_node * node,
         internal_node ** max
         )
@@ -383,14 +383,14 @@ static internal_node * internal_unlink_max (
 }
 
 static void internal_free_node (
-        struct tree_map * tree,
+        struct TreeMap * tree,
         internal_node * node
         )
 {
     if (node) {
         internal_free_node(tree, node->left);
         internal_free_node(tree, node->right);
-        object_cache_free(&internal_node_cache, node);
+        ObjectCacheFree(&internal_node_cache, node);
     }
 }
 
@@ -508,8 +508,8 @@ static void internal_foreach (
 }
 
 static int address_compare_func (
-        tree_map_key_t left,
-        tree_map_key_t right)
+        TreeMapKey_t left,
+        TreeMapKey_t right)
 {
     uintptr_t left_addr = (uintptr_t)left;
     uintptr_t right_addr = (uintptr_t)right;
@@ -529,4 +529,4 @@ static int address_compare_func (
 /**
  * Public API name for 'address_compare_func'
  */
-tree_map_compare_func tree_map_address_compare_func = &address_compare_func;
+TreeMapCompareFunc TreeMapAddressCompareFunc = &address_compare_func;

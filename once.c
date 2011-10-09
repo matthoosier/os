@@ -1,11 +1,11 @@
 #include "once.h"
 #include "spinlock.h"
 
-void once (once_t * control, once_func func, void * param)
+void Once (Once_t * control, OnceFunc func, void * param)
 {
     if (!control->done)
     {
-        spinlock_lock(&control->lock);
+        SpinlockLock(&control->lock);
 
         if (!control->done)
         {
@@ -13,6 +13,6 @@ void once (once_t * control, once_func func, void * param)
             func(param);
         }
 
-        spinlock_unlock(&control->lock);
+        SpinlockUnlock(&control->lock);
     }
 }

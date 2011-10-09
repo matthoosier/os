@@ -13,68 +13,68 @@ Used by large-object caches to get slab's not hosted inside the slab
 storage. Prevents terrible space waste for large (>= PAGE_SIZE / 2)
 objects.
 */
-struct object_cache slabs_cache;
+struct ObjectCache slabs_cache;
 
-static once_t init_control = ONCE_INIT;
+static Once_t init_control = ONCE_INIT;
 
 static void static_init ()
 {
     void init_once (void * param)
     {
-        object_cache_init(&slabs_cache, sizeof(struct slab));
+        ObjectCacheInit(&slabs_cache, sizeof(struct Slab));
     }
 
-    once(&init_control, init_once, NULL);
+    Once(&init_control, init_once, NULL);
 }
 
-static void constructor (struct object_cache * cache)
+static void constructor (struct ObjectCache * cache)
 {
-    cache->bufctl_to_slab_map = tree_map_alloc(tree_map_address_compare_func);
+    cache->bufctl_to_slab_map = TreeMapAlloc(TreeMapAddressCompareFunc);
 }
 
-static void destructor (struct object_cache * cache)
+static void destructor (struct ObjectCache * cache)
 {
-    tree_map_free(cache->bufctl_to_slab_map);
+    TreeMapFree(cache->bufctl_to_slab_map);
     cache->bufctl_to_slab_map = NULL;
 }
 
-static struct slab * large_objects_try_allocate_slab (struct object_cache * cache)
+static struct Slab * large_objects_try_allocate_slab (struct ObjectCache * cache)
 {
-    struct page *   new_page;
-    struct slab *   new_slab;
+    struct Page *   new_page;
+    struct Slab *   new_slab;
     unsigned int    objs_in_slab;
     unsigned int    i;
 
-    new_page = vm_page_alloc();
+    new_page = VmPageAlloc();
 
     if (!new_page) {
         return NULL;
     }
 
-    new_slab = object_cache_alloc(&slabs_cache);
+    new_slab = ObjectCacheAlloc(&slabs_cache);
 
     if (!new_slab) {
-        vm_page_free(new_page);
+        VmPageFree(new_page);
         return NULL;
     }
 
-    init_slab(new_slab);
+    InitSlab(new_slab);
     new_slab->page = new_page;
 
     objs_in_slab = PAGE_SIZE / cache->element_size;
 
     /* Carve out (PAGE_SIZE / element_size) individual buffers. */
     for (i = 0; i < objs_in_slab; ++i) {
-        vmaddr_t        buf_base;
-        struct bufctl * new_bufctl;
+        VmAddr_t        buf_base;
+        struct Bufctl * new_bufctl;
 
         buf_base = new_page->base_address + cache->element_size * i;
-        new_bufctl = (struct bufctl *)buf_base;
-        init_bufctl(new_bufctl);
+        new_bufctl = (struct Bufctl *)buf_base;
+        InitBufctl(new_bufctl);
 
         /* Record controlling slab's location in auxiliary map */
-        tree_map_insert(cache->bufctl_to_slab_map, new_bufctl, new_slab);
-        assert(tree_map_lookup(cache->bufctl_to_slab_map, new_bufctl) == new_slab);
+        TreeMapInsert(cache->bufctl_to_slab_map, new_bufctl, new_slab);
+        assert(TreeMapLookup(cache->bufctl_to_slab_map, new_bufctl) == new_slab);
 
         /* Now insert into freelist */
         list_add_tail(&new_bufctl->freelist_link, &new_slab->freelist_head);
@@ -83,9 +83,9 @@ static struct slab * large_objects_try_allocate_slab (struct object_cache * cach
     return new_slab;
 }
 
-static void large_objects_free_slab (struct object_cache * cache, struct slab * slab)
+static void large_objects_free_slab (struct ObjectCache * cache, struct Slab * slab)
 {
-    struct bufctl * bufctl_cursor;
+    struct Bufctl * bufctl_cursor;
 
     if (slab->refcount == 0) {
         /* Unlink this slab from the cache's list */
@@ -101,33 +101,33 @@ static void large_objects_free_slab (struct object_cache * cache, struct slab * 
         */
         list_for_each_entry (bufctl_cursor, &slab->freelist_head, freelist_link) {
             
-            struct slab * removed;
+            struct Slab * removed;
 
-            removed = tree_map_remove(cache->bufctl_to_slab_map, bufctl_cursor);
+            removed = TreeMapRemove(cache->bufctl_to_slab_map, bufctl_cursor);
             assert(removed != NULL);
         }
 
         /* Release the page that stored the user buffers */
-        vm_page_free(slab->page);
+        VmPageFree(slab->page);
 
         /* Finally free the slab, which is allocated from an object cache. */
-        object_cache_free(&slabs_cache, slab);
+        ObjectCacheFree(&slabs_cache, slab);
     }
 }
 
-static struct slab * large_objects_slab_from_bufctl (
-        struct object_cache * cache,
+static struct Slab * large_objects_slab_from_bufctl (
+        struct ObjectCache * cache,
         void * bufctl_addr
         )
 {
-    return tree_map_lookup(cache->bufctl_to_slab_map, bufctl_addr);
+    return TreeMapLookup(cache->bufctl_to_slab_map, bufctl_addr);
 }
 
-const struct object_cache_ops large_objects_ops = {
-    .static_init = static_init,
-    .constructor = constructor,
-    .destructor = destructor,
-    .try_allocate_slab = large_objects_try_allocate_slab,
-    .try_free_slab = large_objects_free_slab,
-    .map_bufctl_to_slab = large_objects_slab_from_bufctl,
+const struct ObjectCacheOps large_objects_ops = {
+    .StaticInit = static_init,
+    .Constructor = constructor,
+    .Destructor = destructor,
+    .TryAllocateSlab = large_objects_try_allocate_slab,
+    .TryFreeSlab = large_objects_free_slab,
+    .MapBufctlToSlab = large_objects_slab_from_bufctl,
 };

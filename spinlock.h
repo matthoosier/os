@@ -9,23 +9,23 @@ BEGIN_DECLS
 typedef struct
 {
     uint32_t lockval;
-} spinlock_t;
+} Spinlock_t;
 
 #define SPINLOCK_LOCKVAL_UNLOCKED   0
 #define SPINLOCK_LOCKVAL_LOCKED     1
 
 #define SPINLOCK_INIT { SPINLOCK_LOCKVAL_UNLOCKED }
 
-static inline void spinlock_lock (spinlock_t * lock)
+static inline void SpinlockLock (Spinlock_t * lock)
 {
-    while (!atomic_compare_and_exchange(&lock->lockval, SPINLOCK_LOCKVAL_UNLOCKED, SPINLOCK_LOCKVAL_LOCKED))
+    while (!AtomicCompareAndExchange(&lock->lockval, SPINLOCK_LOCKVAL_UNLOCKED, SPINLOCK_LOCKVAL_LOCKED))
     {
     }
 }
 
-static inline void spinlock_unlock (spinlock_t * lock)
+static inline void SpinlockUnlock (Spinlock_t * lock)
 {
-    while (!atomic_compare_and_exchange(&lock->lockval, SPINLOCK_LOCKVAL_LOCKED, SPINLOCK_LOCKVAL_UNLOCKED))
+    while (!AtomicCompareAndExchange(&lock->lockval, SPINLOCK_LOCKVAL_LOCKED, SPINLOCK_LOCKVAL_UNLOCKED))
     {
     }
 }

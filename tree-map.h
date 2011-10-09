@@ -4,17 +4,17 @@
 /**
  * Opaque forward declaration
  */
-struct tree_map;
+struct TreeMap;
 
 /**
  * Key types
  */
-typedef void * tree_map_key_t;
+typedef void * TreeMapKey_t;
 
 /**
  * Value types
  */
-typedef void * tree_map_value_t;
+typedef void * TreeMapValue_t;
 
 /**
  * Key comparison function
@@ -22,14 +22,14 @@ typedef void * tree_map_value_t;
  * Return -1 if @left is less than @right, 0 if @left is
  * equal to @right, and +1 if @left is greater than @right.
  */
-typedef int (*tree_map_compare_func) (
-        tree_map_key_t left,
-        tree_map_key_t right
+typedef int (*TreeMapCompareFunc) (
+        TreeMapKey_t left,
+        TreeMapKey_t right
         );
 
-typedef void (*tree_map_foreach_func) (
-        tree_map_key_t key,
-        tree_map_value_t value,
+typedef void (*TreeMapForeachFunc) (
+        TreeMapKey_t key,
+        TreeMapValue_t value,
         void * user_data
         );
 
@@ -37,29 +37,29 @@ typedef void (*tree_map_foreach_func) (
  * Canned key-comparision function suitable for comparing
  * keys that are virtual memory addresses.
  */
-extern tree_map_compare_func tree_map_address_compare_func;
+extern TreeMapCompareFunc TreeMapAddressCompareFunc;
 
 /**
  * Make a tree instance
  */
-extern struct tree_map * tree_map_alloc (
-        tree_map_compare_func comparator
+extern struct TreeMap * TreeMapAlloc (
+        TreeMapCompareFunc comparator
         );
 
 /**
  * Destroy a tree instance.
  */
-extern void tree_map_free (struct tree_map * tree);
+extern void TreeMapFree (struct TreeMap * tree);
 
 /**
  * Maps @key to @value.
  *
  * Returns any previous value that was mapped to @key.
  */
-extern tree_map_value_t tree_map_insert (
-        struct tree_map * tree,
-        tree_map_key_t key,
-        tree_map_value_t value
+extern TreeMapValue_t TreeMapInsert (
+        struct TreeMap * tree,
+        TreeMapKey_t key,
+        TreeMapValue_t value
         );
 
 /**
@@ -67,32 +67,32 @@ extern tree_map_value_t tree_map_insert (
  *
  * Returns the value (if any) that was mapped to @key.
  */
-extern tree_map_value_t tree_map_remove (
-        struct tree_map * tree,
-        tree_map_key_t key
+extern TreeMapValue_t TreeMapRemove (
+        struct TreeMap * tree,
+        TreeMapKey_t key
         );
 
 /**
  * Finds the value (if any) mapped to @key
  */
-extern tree_map_value_t tree_map_lookup (
-        struct tree_map * tree,
-        tree_map_key_t key
+extern TreeMapValue_t TreeMapLookup (
+        struct TreeMap * tree,
+        TreeMapKey_t key
         );
 
 /**
  * Returns number of entries in the map
  */
-extern unsigned int tree_map_size (
-        struct tree_map * tree
+extern unsigned int TreeMapSize (
+        struct TreeMap * tree
         );
 
 /**
  * Visit each key/value pair current stored in the map
  */
-extern void tree_map_foreach (
-        struct tree_map * tree,
-        tree_map_foreach_func func,
+extern void TreeMapForeach (
+        struct TreeMap * tree,
+        TreeMapForeachFunc func,
         void * user_data
         );
 

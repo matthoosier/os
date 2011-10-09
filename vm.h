@@ -14,8 +14,8 @@ extern char __HeapStart;
 /* Don't use this directly. Use VIRTUAL_HEAP_START and HEAP_SIZE */
 extern char __RamEnd;
 
-typedef uintptr_t physaddr_t;
-typedef uintptr_t vmaddr_t;
+typedef uintptr_t PhysAddr_t;
+typedef uintptr_t VmAddr_t;
 
 /*
  * The kernel code's run address is 3GB higher than its load address.
@@ -34,7 +34,7 @@ extern void * __KernelStart[];
 #ifdef __GNUC__
     #define V2P(_vmaddr)            \
             ({                      \
-            vmaddr_t a = (_vmaddr); \
+            VmAddr_t a = (_vmaddr); \
             a - KERNEL_MODE_OFFSET; \
             })
 #else
@@ -52,20 +52,20 @@ extern void * __KernelStart[];
 #ifdef __GNUC__
     #define P2V(_physaddr)              \
             ({                          \
-            physaddr_t a = (_physaddr); \
+            PhysAddr_t a = (_physaddr); \
             a + KERNEL_MODE_OFFSET;     \
             })
 #else
     #define P2V(_physaddr) ((_physaddr) + KERNEL_MODE_OFFSET)
 #endif
 
-#define VIRTUAL_HEAP_START ((vmaddr_t)&__HeapStart)
-#define HEAP_SIZE ((size_t)((vmaddr_t)&__RamEnd) - VIRTUAL_HEAP_START)
+#define VIRTUAL_HEAP_START ((VmAddr_t)&__HeapStart)
+#define HEAP_SIZE ((size_t)((VmAddr_t)&__RamEnd) - VIRTUAL_HEAP_START)
 
-struct page
+struct Page
 {
     /* Always a multiple of PAGE_SIZE. */
-    vmaddr_t    base_address;
+    VmAddr_t    base_address;
 
     /*
     Used internally by VM to keep list of free pages, and allowed for
@@ -75,13 +75,13 @@ struct page
 };
 
 /* Returns back the virtual memory address of a newly allocated page */
-extern struct page * vm_page_alloc ();
+extern struct Page * VmPageAlloc ();
 
 /* Release the page starting at virtual memory address 'page_address' */
-extern void vm_page_free (struct page * page);
+extern void VmPageFree (struct Page * page);
 
 /* Returns back the virtual memory address of a block of contiguous pages */
-extern struct page * vm_pages_alloc (unsigned int order);
+extern struct Page * VmPagesAlloc (unsigned int order);
 
 END_DECLS
 

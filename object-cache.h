@@ -7,10 +7,10 @@
 
 BEGIN_DECLS
 
-struct tree_map;
-struct object_cache_ops;
+struct TreeMap;
+struct ObjectCacheOps;
 
-struct object_cache
+struct ObjectCache
 {
     size_t element_size;
 
@@ -18,15 +18,15 @@ struct object_cache
     struct list_head slab_head;
 
     /* Used for large-object case */
-    struct tree_map * bufctl_to_slab_map;
+    struct TreeMap * bufctl_to_slab_map;
 
-    const struct object_cache_ops * ops;
+    const struct ObjectCacheOps * ops;
 };
 
-extern void object_cache_init (struct object_cache * cache, size_t element_size);
+extern void ObjectCacheInit (struct ObjectCache * cache, size_t element_size);
 
-extern void * object_cache_alloc (struct object_cache * cache);
-extern void object_cache_free (struct object_cache * cache, void * element);
+extern void * ObjectCacheAlloc (struct ObjectCache * cache);
+extern void ObjectCacheFree (struct ObjectCache * cache, void * element);
 
 END_DECLS
 

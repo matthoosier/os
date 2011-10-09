@@ -11,7 +11,7 @@ _start_high:
     ldr r0, =__KernelStart
     add sp, sp, r0
 
-    bl init
+    bl Init
 
 0:
     b 0b

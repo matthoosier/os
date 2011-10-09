@@ -40,7 +40,7 @@
 
 BEGIN_DECLS
 
-extern int arch_get_version (void);
+extern int ArchGetVersion (void);
 
 END_DECLS
 

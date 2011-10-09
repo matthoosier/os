@@ -7,11 +7,11 @@
 
 #define ALIGNED_THREAD_STRUCT_SIZE                                  \
     /* Padded out to multiple of 8 to preserve %sp requirements */  \
-    (ALIGN(sizeof(struct thread), 3))
+    (ALIGN(sizeof(struct Thread), 3))
 
 #define THREAD_STRUCT_FROM_SP(_sp)                                  \
     (                                                               \
-    (struct thread *)                                               \
+    (struct Thread *)                                               \
     (((_sp) & PAGE_MASK) + PAGE_SIZE - ALIGNED_THREAD_STRUCT_SIZE)  \
     )
 
@@ -34,7 +34,7 @@ typedef enum
 
     /* This isn't a state, just a way to programatically calculate */
     THREAD_STATE_COUNT,
-} thread_state;
+} ThreadState;
 
 /*
 The main control and saved-state for kernel threads. Each thread's
@@ -43,7 +43,7 @@ used for the thread's stack. This avoids object allocations and also
 makes deducing the current thread easy: just compute the right offset
 in the page containing the current stack pointer.
 */
-struct thread
+struct Thread
 {
     uint32_t    registers[REGISTER_COUNT];
 
@@ -53,23 +53,28 @@ struct thread
         void *  base;
 
         /* If non-NULL, stack was dynamically allocated */
-        struct page * page;
+        struct Page * page;
     } kernel_stack;
 
-    thread_state state;
+    ThreadState state;
 
     /* For use in scheduling queues. */
     struct list_head queue_link;
 };
 
-typedef void (*thread_func)(void * param);
+typedef void (*ThreadFunc)(void * param);
 
-extern struct thread * thread_create (thread_func body, void * param);
+extern struct Thread * ThreadCreate (
+        ThreadFunc body,
+        void * param
+        );
 
-extern void thread_switch (struct thread *  outgoing,
-                           struct thread *  incoming);
+extern void ThreadSwitch (
+        struct Thread *  outgoing,
+        struct Thread *  incoming
+        );
 
-extern void thread_yield (void);
+extern void ThreadYield (void);
 
 END_DECLS
 

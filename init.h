@@ -9,7 +9,7 @@ BEGIN_DECLS
 extern uint8_t init_stack[];
 extern uint8_t * init_stack_ceiling;
 
-extern void init (void)
+extern void Init (void)
     __attribute__ ((noreturn));
 
 END_DECLS

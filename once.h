@@ -6,14 +6,14 @@
 
 typedef struct
 {
-    spinlock_t  lock;
+    Spinlock_t  lock;
     bool        done;
-} once_t;
+} Once_t;
 
 #define ONCE_INIT { SPINLOCK_INIT, false }
 
-typedef void (*once_func) (void * param);
+typedef void (*OnceFunc) (void * param);
 
-extern void once (once_t * control, once_func func, void * param);
+extern void Once (Once_t * control, OnceFunc func, void * param);
 
 #endif /* __ONCE_H__ */

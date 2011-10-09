@@ -23,19 +23,19 @@ uint8_t * init_stack_ceiling = &init_stack[
     N_ELEMENTS(init_stack) - ALIGNED_THREAD_STRUCT_SIZE
     ];
 
-struct object_cache an_object_cache;
+struct ObjectCache an_object_cache;
 enum { AN_OBJECT_CACHE_ELEMENT_SIZE = PAGE_SIZE / 2 };
 
-void init (void)
+void Init (void)
 {
-    struct page * one = vm_page_alloc();
-    struct page * two = vm_page_alloc();
-    struct page * three = vm_page_alloc();
-    struct page * four = vm_page_alloc();
+    struct Page * one = VmPageAlloc();
+    struct Page * two = VmPageAlloc();
+    struct Page * three = VmPageAlloc();
+    struct Page * four = VmPageAlloc();
 
-    vm_page_free(three);
+    VmPageFree(three);
     three = NULL;
-    vm_page_free(four);
+    VmPageFree(four);
     four = NULL;
 
     one = one;
@@ -48,20 +48,20 @@ void init (void)
     void *an_element3;
     void *an_element4;
 
-    object_cache_init(&an_object_cache, AN_OBJECT_CACHE_ELEMENT_SIZE);
+    ObjectCacheInit(&an_object_cache, AN_OBJECT_CACHE_ELEMENT_SIZE);
 
-    an_element1 = object_cache_alloc(&an_object_cache);
-    object_cache_free(&an_object_cache, an_element1);
+    an_element1 = ObjectCacheAlloc(&an_object_cache);
+    ObjectCacheFree(&an_object_cache, an_element1);
 
-    an_element2 = object_cache_alloc(&an_object_cache);
-    an_element1 = object_cache_alloc(&an_object_cache);
-    an_element3 = object_cache_alloc(&an_object_cache);
-    an_element4 = object_cache_alloc(&an_object_cache);
+    an_element2 = ObjectCacheAlloc(&an_object_cache);
+    an_element1 = ObjectCacheAlloc(&an_object_cache);
+    an_element3 = ObjectCacheAlloc(&an_object_cache);
+    an_element4 = ObjectCacheAlloc(&an_object_cache);
 
-    object_cache_free(&an_object_cache, an_element4);
-    object_cache_free(&an_object_cache, an_element3);
-    object_cache_free(&an_object_cache, an_element1);
-    object_cache_free(&an_object_cache, an_element2);
+    ObjectCacheFree(&an_object_cache, an_element4);
+    ObjectCacheFree(&an_object_cache, an_element3);
+    ObjectCacheFree(&an_object_cache, an_element1);
+    ObjectCacheFree(&an_object_cache, an_element2);
 
     an_element1 = an_element1;
     an_element2 = an_element2;
@@ -75,7 +75,7 @@ void init (void)
 
 void install_kernel_memory_map ()
 {
-    struct translation_table * kernel_tt = translation_table_alloc();
+    struct TranslationTable * kernel_tt = TranslationTableAlloc();
     kernel_tt = kernel_tt;
 
     /* Map only the kernel high memory (all physical RAM) */
@@ -85,7 +85,7 @@ void install_kernel_memory_map ()
 
     for (; mb_idx < mb_idx_bound; mb_idx++)
     {
-        bool success = translation_table_map_section(
+        bool success = TranslationTableMapSection(
                 kernel_tt,
                 mb_idx << MEGABYTE_SHIFT,
                 (mb_idx << MEGABYTE_SHIFT) - KERNEL_MODE_OFFSET
@@ -96,10 +96,10 @@ void install_kernel_memory_map ()
     /* Really just a marker from the linker script */
     extern char __VectorStartPhysical;
 
-    bool success = translation_table_map_page(
+    bool success = TranslationTableMapPage(
                 kernel_tt,
                 0xffff0000,
-                (physaddr_t)&__VectorStartPhysical
+                (PhysAddr_t)&__VectorStartPhysical
                 );
     assert(success);
 
@@ -108,17 +108,17 @@ void install_kernel_memory_map ()
     But there was some additional setup work (like configuring exceptions)
     that didn't happen originally.
     */
-    mmu_set_enabled();
+    MmuSetEnabled();
 
     /* Install this fully-fledged pagetable */
-    mmu_set_translation_table(kernel_tt);
+    MmuSetTranslationTable(kernel_tt);
 }
 
 /* Retroactively filled in */
-static struct thread *first_thread = (struct thread *)&init_stack[N_ELEMENTS(init_stack) - ALIGNED_THREAD_STRUCT_SIZE];
+static struct Thread *first_thread = (struct Thread *)&init_stack[N_ELEMENTS(init_stack) - ALIGNED_THREAD_STRUCT_SIZE];
 
 /* Really forked */
-static struct thread *second_thread;
+static struct Thread *second_thread;
 
 void second_thread_body (void * param)
 {
@@ -138,7 +138,7 @@ void second_thread_body (void * param)
 
         assert(syscall1(0, 37) == 37);
 
-        thread_yield();
+        ThreadYield();
     }
 }
 
@@ -157,15 +157,15 @@ void run_first_thread ()
     int mmu_enabled;
     int arch_version;
 
-    mmu_enabled = mmu_get_enabled();
-    arch_version = arch_get_version();
+    mmu_enabled = MmuGetEnabled();
+    arch_version = ArchGetVersion();
 
     mmu_enabled = mmu_enabled;
     arch_version = arch_version;
 
-    second_thread = thread_create(second_thread_body, "Foo!");
+    second_thread = ThreadCreate(second_thread_body, "Foo!");
 
     while (true) {
-        thread_yield();
+        ThreadYield();
     }
 }

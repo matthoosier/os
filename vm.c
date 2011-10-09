@@ -26,22 +26,22 @@ typedef struct
 static buddylist_level buddylists[NUM_BUDDYLIST_LEVELS];
 
 static unsigned int     num_pages;
-static struct page *    page_structs;
-static vmaddr_t         pages_base;
+static struct Page *    page_structs;
+static VmAddr_t         pages_base;
 
-static once_t           init_control = ONCE_INIT;
+static Once_t           init_control = ONCE_INIT;
 
-static inline unsigned int page_index_from_base_address (vmaddr_t base)
+static inline unsigned int page_index_from_base_address (VmAddr_t base)
 {
     return (base - pages_base) >> PAGE_SHIFT;
 }
 
-static inline unsigned int page_index_from_struct (struct page * page)
+static inline unsigned int page_index_from_struct (struct Page * page)
 {
     return page_index_from_base_address(page->base_address);
 }
 
-static inline int buddylist_level_from_alignment (vmaddr_t addr)
+static inline int buddylist_level_from_alignment (VmAddr_t addr)
 {
     unsigned int i;
 
@@ -85,7 +85,7 @@ static void vm_init (void * ignored)
 
         /* Initialize bitmap. All blocks are initially unowned. */
         for (idx = 0; idx < buddylists[i].bitmap.element_count; idx++) {
-            bitmap_clear(buddylists[i].bitmap.elements, idx);
+            BitmapClear(buddylists[i].bitmap.elements, idx);
         }
     }
 
@@ -94,7 +94,7 @@ static void vm_init (void * ignored)
     pages_base &= PAGE_MASK << (NUM_BUDDYLIST_LEVELS - 1);
 
     num_pages = PAGE_COUNT_FROM_SIZE(HEAP_SIZE - (pages_base - VIRTUAL_HEAP_START));
-    page_structs = (struct page *)VIRTUAL_HEAP_START;
+    page_structs = (struct Page *)VIRTUAL_HEAP_START;
 
     /* Initialize each buddylist level's freelist head */
     for (i = 0; i < NUM_BUDDYLIST_LEVELS; i++) {
@@ -107,7 +107,7 @@ static void vm_init (void * ignored)
     coaslesced into the biggest possible chunks.
     */
     for (i = 0; i < num_pages; i += SETBIT(NUM_BUDDYLIST_LEVELS - 1)) {
-        vmaddr_t base_address = pages_base + (i * PAGE_SIZE);
+        VmAddr_t base_address = pages_base + (i * PAGE_SIZE);
         int buddy_level = buddylist_level_from_alignment(base_address);
 
         page_structs[i].base_address = base_address;
@@ -121,14 +121,14 @@ static void vm_init (void * ignored)
     }
 }
 
-struct page * vm_pages_alloc_internal (
+struct Page * vm_pages_alloc_internal (
         unsigned int order,
         bool mark_busy_in_bitmap
         )
 {
-    struct page * result;
+    struct Page * result;
 
-    once(&init_control, vm_init, NULL);
+    Once(&init_control, vm_init, NULL);
 
     if (order >= NUM_BUDDYLIST_LEVELS) {
         return NULL;
@@ -136,9 +136,9 @@ struct page * vm_pages_alloc_internal (
 
     /* If no block of the requested size is available, split a larger one */
     if (list_empty(&buddylists[order].freelist_head)) {
-        struct page * block_to_split;
-        struct page * second_half_struct;
-        vmaddr_t  second_half_address;
+        struct Page * block_to_split;
+        struct Page * second_half_struct;
+        VmAddr_t  second_half_address;
 
         /* Recursive call */
         block_to_split = vm_pages_alloc_internal(order + 1, false);
@@ -149,7 +149,7 @@ struct page * vm_pages_alloc_internal (
 
         /*
         If we got this far, then the 'block_to_split' structure is already
-        the right 'struct page' instance to represent the lower-half of
+        the right 'struct Page' instance to represent the lower-half of
         the block once it's split in two.
 
         We still need to compute the right struct instance (and initialize
@@ -181,14 +181,14 @@ struct page * vm_pages_alloc_internal (
     }
 
     /* This will always find an entry on the first iteration. */
-    result = list_first_entry(&buddylists[order].freelist_head, struct page, list_link);
+    result = list_first_entry(&buddylists[order].freelist_head, struct Page, list_link);
 
     /* Remove the selected page from the free-list. */
     list_del_init(&result->list_link);
 
     /* Mark page as busy in whichever level's bitmap is appropriate. */
     if (mark_busy_in_bitmap) {
-        bitmap_set(
+        BitmapSet(
             buddylists[order].bitmap.elements,
             page_index_from_struct(result) >> order
             );
@@ -197,21 +197,21 @@ struct page * vm_pages_alloc_internal (
     return result;
 }
 
-struct page * vm_page_alloc ()
+struct Page * VmPageAlloc ()
 {
-    return vm_pages_alloc(0);
+    return VmPagesAlloc(0);
 }
 
-struct page * vm_pages_alloc (unsigned int order)
+struct Page * VmPagesAlloc (unsigned int order)
 {
     return vm_pages_alloc_internal(order, true);
 }
 
-static void try_merge_block (struct page * block, unsigned int order)
+static void try_merge_block (struct Page * block, unsigned int order)
 {
-    vmaddr_t        partner_address;
+    VmAddr_t        partner_address;
     unsigned int    partner_index;
-    struct page *   partner;
+    struct Page *   partner;
 
     /* No coaslescing is possible if block is from largest bucket */
     if (order >= NUM_BUDDYLIST_LEVELS - 1) {
@@ -227,8 +227,8 @@ static void try_merge_block (struct page * block, unsigned int order)
     partner = &page_structs[partner_index];
 
     /* If the partner isn't allocated out to a user, then merge */
-    if (!bitmap_get(buddylists[order].bitmap.elements, partner_index >> order)) {
-        struct page * merged_block = block->base_address < partner->base_address
+    if (!BitmapGet(buddylists[order].bitmap.elements, partner_index >> order)) {
+        struct Page * merged_block = block->base_address < partner->base_address
                 ? block
                 : partner;
 
@@ -244,13 +244,13 @@ static void try_merge_block (struct page * block, unsigned int order)
     }
 }
 
-void vm_page_free (struct page * page)
+void VmPageFree (struct Page * page)
 {
     unsigned int order;
     unsigned int largest_order;
     unsigned int idx;
 
-    once(&init_control, vm_init, NULL);
+    Once(&init_control, vm_init, NULL);
 
     /*
     Figure out the chunkiest possible buddylist level this block could
@@ -265,12 +265,12 @@ void vm_page_free (struct page * page)
     for (order = largest_order; order >= 0; order--) {
         idx = page_index_from_base_address(page->base_address) >> order;
 
-        if (bitmap_get(buddylists[order].bitmap.elements, idx)) {
+        if (BitmapGet(buddylists[order].bitmap.elements, idx)) {
 
             /* Found it. Return to freelist and clear bitmap. Then done. */
             INIT_LIST_HEAD(&page->list_link);
             list_add(&page->list_link, &buddylists[order].freelist_head);
-            bitmap_clear(buddylists[order].bitmap.elements, idx);
+            BitmapClear(buddylists[order].bitmap.elements, idx);
             try_merge_block(page, order);
             return;
         }
