@@ -138,7 +138,8 @@ void second_thread_body (void * param)
 
         assert(syscall1(0, 37) == 37);
 
-        ThreadYield();
+        ThreadAddReady(THREAD_CURRENT());
+        ThreadYieldNoRequeue();
     }
 }
 
@@ -166,6 +167,7 @@ void run_first_thread ()
     second_thread = ThreadCreate(second_thread_body, "Foo!");
 
     while (true) {
-        ThreadYield();
+        ThreadAddReady(THREAD_CURRENT());
+        ThreadYieldNoRequeue();
     }
 }

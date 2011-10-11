@@ -1,6 +1,7 @@
 #include <stdlib.h>
 
 #include "arch.h"
+#include "assert.h"
 #include "thread.h"
 #include "vm.h"
 
@@ -8,7 +9,7 @@ static LIST_HEAD(ready_queue);
 
 static void thread_trampoline ();
 
-void ThreadSwitch (struct Thread * outgoing,
+static void ThreadSwitch (struct Thread * outgoing,
                    struct Thread * incoming)
 {
     uint32_t next_pc = next_pc;
@@ -83,8 +84,10 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
     /* Install trampoline in case the thread returns. */
     descriptor->registers[REGISTER_INDEX_LR] = (uint32_t)thread_trampoline;
 
-    list_add_tail(&descriptor->queue_link, &ready_queue);
-    ThreadYield();
+    /* Mark the new thread as ready, and yield so that it gets scheduled. */
+    ThreadAddReady(descriptor);
+    ThreadAddReady(THREAD_CURRENT());
+    ThreadYieldNoRequeue();
 
     return descriptor;
 }
@@ -95,20 +98,21 @@ static void thread_trampoline ()
     }
 }
 
-void ThreadYield (void)
+extern void ThreadAddReady (struct Thread * thread)
 {
-    /* No-op if no threads are ready to run. */
-    if (!list_empty(&ready_queue)) {
-        struct Thread * outgoing;
-        struct Thread * next;
+    list_add_tail(&thread->queue_link, &ready_queue);
+}
 
-        outgoing = THREAD_CURRENT();
-        outgoing->state = THREAD_STATE_READY;
-        list_add_tail(&outgoing->queue_link, &ready_queue);
+void ThreadYieldNoRequeue (void)
+{
+    struct Thread * next;
 
-        next = list_first_entry(&ready_queue, struct Thread, queue_link);
-        list_del_init(&next->queue_link);
-        next->state = THREAD_STATE_RUNNING;
-        ThreadSwitch(outgoing, next);
-    }
+    assert(!list_empty(&ready_queue));
+
+    /* Pop off thread at front of run-queue */
+    next = list_first_entry(&ready_queue, struct Thread, queue_link);
+    next->state = THREAD_STATE_RUNNING;
+    list_del_init(&next->queue_link);
+
+    ThreadSwitch(THREAD_CURRENT(), next);
 }

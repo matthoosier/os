@@ -69,12 +69,9 @@ extern struct Thread * ThreadCreate (
         void * param
         );
 
-extern void ThreadSwitch (
-        struct Thread *  outgoing,
-        struct Thread *  incoming
-        );
+extern void ThreadYieldNoRequeue (void);
 
-extern void ThreadYield (void);
+extern void ThreadAddReady (struct Thread * thread);
 
 END_DECLS
 
