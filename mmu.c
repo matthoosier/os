@@ -114,6 +114,17 @@ static void SetPagetableBase (PhysAddr_t newbase)
     );
 }
 
+void MmuFlushTlb (void)
+{
+    int ignored_register = ignored_register;
+
+    asm volatile(
+        "mcr p15, 0, %[ignored_register], c8, c7, 0"
+        :
+        : [ignored_register] "r" (ignored_register)
+    );
+}
+
 /* Allocates translation_table's */
 struct ObjectCache translation_table_cache;
 

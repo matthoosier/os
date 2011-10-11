@@ -38,7 +38,7 @@ extern struct TranslationTable * TranslationTableAlloc (void);
 extern void TranslationTableFree (struct TranslationTable * table);
 
 extern struct TranslationTable * MmuGetTranslationTable ();
-extern void MmuSetTranslationTable (struct TranslationTable *);
+extern void MmuSetTranslationTable (struct TranslationTable * table);
 
 extern bool TranslationTableMapPage (
         struct TranslationTable * table,
