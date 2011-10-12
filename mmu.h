@@ -49,10 +49,20 @@ extern bool TranslationTableMapPage (
         PhysAddr_t phys
         );
 
+extern bool TranslationTableUnmapPage (
+        struct TranslationTable * table,
+        VmAddr_t virt
+        );
+
 extern bool TranslationTableMapSection (
         struct TranslationTable * table,
         VmAddr_t virt,
         PhysAddr_t phys
+        );
+
+extern bool TranslationTableUnmapSection (
+        struct TranslationTable * table,
+        VmAddr_t virt
         );
 
 struct TranslationTable
@@ -101,6 +111,8 @@ struct SecondlevelTable
      * Utility field for inserting into whatever list is needed
      */
     struct list_head link;
+
+    unsigned int refcount;
 };
 
 struct SecondlevelPtes

@@ -215,6 +215,8 @@ static struct SecondlevelTable * secondlevel_table_alloc ()
         for (i = 0; i < N_ELEMENTS(table->ptes->ptes); i++) {
             table->ptes->ptes[i] = PT_SECONDLEVEL_MAPTYPE_UNMAPPED;
         }
+
+        table->refcount = 0;
     }
 
     return table;
@@ -318,6 +320,9 @@ void TranslationTableFree (struct TranslationTable * table)
         list_add(&secondlevel_table->link, head);
     }
 
+    /* Go ahead and gather up all the nodes */
+    TreeMapForeach(table->sparse_secondlevel_map, func, &head);
+
     /* Deallocate everything we found in there */
     while (!list_empty(&head))
     {
@@ -329,8 +334,6 @@ void TranslationTableFree (struct TranslationTable * table)
 
         SecondlevelTableFree(secondlevel_table);
     }
-
-    TreeMapForeach(table->sparse_secondlevel_map, func, &head);
 
     table->firstlevel_ptes = NULL;
     TreeMapFree(table->sparse_secondlevel_map);
@@ -424,7 +427,7 @@ bool TranslationTableMapSection (
     phys_idx = phys >> MEGABYTE_SHIFT;
 
     /* Make sure no individual page mappings exist for the VM range */
-    if((table->firstlevel_ptes[virt_idx] & PT_FIRSTLEVEL_MAPTYPE_MASK) != PT_FIRSTLEVEL_MAPTYPE_UNMAPPED) {
+    if ((table->firstlevel_ptes[virt_idx] & PT_FIRSTLEVEL_MAPTYPE_MASK) != PT_FIRSTLEVEL_MAPTYPE_UNMAPPED) {
         return false;
     }
 
@@ -436,6 +439,37 @@ bool TranslationTableMapSection (
             ((phys_idx << MEGABYTE_SHIFT) & PT_FIRSTLEVEL_SECTION_BASE_ADDR_MASK);
 
     return true;
+}
+
+bool TranslationTableUnmapSection (
+        struct TranslationTable * table,
+        VmAddr_t virt
+        )
+{
+    unsigned int virt_idx;
+
+    assert(virt % SECTION_SIZE == 0);
+
+    virt_idx = virt >> MEGABYTE_SHIFT;
+
+    switch (table->firstlevel_ptes[virt_idx] & PT_FIRSTLEVEL_MAPTYPE_MASK)
+    {
+        case PT_FIRSTLEVEL_MAPTYPE_SECTION:
+            table->firstlevel_ptes[virt_idx] = PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
+            return true;
+            break;
+
+        case PT_FIRSTLEVEL_MAPTYPE_COARSE:
+        case PT_FIRSTLEVEL_MAPTYPE_UNMAPPED:
+            return false;
+            break;
+
+        /* There are no other defined mapping types */
+        default:
+            assert(false);
+            return false;
+            break;
+    }
 }
 
 bool TranslationTableMapPage (
@@ -523,6 +557,82 @@ bool TranslationTableMapPage (
             PT_SECONDLEVEL_MAPTYPE_SMALL_PAGE |
             PT_SECONDLEVEL_AP_FULL |
             (phys & PT_SECONDLEVEL_SMALL_PAGE_BASE_ADDR_MASK);
+
+    secondlevel_table->refcount++;
+
+    return true;
+}
+
+bool TranslationTableUnmapPage (
+        struct TranslationTable * table,
+        VmAddr_t virt
+        )
+{
+    /* VM address rounded down to nearest megabyte */
+    uintptr_t virt_mb_rounded;
+
+    /* Page index (within the containing megabyte) of the VM address */
+    uintptr_t virt_pg_idx;
+
+    /* Data structure representing secondlevel table */
+    struct SecondlevelTable * secondlevel_table = NULL;
+
+    assert(virt % PAGE_SIZE == 0);
+
+    virt_mb_rounded = virt & MEGABYTE_MASK;
+    virt_pg_idx = (virt & ~MEGABYTE_MASK) >> PAGE_SHIFT;
+
+    assert(virt_pg_idx < (SECTION_SIZE / PAGE_SIZE));
+
+    /* Make sure no previous mapping exists for the page */
+    switch (table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] & PT_FIRSTLEVEL_MAPTYPE_MASK)
+    {
+        case PT_FIRSTLEVEL_MAPTYPE_UNMAPPED:
+        case PT_FIRSTLEVEL_MAPTYPE_SECTION:
+            return false;
+            break;
+
+        case PT_FIRSTLEVEL_MAPTYPE_COARSE:
+
+            secondlevel_table = TreeMapLookup(
+                    table->sparse_secondlevel_map,
+                    (TreeMapKey_t)virt_mb_rounded
+                    );
+
+            if (!secondlevel_table) {
+                /* No pages exist in the section. Why's it mapped then?? */
+                assert(false);
+                return false;
+            }
+
+            break;
+
+        /* There are no other defined mapping types */
+        default:
+            assert(false);
+            return false;
+            break;
+    }
+
+    if ((secondlevel_table->ptes->ptes[virt_pg_idx] & PT_SECONDLEVEL_MAPTYPE_MASK) != PT_SECONDLEVEL_MAPTYPE_SMALL_PAGE) {
+        return false;
+    }
+
+    secondlevel_table->ptes->ptes[virt_pg_idx] = PT_SECONDLEVEL_MAPTYPE_UNMAPPED;
+    secondlevel_table->refcount--;
+
+    /* If no pages are used in the secondlevel table, clean it up */
+    if (secondlevel_table->refcount < 1) {
+        table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] &= ~PT_FIRSTLEVEL_MAPTYPE_MASK;
+        table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] |= PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
+
+        secondlevel_table = TreeMapRemove(
+                table->sparse_secondlevel_map,
+                (TreeMapKey_t)virt_mb_rounded
+                );
+
+        assert(secondlevel_table != NULL);
+    }
 
     return true;
 }
