@@ -193,7 +193,7 @@ TreeMapValue_t TreeMapLookup (
     return node ? node->value : NULL;
 }
 
-unsigned int tree_map_size (
+unsigned int TreeMapSize (
         struct TreeMap * tree
         )
 {
@@ -498,11 +498,9 @@ static void internal_foreach (
         void * user_data
         )
 {
-    if (node->left) {
+    if (node) {
         internal_foreach(node->left, func, user_data);
-    }
-    func(node, user_data);
-    if (node->right) {
+        func(node, user_data);
         internal_foreach(node->right, func, user_data);
     }
 }
