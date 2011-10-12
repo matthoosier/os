@@ -156,3 +156,17 @@ void * memset (void *b, int c, size_t len)
 
     return b;
 }
+
+void *
+memcpy (void * s1, const void * s2, size_t n)
+{
+    char * src_ptr = (char *)s2;
+    char * dst_ptr = (char *)s1;
+    char * src_bound = ((char *)s2) + n;
+
+    for (; src_ptr < src_bound; src_ptr++, dst_ptr++) {
+        *dst_ptr = *src_ptr;
+    }
+
+    return s1;
+}
