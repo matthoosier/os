@@ -30,7 +30,11 @@ BEGIN_DECLS
 
 typedef enum
 {
-    THREAD_STATE_READY = 0,
+    THREAD_STATE_SEND,
+    THREAD_STATE_REPLY,
+    THREAD_STATE_RECEIVE,
+
+    THREAD_STATE_READY,
     THREAD_STATE_RUNNING,
 
     /* This isn't a state, just a way to programatically calculate */
