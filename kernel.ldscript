@@ -6,7 +6,7 @@ ENTRY(_start)
 SEARCH_DIR("/opt/local/arm-none-eabi/lib");
 SECTIONS
 {
-    __KernelStart = 3 * 1024 * 1024 * 1024;
+    __KernelStart = 2 * 1024 * 1024 * 1024;
     __PhysicalRamSize = 256 * 1024 * 1024;
 
     . = 0x0;

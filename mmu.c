@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <string.h>
+#include <strings.h>
 
 #include "arch.h"
 #include "array.h"
@@ -15,11 +16,71 @@
 #define ARM_MMU_ENABLED_BIT             0
 #define ARM_MMU_EXCEPTION_VECTOR_BIT    13
 
-static PhysAddr_t GetPagetableBase (void) __attribute__((used));
-static void SetPagetableBase (PhysAddr_t newbase);
-
 static struct SecondlevelTable * secondlevel_table_alloc ();
 static void SecondlevelTableFree (struct SecondlevelTable *);
+
+static inline uint32_t GetTTBR0 ()
+{
+    uint32_t val;
+
+    asm volatile(
+        "mrc p15, 0, %[ttbr0], c2, c2, 0"
+        : [ttbr0] "=r" (val)
+    );
+
+    return val;
+}
+
+static inline void SetTTBR0 (uint32_t val)
+{
+    asm volatile(
+        "mcr p15, 0, %[ttbr0], c2, c2, 0"
+        :
+        : [ttbr0] "r" (val)
+    );
+}
+
+static inline uint32_t GetTTBR1 ()
+{
+    uint32_t val;
+
+    asm volatile(
+        "mrc p15, 0, %[ttbr1], c2, c2, 1"
+        : [ttbr1] "=r" (val)
+    );
+
+    return val;
+}
+
+static inline void SetTTBR1 (uint32_t val)
+{
+    asm volatile(
+        "mcr p15, 0, %[ttbr1], c2, c2, 1"
+        :
+        : [ttbr1] "r" (val)
+    );
+}
+
+static inline uint32_t GetTTBC ()
+{
+    uint32_t val;
+
+    asm volatile(
+        "mrc p15, 0, %[reg], c2, c2, 2"
+        : [reg] "=r" (val)
+    );
+
+    return val;
+}
+
+static inline void SetTTBC (uint32_t val)
+{
+    asm volatile(
+        "mcr p15, 0, %[reg], c2, c2, 2"
+        :
+        : [reg] "r" (val)
+    );
+}
 
 int MmuGetEnabled (void)
 {
@@ -51,6 +112,12 @@ void MmuSetEnabled ()
     /* Domain access control register */
     uint32_t cp15_r3;
 
+    /*
+    The number of leading bits which must be 0 for an address to fall into
+    the user (as opposed to kernel) address range.
+    */
+    int n;
+
     /* Allow full access to everything in the default domain. */
     cp15_r3 = PT_DOMAIN_ACCESS_LEVEL_ALL << (2 * PT_DOMAIN_DEFAULT);
 
@@ -59,6 +126,22 @@ void MmuSetEnabled ()
         :
         : [cp15_r3] "r" (cp15_r3)
     );
+
+    /*
+    Turn on VMSAv6's support for dual translation-table bases.
+    */
+    #define TTBC_N_MASK     0b111
+
+    /*
+    Enfoce that kernel-reserved address range starts on an even power of 2
+    */
+    assert(1 << (ffs(KERNEL_MODE_OFFSET) - 1) == KERNEL_MODE_OFFSET);
+
+    n = 32 - (ffs(KERNEL_MODE_OFFSET) - 1);
+    uint32_t ttbc = GetTTBC();
+    ttbc &= ~TTBC_N_MASK;
+    ttbc |= (n & TTBC_N_MASK);
+    SetTTBC(ttbc);
 
     /* Read/modify/write on MMU control register. */
     asm volatile(
@@ -76,41 +159,6 @@ void MmuSetEnabled ()
         "mcr p15, 0, %[cp15_r1], c1, c0"
         :
         : [cp15_r1] "r" (cp15_r1)
-    );
-}
-
-static PhysAddr_t GetPagetableBase (void)
-{
-    return 0;
-}
-
-static void SetPagetableBase (PhysAddr_t newbase)
-{
-    uint32_t ttb0;
-
-    assert((newbase & 0xffffc000) == newbase);
-
-    /*
-    Only bits 14 through 31 (that is, the high 18 bits) of the translation
-    table base register are usable. Because the hardware requires the
-    translation table to start on a 16KB boundary.
-    */
-
-    /* Fetch translation base register */
-    asm volatile(
-        "mrc p15, 0, %[ttb0], c2, c2, 0"
-        : [ttb0] "=r" (ttb0)
-    );
-
-    /* Set the top 18 bits to encode our translation base address */
-    ttb0 &= 0x00003fff;
-    ttb0 |= (newbase & 0xffffc000);
-
-    /* Install modified register back */
-    asm volatile(
-        "mcr p15, 0, %[ttb0], c2, c2, 0"
-        :
-        : [ttb0] "r" (ttb0)
     );
 }
 
@@ -290,17 +338,74 @@ void TranslationTableFree (struct TranslationTable * table)
     ObjectCacheFree(&translation_table_cache, table);
 }
 
-static struct TranslationTable * current_translation_table = NULL;
+static struct TranslationTable * kernel_translation_table = NULL;
 
-struct TranslationTable * MmuGetTranslationTable ()
+struct TranslationTable * MmuGetKernelTranslationTable ()
 {
-    return current_translation_table;
+    return kernel_translation_table;
 }
 
-void MmuSetTranslationTable (struct TranslationTable * table)
+void MmuSetKernelTranslationTable (struct TranslationTable * table)
 {
-    current_translation_table = table;
-    SetPagetableBase(V2P((VmAddr_t)&table->firstlevel_ptes[0]));
+    uint32_t    ttbr1;
+    PhysAddr_t  table_phys = V2P((VmAddr_t)&table->firstlevel_ptes[0]);
+
+    /* Sanity check */
+    assert((table_phys & 0xffffc000) == table_phys);
+
+    /*
+    Only bits 14 through 31 (that is, the high 18 bits) of the translation
+    table base register are usable. Because the hardware requires the
+    translation table to start on a 16KB boundary.
+    */
+
+    /* Fetch translation base register */
+    ttbr1 = GetTTBR1();
+
+    /* Set the top 18 bits to encode our translation base address */
+    ttbr1 &= 0x00003fff;
+    ttbr1 |= (table_phys & 0xffffc000);
+
+    /* Install modified register back */
+    SetTTBR1(ttbr1);
+    kernel_translation_table = table;
+}
+
+static struct TranslationTable * user_translation_table = NULL;
+
+struct TranslationTable * MmuGetUserTranslationTable ()
+{
+    return user_translation_table;
+}
+
+void MmuSetUserTranslationTable (struct TranslationTable * table)
+{
+    uint32_t    ttbr0;
+    PhysAddr_t  table_phys;
+
+    table_phys = table != NULL
+            ? V2P((VmAddr_t)&table->firstlevel_ptes[0])
+            : 0;
+
+    /* Sanity check */
+    assert((table_phys & 0xffffc000) == table_phys);
+
+    /*
+    Only bits 14 through 31 (that is, the high 18 bits) of the translation
+    table base register are usable. Because the hardware requires the
+    translation table to start on a 16KB boundary.
+    */
+
+    /* Fetch translation base register */
+    ttbr0 = GetTTBR0();
+
+    /* Set the top 18 bits to encode our translation base address */
+    ttbr0 &= 0x00003fff;
+    ttbr0 |= (table_phys & 0xffffc000);
+
+    /* Install modified register back */
+    SetTTBR0(ttbr0);
+    user_translation_table = table;
 }
 
 bool TranslationTableMapSection (

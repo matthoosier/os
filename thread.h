@@ -1,9 +1,10 @@
 #ifndef __THREAD_H__
 #define __THREAD_H__
 
-#include "decls.h"
 #include "arch.h"
+#include "decls.h"
 #include "list.h"
+#include "mmu.h"
 
 #define ALIGNED_THREAD_STRUCT_SIZE                                  \
     /* Padded out to multiple of 8 to preserve %sp requirements */  \
@@ -57,6 +58,8 @@ struct Thread
     } kernel_stack;
 
     ThreadState state;
+
+    struct TranslationTable * user_address_space;
 
     /* For use in scheduling queues. */
     struct list_head queue_link;

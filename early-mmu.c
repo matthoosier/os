@@ -25,7 +25,7 @@ static pt_firstlevel_t early_table[4096]
 static void _install_pagetable()
 {
     uint32_t ttbc = ttbc;
-    uint32_t ttb0 = ttb0;
+    uint32_t ttbr0 = ttbr0;
 
     /*
     Only bits 14 through 31 (that is, the high 18 bits) of the translation
@@ -35,19 +35,19 @@ static void _install_pagetable()
 
     /* Fetch translation base register */
     asm volatile(
-        "mrc p15, 0, %[ttb0], c2, c2, 0"
-        : [ttb0]"=r" (ttb0)
+        "mrc p15, 0, %[ttbr0], c2, c2, 0"
+        : [ttbr0]"=r" (ttbr0)
     );
 
     /* Set the top 18 bits to be the base of the pagetable. */
-    ttb0 &= 0x00003fff;
-    ttb0 |= (uintptr_t)&early_table[0];
+    ttbr0 &= 0x00003fff;
+    ttbr0 |= (uintptr_t)&early_table[0];
 
     /* Store back */
     asm volatile(
-        "mcr p15, 0, %[ttb0], c2, c2, 0"
+        "mcr p15, 0, %[ttbr0], c2, c2, 0"
         :
-        : [ttb0]"r" (ttb0)
+        : [ttbr0]"r" (ttbr0)
     );
 
     /* Fetch the Translation Table Base Control register just to have a look */

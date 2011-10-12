@@ -103,6 +103,10 @@ void install_kernel_memory_map ()
                 );
     assert(success);
 
+    /* Install this fully-fledged pagetable */
+    MmuSetUserTranslationTable(kernel_tt);
+    MmuSetKernelTranslationTable(kernel_tt);
+
     /*
     Yes, it's actually already on from our crude original setup.
     But there was some additional setup work (like configuring exceptions)
@@ -110,8 +114,12 @@ void install_kernel_memory_map ()
     */
     MmuSetEnabled();
 
-    /* Install this fully-fledged pagetable */
-    MmuSetTranslationTable(kernel_tt);
+    /*
+    Crutch user-mode table no longer necessary now that MmuSetEnabled()
+    has fully configured the CPU's support for using a separate translation
+    table for user- and kernel-mode address ranges.
+    */
+    MmuSetUserTranslationTable(NULL);
 }
 
 /* Retroactively filled in */
@@ -152,6 +160,7 @@ void run_first_thread ()
     first_thread->kernel_stack.ceiling  = init_stack_ceiling;
     first_thread->kernel_stack.base     = &init_stack[0];
     first_thread->kernel_stack.page     = NULL;
+    first_thread->user_address_space    = NULL;
     first_thread->state                 = THREAD_STATE_RUNNING;
     INIT_LIST_HEAD(&first_thread->queue_link);
 

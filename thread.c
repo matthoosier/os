@@ -15,6 +15,11 @@ static void ThreadSwitch (struct Thread * outgoing,
     uint32_t next_pc = next_pc;
     uint32_t cpsr_temp = cpsr_temp;
 
+    if (outgoing->user_address_space != incoming->user_address_space) {
+        MmuSetUserTranslationTable(incoming->user_address_space);
+        MmuFlushTlb();
+    }
+
     asm volatile(
         "                                               \n"
         "save_outgoing:                                 \n"
@@ -71,6 +76,7 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
     descriptor->kernel_stack.ceiling = descriptor;
     descriptor->kernel_stack.base = (void *)stack_page->base_address;
     descriptor->kernel_stack.page = stack_page;
+    descriptor->user_address_space = THREAD_CURRENT()->user_address_space;
     INIT_LIST_HEAD(&descriptor->queue_link);
     descriptor->state = THREAD_STATE_READY;
 
