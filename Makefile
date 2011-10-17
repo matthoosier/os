@@ -21,7 +21,6 @@ kernel_c_files = \
 	once.c \
 	small-object-cache.c \
 	stdlib.c \
-	syscall.c \
 	thread.c \
 	tree-map.c \
 	vm.c \

@@ -7,7 +7,6 @@
 #include "init.h"
 #include "mmu.h"
 #include "object-cache.h"
-#include "syscall.h"
 #include "thread.h"
 #include "vm.h"
 
@@ -143,8 +142,6 @@ void second_thread_body (void * param)
             "msr cpsr, %[saved_cpsr]        \n"
             : [saved_cpsr]"+r"(saved_cpsr)
         );
-
-        assert(syscall1(0, 37) == 37);
 
         ThreadAddReady(THREAD_CURRENT());
         ThreadYieldNoRequeue();
