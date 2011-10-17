@@ -1,42 +1,75 @@
 all: kernel
 
-c_files = $(wildcard *.c)
-c_dep_files = $(patsubst %.c, .%.c.depends, $(c_files))
-asm_files = $(wildcard *.S)
+NULL =
 
-objs = $(patsubst %.c, %.o, $(c_files)) $(patsubst %.S, %.o, $(asm_files))
+kernel_asm_files = \
+	atomic.S \
+	early-entry.S \
+	high-entry.S \
+	vector.S \
+	$(NULL)
 
--include $(c_dep_files)
+kernel_c_files = \
+	arch.c \
+	assert.c \
+	early-mmu.c \
+	init.c \
+	large-object-cache.c \
+	message.c \
+	mmu.c \
+	object-cache.c \
+	once.c \
+	small-object-cache.c \
+	stdlib.c \
+	syscall.c \
+	thread.c \
+	tree-map.c \
+	vm.c \
+	$(NULL)
 
-asm_temps = $(patsubst %.c, %.s, $(c_files))
-preproc_temps = $(patsubst %.c, %.i, $(c_files))
+kernel_c_dep_files = $(patsubst %.c, .%.c.depends, $(kernel_c_files))
+
+-include $(kernel_c_dep_files)
+
+kernel_objs = \
+	$(patsubst %.c, %.ko, $(kernel_c_files)) \
+	$(patsubst %.S, %.ko, $(kernel_asm_files)) \
+	$(NULL)
+
+kernel_asm_temps = $(patsubst %.c, %.s, $(kernel_c_files))
+kernel_preproc_temps = $(patsubst %.c, %.i, $(kernel_c_files))
 
 CROSS_COMPILE = arm-none-eabi
 
-ASFLAGS += -Wall -Werror -g
-CFLAGS += -Wall -Werror -save-temps -g -march=armv6
-LDFLAGS += -Wl,-T,kernel.ldscript
+KERNEL_ASFLAGS += $(ASFLAGS) -Wall -Werror -g
+KERNEL_CFLAGS += $(CFLAGS) -Wall -Werror -save-temps -g -march=armv6
+KERNEL_LDFLAGS += $(LDFLAGS) -Wl,-T,kernel.ldscript
 
-CC = $(CROSS_COMPILE)-gcc
-AS = $(CROSS_COMPILE)-as
-LD = $(CROSS_COMPILE)-gcc
+KERNEL_CC = $(CROSS_COMPILE)-gcc
+KERNEL_AS = $(CROSS_COMPILE)-as
+KERNEL_LD = $(CROSS_COMPILE)-gcc
 
 kernel: kernel.ldscript
 
-%.o: %.c
+%.ko: %.c
 	@# Update dependencies
-	@$(CC) $(CFLAGS) -M -o .$<.depends $<
+	@$(KERNEL_CC) $(KERNEL_CFLAGS) -M -MT $@ -o .$<.depends $<
 	@# Build object
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(KERNEL_CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
-%.o: %.S
-	$(CC) $(ASFLAGS) -c -o $@ $<
+%.ko: %.S
+	$(KERNEL_CC) $(KERNEL_ASFLAGS) -c -o $@ $<
 
-kernel: $(objs)
-	$(LD) $(LDFLAGS) -nostdlib -o $@ $(objs)
+kernel: $(kernel_objs)
+	$(KERNEL_LD) $(KERNEL_LDFLAGS) -nostdlib -o $@ $(kernel_objs)
 
 clean:
-	rm -f $(objs) $(c_dep_files) $(asm_temps) $(preproc_temps) kernel
+	rm -f \
+		$(kernel_objs) \
+		$(kernel_c_dep_files) \
+		$(kernel_asm_temps) \
+		$(kernel_preproc_temps) \
+		kernel
 
 debug: kernel
 	$(CROSS_COMPILE)-gdb kernel --eval="target remote :1234"

@@ -13,13 +13,13 @@ SECTIONS
 
     .early.text :
         {
-        early-*.o(.text)
+        early-*.ko(.text)
         }
 
     .early.data :
         {
-        early-*.o(.data .data.*)
-        early-*.o(.bss .bss.*)
+        early-*.ko(.data .data.*)
+        early-*.ko(.bss .bss.*)
         }
 
     . = ALIGN(CONSTANT(MAXPAGESIZE));
