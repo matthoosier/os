@@ -1,4 +1,6 @@
-all: kernel
+all: kernel progs
+
+progs: syscall-client
 
 NULL =
 
@@ -50,6 +52,28 @@ KERNEL_LD = $(CROSS_COMPILE)-gcc
 
 kernel: kernel.ldscript
 
+syscall_client_c_files = \
+	syscall-client.c \
+	syscall.c \
+	$(NULL)
+
+syscall_client_c_dep_files = \
+	$(patsubst %.c, .%.c.depends, $(syscall_client_c_files)) \
+	$(NULL)
+
+-include $(syscall_client_c_dep_files)
+
+syscall_client_objs = \
+	$(patsubst %.c, %.ko, $(syscall_client_c_files)) \
+	$(NULL)
+
+syscall_client_asm_temps = $(patsubst %.c, %.s, $(syscall_client_c_files))
+
+syscall_client_preproc_temps = $(patsubst %.c, %.i, $(syscall_client_c_files))
+
+syscall-client: $(syscall_client_objs)
+	$(KERNEL_LD) -nostdlib -o $@ $+ 
+
 %.ko: %.c
 	@# Update dependencies
 	@$(KERNEL_CC) $(KERNEL_CFLAGS) -M -MT $@ -o .$<.depends $<
@@ -68,7 +92,13 @@ clean:
 		$(kernel_c_dep_files) \
 		$(kernel_asm_temps) \
 		$(kernel_preproc_temps) \
-		kernel
+		kernel \
+		$(syscall_client_objs) \
+		$(syscall_client_c_dep_files) \
+		$(syscall_client_asm_temps) \
+		$(syscall_client_preproc_temps) \
+		syscall-client \
+		$(NULL)
 
 debug: kernel
 	$(CROSS_COMPILE)-gdb kernel --eval="target remote :1234"
