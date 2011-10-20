@@ -53,6 +53,7 @@ KERNEL_LD = $(CROSS_COMPILE)-gcc
 kernel: kernel.ldscript
 
 syscall_client_c_files = \
+	crt.c \
 	syscall-client.c \
 	syscall.c \
 	$(NULL)

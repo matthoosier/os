@@ -1,6 +1,6 @@
 #include "syscall.h"
 
-void _start () {
+int main () {
     int counter;
 
     for (counter = 0; 1 == 1; counter++) {
