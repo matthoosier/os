@@ -1,8 +1,18 @@
-all: kernel progs
+all: kernel progs tools
 
 progs: syscall-client
 
 NULL =
+
+tools = \
+	elfstats \
+	$(NULL)
+
+tools: $(tools)
+
+elfstats_objs = \
+	elfstats.host.o \
+	$(NULL)
 
 kernel_asm_files = \
 	atomic.S \
@@ -42,8 +52,11 @@ kernel_preproc_temps = $(patsubst %.c, %.i, $(kernel_c_files))
 
 CROSS_COMPILE = arm-none-eabi
 
-KERNEL_ASFLAGS += $(ASFLAGS) -Wall -Werror -g
-KERNEL_CFLAGS += $(CFLAGS) -Wall -Werror -save-temps -g -march=armv6
+ASFLAGS += -g
+CFLAGS += -g
+
+KERNEL_ASFLAGS += $(ASFLAGS) -Wall -Werror
+KERNEL_CFLAGS += $(CFLAGS) -Wall -Werror -save-temps -march=armv6
 KERNEL_LDFLAGS += $(LDFLAGS) -Wl,-T,kernel.ldscript
 
 KERNEL_CC = $(CROSS_COMPILE)-gcc
@@ -87,6 +100,12 @@ syscall-client: $(syscall_client_objs)
 kernel: $(kernel_objs)
 	$(KERNEL_LD) $(KERNEL_LDFLAGS) -nostdlib -o $@ $(kernel_objs)
 
+%.host.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+elfstats: $(elfstats_objs)
+	$(CC) $(LDFLAGS) -o $@ $<
+
 clean:
 	rm -f \
 		$(kernel_objs) \
@@ -99,6 +118,10 @@ clean:
 		$(syscall_client_asm_temps) \
 		$(syscall_client_preproc_temps) \
 		syscall-client \
+		$(NULL)
+	rm -f \
+		$(foreach tool,$(tools),$(tool)) \
+		$(foreach tool,$(tools),$($(tool)_objs)) \
 		$(NULL)
 
 debug: kernel
