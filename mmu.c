@@ -119,7 +119,7 @@ void MmuSetEnabled ()
     int n;
 
     /* Allow full access to everything in the default domain. */
-    cp15_r3 = PT_DOMAIN_ACCESS_LEVEL_ALL << (2 * PT_DOMAIN_DEFAULT);
+    cp15_r3 = PT_DOMAIN_ACCESS_LEVEL_CLIENT << (2 * PT_DOMAIN_DEFAULT);
 
     asm volatile(
         "mcr p15, 0, %[cp15_r3], c3, c0, 0"
@@ -216,7 +216,7 @@ static struct SecondlevelTable * secondlevel_table_alloc ()
             table->ptes->ptes[i] = PT_SECONDLEVEL_MAPTYPE_UNMAPPED;
         }
 
-        table->refcount = 0;
+        table->num_mapped_pages = 0;
     }
 
     return table;
@@ -558,7 +558,7 @@ bool TranslationTableMapPage (
             PT_SECONDLEVEL_AP_FULL |
             (phys & PT_SECONDLEVEL_SMALL_PAGE_BASE_ADDR_MASK);
 
-    secondlevel_table->refcount++;
+    secondlevel_table->num_mapped_pages++;
 
     return true;
 }
@@ -619,10 +619,10 @@ bool TranslationTableUnmapPage (
     }
 
     secondlevel_table->ptes->ptes[virt_pg_idx] = PT_SECONDLEVEL_MAPTYPE_UNMAPPED;
-    secondlevel_table->refcount--;
+    secondlevel_table->num_mapped_pages--;
 
     /* If no pages are used in the secondlevel table, clean it up */
-    if (secondlevel_table->refcount < 1) {
+    if (secondlevel_table->num_mapped_pages < 1) {
         table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] &= ~PT_FIRSTLEVEL_MAPTYPE_MASK;
         table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] |= PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
 

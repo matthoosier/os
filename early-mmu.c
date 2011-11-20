@@ -74,7 +74,7 @@ static void _enable_mmu()
     CP15, Register 3 controls these. Each of the 16 domains gets two bits
     of configuration.
     */
-    cp15_r3 = PT_DOMAIN_ACCESS_LEVEL_ALL << (2 * PT_DOMAIN_DEFAULT);
+    cp15_r3 = PT_DOMAIN_ACCESS_LEVEL_CLIENT << (2 * PT_DOMAIN_DEFAULT);
     asm volatile (
         "mcr p15, 0, %[cp15_r3], c3, c0, 0\n"
         :

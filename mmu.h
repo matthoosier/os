@@ -22,7 +22,8 @@
  */
 #define PT_DOMAIN_DEFAULT           0
 
-#define PT_DOMAIN_ACCESS_LEVEL_ALL  0b11
+#define PT_DOMAIN_ACCESS_LEVEL_ALL      0b11
+#define PT_DOMAIN_ACCESS_LEVEL_CLIENT   0b01
 
 extern int MmuGetEnabled (void);
 extern void MmuSetEnabled ();
@@ -112,7 +113,7 @@ struct SecondlevelTable
      */
     struct list_head link;
 
-    unsigned int refcount;
+    unsigned int num_mapped_pages;
 };
 
 struct SecondlevelPtes
