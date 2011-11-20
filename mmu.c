@@ -636,3 +636,133 @@ bool TranslationTableUnmapPage (
 
     return true;
 }
+
+ssize_t CopyWithAddressSpaces (
+        struct TranslationTable *   source_tt,
+        const void *                source_buf,
+        size_t                      source_len,
+        struct TranslationTable *   dest_tt,
+        void *                      dest_buf,
+        size_t                      dest_len
+        )
+{
+    #define min(_a, _b)     \
+        ({                  \
+        typeof(_a) a = _a;  \
+        typeof(_b) b = _b;  \
+        a < b ? a : b;      \
+        })
+
+    size_t len;
+
+    len = min(source_len, dest_len);
+
+    if (source_tt == dest_tt && false) {
+        /* Sender and receiver both in same address space. */
+        memcpy(dest_buf, source_buf, len);
+    }
+    else {
+
+        size_t      remaining;
+        VmAddr_t    src_cursor  = (VmAddr_t)source_buf;
+        VmAddr_t    dst_cursor  = (VmAddr_t)dest_buf;
+
+        /*
+        Loop once for each contiguous chunk that can be copied from a
+        source-address-space page to a destination-address-space page.
+        */
+        for (remaining = len; remaining > 0;) {
+
+            VmAddr_t src_mb;
+            VmAddr_t dst_mb;
+
+            PhysAddr_t src_phys;
+            PhysAddr_t dst_phys;
+
+            size_t src_valid_len;
+            size_t dst_valid_len;
+
+            pt_firstlevel_t src_firstlevel_pte;
+            pt_firstlevel_t dst_firstlevel_pte;
+
+            pt_secondlevel_t *src_secondlevel_base;
+            pt_secondlevel_t *dst_secondlevel_base;
+
+            src_mb = src_cursor & MEGABYTE_MASK;
+            dst_mb = dst_cursor & MEGABYTE_MASK;
+
+            src_firstlevel_pte = source_tt->firstlevel_ptes[src_mb >> MEGABYTE_SHIFT];
+            dst_firstlevel_pte = dest_tt->firstlevel_ptes[dst_mb >> MEGABYTE_SHIFT];
+
+            /* Figure out physical address of source buffer chunk */
+            switch (src_firstlevel_pte & PT_FIRSTLEVEL_MAPTYPE_MASK) {
+
+                case PT_FIRSTLEVEL_MAPTYPE_SECTION:
+                    src_phys = (src_firstlevel_pte & PT_FIRSTLEVEL_SECTION_BASE_ADDR_MASK) + (src_cursor & ~MEGABYTE_MASK);
+                    src_valid_len = (1 << MEGABYTE_SHIFT) - (src_cursor & ~MEGABYTE_MASK);
+                    break;
+
+                case PT_FIRSTLEVEL_MAPTYPE_COARSE:
+
+                    src_secondlevel_base = (pt_secondlevel_t *)P2V(
+                            src_firstlevel_pte &
+                            PT_FIRSTLEVEL_COARSE_BASE_ADDR_MASK
+                            );
+
+                    assert((VmAddr_t)src_secondlevel_base != P2V((PhysAddr_t)NULL));
+
+                    src_phys = src_secondlevel_base[((src_cursor & ~MEGABYTE_MASK) & PAGE_MASK) >> PAGE_SHIFT];
+                    src_valid_len = PAGE_SIZE - (src_cursor & ~PAGE_MASK);
+                    break;
+
+                default:
+                    assert(false);
+                    break;
+            }
+
+            /* Figure out physical address of destination buffer chunk */
+            switch (dst_firstlevel_pte & PT_FIRSTLEVEL_MAPTYPE_MASK) {
+
+                case PT_FIRSTLEVEL_MAPTYPE_SECTION:
+                    dst_phys = (dst_firstlevel_pte & PT_FIRSTLEVEL_SECTION_BASE_ADDR_MASK) + (dst_cursor & ~MEGABYTE_MASK);
+                    dst_valid_len = (1 << MEGABYTE_SHIFT) - (dst_cursor & ~MEGABYTE_MASK);
+                    break;
+
+                case PT_FIRSTLEVEL_MAPTYPE_COARSE:
+
+                    dst_secondlevel_base = (pt_secondlevel_t *)P2V(
+                            dst_firstlevel_pte &
+                            PT_FIRSTLEVEL_COARSE_BASE_ADDR_MASK
+                            );
+
+                    assert((VmAddr_t)dst_secondlevel_base != P2V((PhysAddr_t)NULL));
+
+                    dst_phys = dst_secondlevel_base[((dst_cursor & ~MEGABYTE_MASK) & PAGE_MASK) >> PAGE_SHIFT];
+                    dst_valid_len = PAGE_SIZE - (src_cursor & ~PAGE_MASK);
+                    break;
+
+                default:
+                    assert(false);
+                    break;
+            }
+
+            size_t chunk_size = min(
+                    remaining,
+                    min(src_valid_len, dst_valid_len)
+                    );
+
+            /*
+            The kernel memory map contains all of physical memory, so we can
+            just use plain memcpy() now that we've figured out the appropriate
+            segments of physical memory to more to/from.
+            */
+            memcpy((void *)P2V(dst_phys), (void *)P2V(src_phys), chunk_size);
+
+            remaining   -= chunk_size;
+            src_cursor  += chunk_size;
+            dst_cursor  += chunk_size;
+        }
+    }
+
+    return len;
+}

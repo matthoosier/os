@@ -66,6 +66,15 @@ extern bool TranslationTableUnmapSection (
         VmAddr_t virt
         );
 
+extern ssize_t CopyWithAddressSpaces (
+        struct TranslationTable *   source_tt,
+        const void *                source_buf,
+        size_t                      source_len,
+        struct TranslationTable *   dest_tt,
+        void *                      dest_buf,
+        size_t                      dest_len
+        );
+
 struct TranslationTable
 {
     /* Provides the storage pointed at by 'translation_base' below */

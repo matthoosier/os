@@ -3,6 +3,7 @@
 #include "assert.h"
 #include "list.h"
 #include "message.h"
+#include "mmu.h"
 #include "object-cache.h"
 #include "once.h"
 #include "thread.h"
@@ -65,11 +66,11 @@ static void ConnectionFree (struct Connection * connection);
 static struct Message * MessageAlloc (void);
 static void MessageFree (struct Message * context);
 
-static size_t TransferPayload (
-        struct Thread * source,
+static ssize_t TransferPayload (
+        struct Thread * source_thread,
         const void *    source_buf,
         size_t          source_len,
-        struct Thread * dest,
+        struct Thread * dest_thread,
         void *          dest_buf,
         size_t          dest_len
         );
@@ -234,7 +235,7 @@ int MessageSend (
     MessageFree(message);
 
     return result;
-}
+} /* MessageSend() */
 
 int MessageReceive (
         struct Channel * channel,
@@ -299,7 +300,7 @@ int MessageReceive (
     message->sender->state = THREAD_STATE_REPLY;
 
     return result;
-}
+} /* MessageReceive() */
 
 int MessageReply (
         struct Message * context,
@@ -316,6 +317,12 @@ int MessageReply (
     context->receiver_replybuf = replybuf;
     context->receiver_replybuf_len = replybuf_len;
 
+    /*
+    Releasing this thread to run again might make the receiver's reply
+    buffer invalid, so do the transfer before returning control. The sender
+    will wake up with the reply message already copied into his address
+    space's replybuf.
+    */
     result = context->result = TransferPayload (
             context->receiver,
             context->receiver_replybuf,
@@ -331,24 +338,38 @@ int MessageReply (
 
     /* Sender frees the message after fetching the return value from it */
     return result;
-}
+} /* MessageReply() */
 
-static size_t TransferPayload (
-        struct Thread * source,
+static ssize_t TransferPayload (
+        struct Thread * source_thread,
         const void *    source_buf,
         size_t          source_len,
-        struct Thread * dest,
+        struct Thread * dest_thread,
         void *          dest_buf,
         size_t          dest_len
         )
 {
-    size_t len;
+    struct TranslationTable *src_tt;
+    struct TranslationTable *dst_tt;
 
-    assert(source->user_address_space == dest->user_address_space);
+    if ((VmAddr_t)source_buf >= KERNEL_MODE_OFFSET) {
+        src_tt = MmuGetKernelTranslationTable();
+    } else {
+        src_tt = source_thread->user_address_space;
+    }
 
-    len = source_len < dest_len ? source_len : dest_len;
+    if ((VmAddr_t)dest_buf >= KERNEL_MODE_OFFSET) {
+        dst_tt = MmuGetKernelTranslationTable();
+    } else {
+        dst_tt = dest_thread->user_address_space;
+    }
 
-    memcpy(dest_buf, source_buf, len);
-
-    return len;
+    return CopyWithAddressSpaces(
+            src_tt,
+            source_buf,
+            source_len,
+            dst_tt,
+            dest_buf,
+            dest_len
+            );
 }
