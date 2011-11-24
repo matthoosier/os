@@ -7,6 +7,7 @@
 #include "assert.h"
 #include "bits.h"
 #include "compiler.h"
+#include "minmax.h"
 #include "mmu.h"
 #include "object-cache.h"
 #include "once.h"
@@ -649,16 +650,9 @@ ssize_t CopyWithAddressSpaces (
         size_t                      dest_len
         )
 {
-    #define min(_a, _b)     \
-        ({                  \
-        typeof(_a) a = _a;  \
-        typeof(_b) b = _b;  \
-        a < b ? a : b;      \
-        })
-
     size_t len;
 
-    len = min(source_len, dest_len);
+    len = MIN(source_len, dest_len);
 
     if (source_tt == dest_tt && false) {
         /* Sender and receiver both in same address space. */
@@ -749,9 +743,9 @@ ssize_t CopyWithAddressSpaces (
                     break;
             }
 
-            size_t chunk_size = min(
+            size_t chunk_size = MIN(
                     remaining,
-                    min(src_valid_len, dst_valid_len)
+                    MIN(src_valid_len, dst_valid_len)
                     );
 
             /*

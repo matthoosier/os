@@ -1,14 +1,8 @@
 #include "assert.h"
+#include "minmax.h"
 #include "object-cache.h"
 #include "once.h"
 #include "tree-map.h"
-
-#define max(_a, _b)     \
-    ({                  \
-    typeof(_a) a = _a;  \
-    typeof(_b) b = _b;  \
-    a > b ? a : b;      \
-    })
 
 static Once_t init_control = ONCE_INIT;
 
@@ -442,7 +436,7 @@ static internal_node * internal_rebalance (
             }
         }
 
-        node->height = max(height(node->left), height(node->right)) + 1;
+        node->height = MAX(height(node->left), height(node->right)) + 1;
     }
 
     return node;
@@ -456,8 +450,8 @@ static internal_node * rotate_with_left_child (
     k2->left = k1->right;
     k1->right = k2;
 
-    k2->height = max(height(k2->left), height(k2->right)) + 1;
-    k1->height = max(height(k1->left), height(k1->right)) + 1;
+    k2->height = MAX(height(k2->left), height(k2->right)) + 1;
+    k1->height = MAX(height(k1->left), height(k1->right)) + 1;
 
     return k1;
 }
@@ -478,8 +472,8 @@ static internal_node * rotate_with_right_child (
     k1->right = k2->left;
     k2->left = k1;
 
-    k1->height = max(height(k1->left), height(k1->right)) + 1;
-    k2->height = max(height(k2->left), height(k2->right)) + 1;
+    k1->height = MAX(height(k1->left), height(k1->right)) + 1;
+    k2->height = MAX(height(k2->left), height(k2->right)) + 1;
 
     return k2;
 }
