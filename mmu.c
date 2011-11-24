@@ -555,7 +555,10 @@ bool TranslationTableMapPage (
     /* Insert the new page into the secondlevel TT */
     secondlevel_table->ptes->ptes[virt_pg_idx] =
             PT_SECONDLEVEL_MAPTYPE_SMALL_PAGE |
-            PT_SECONDLEVEL_AP_FULL |
+            PT_SECONDLEVEL_AP0_FULL |
+            PT_SECONDLEVEL_AP1_FULL |
+            PT_SECONDLEVEL_AP2_FULL |
+            PT_SECONDLEVEL_AP3_FULL |
             (phys & PT_SECONDLEVEL_SMALL_PAGE_BASE_ADDR_MASK);
 
     secondlevel_table->num_mapped_pages++;
