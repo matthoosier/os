@@ -18,7 +18,7 @@
 #define ARM_MMU_EXCEPTION_VECTOR_BIT    13
 
 static struct SecondlevelTable * secondlevel_table_alloc ();
-static void SecondlevelTableFree (struct SecondlevelTable *);
+static void secondlevel_table_free (struct SecondlevelTable *);
 
 static inline uint32_t GetTTBR0 ()
 {
@@ -81,6 +81,29 @@ static inline void SetTTBC (uint32_t val)
         :
         : [reg] "r" (val)
     );
+}
+
+static inline unsigned int ap_from_prot (Prot_t prot)
+{
+    unsigned int val;
+
+    switch (prot) {
+        case PROT_NONE:
+        case PROT_WRITE:
+            val = PT_FIRSTLEVEL_SECTION_AP_PRIV_ONLY;
+            break;
+        case PROT_READ:
+            val = PT_FIRSTLEVEL_SECTION_AP_PRIV_AND_USER_READ;
+            break;
+        case PROT_READ | PROT_WRITE:
+            val = PT_FIRSTLEVEL_SECTION_AP_FULL;
+            break;
+        default:
+            val = PT_FIRSTLEVEL_SECTION_AP_NONE;
+            break;
+    }
+
+    return (val & PT_FIRSTLEVEL_SECTION_AP_MASK) >> PT_FIRSTLEVEL_SECTION_AP_SHIFT;
 }
 
 int MmuGetEnabled (void)
@@ -223,7 +246,7 @@ static struct SecondlevelTable * secondlevel_table_alloc ()
     return table;
 }
 
-static void SecondlevelTableFree (struct SecondlevelTable * table)
+static void secondlevel_table_free (struct SecondlevelTable * table)
 {
     if (!list_empty(&table->link)) {
         list_del(&table->link);
@@ -333,7 +356,7 @@ void TranslationTableFree (struct TranslationTable * table)
                 link
                 );
 
-        SecondlevelTableFree(secondlevel_table);
+        secondlevel_table_free(secondlevel_table);
     }
 
     table->firstlevel_ptes = NULL;
@@ -415,7 +438,8 @@ void MmuSetUserTranslationTable (struct TranslationTable * table)
 bool TranslationTableMapSection (
         struct TranslationTable * table,
         VmAddr_t virt,
-        PhysAddr_t phys
+        PhysAddr_t phys,
+        Prot_t prot
         )
 {
     unsigned int virt_idx;
@@ -436,7 +460,7 @@ bool TranslationTableMapSection (
     table->firstlevel_ptes[virt_idx] =
             PT_FIRSTLEVEL_MAPTYPE_SECTION |
             (PT_DOMAIN_DEFAULT << PT_FIRSTLEVEL_DOMAIN_SHIFT) |
-            PT_FIRSTLEVEL_SECTION_AP_FULL |
+            (ap_from_prot(prot) << PT_FIRSTLEVEL_SECTION_AP_SHIFT) |
             ((phys_idx << MEGABYTE_SHIFT) & PT_FIRSTLEVEL_SECTION_BASE_ADDR_MASK);
 
     return true;
@@ -476,7 +500,8 @@ bool TranslationTableUnmapSection (
 bool TranslationTableMapPage (
         struct TranslationTable * table,
         VmAddr_t virt,
-        PhysAddr_t phys
+        PhysAddr_t phys,
+        Prot_t prot
         )
 {
     /* VM address rounded down to nearest megabyte */
@@ -556,10 +581,10 @@ bool TranslationTableMapPage (
     /* Insert the new page into the secondlevel TT */
     secondlevel_table->ptes->ptes[virt_pg_idx] =
             PT_SECONDLEVEL_MAPTYPE_SMALL_PAGE |
-            PT_SECONDLEVEL_AP0_FULL |
-            PT_SECONDLEVEL_AP1_FULL |
-            PT_SECONDLEVEL_AP2_FULL |
-            PT_SECONDLEVEL_AP3_FULL |
+            (ap_from_prot(prot) << PT_SECONDLEVEL_AP0_SHIFT) |
+            (ap_from_prot(prot) << PT_SECONDLEVEL_AP1_SHIFT) |
+            (ap_from_prot(prot) << PT_SECONDLEVEL_AP2_SHIFT) |
+            (ap_from_prot(prot) << PT_SECONDLEVEL_AP3_SHIFT) |
             (phys & PT_SECONDLEVEL_SMALL_PAGE_BASE_ADDR_MASK);
 
     secondlevel_table->num_mapped_pages++;

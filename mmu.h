@@ -25,6 +25,12 @@
 #define PT_DOMAIN_ACCESS_LEVEL_ALL      0b11
 #define PT_DOMAIN_ACCESS_LEVEL_CLIENT   0b01
 
+typedef unsigned int Prot_t; enum {
+    PROT_NONE   = 0b00,
+    PROT_READ   = 0b01,
+    PROT_WRITE  = 0b10,
+};
+
 extern int MmuGetEnabled (void);
 extern void MmuSetEnabled ();
 
@@ -47,7 +53,8 @@ extern void MmuSetUserTranslationTable (struct TranslationTable * table);
 extern bool TranslationTableMapPage (
         struct TranslationTable * table,
         VmAddr_t virt,
-        PhysAddr_t phys
+        PhysAddr_t phys,
+        Prot_t prot
         );
 
 extern bool TranslationTableUnmapPage (
@@ -58,7 +65,8 @@ extern bool TranslationTableUnmapPage (
 extern bool TranslationTableMapSection (
         struct TranslationTable * table,
         VmAddr_t virt,
-        PhysAddr_t phys
+        PhysAddr_t phys,
+        Prot_t prot
         );
 
 extern bool TranslationTableUnmapSection (

@@ -87,7 +87,8 @@ void install_kernel_memory_map ()
         bool success = TranslationTableMapSection(
                 kernel_tt,
                 mb_idx << MEGABYTE_SHIFT,
-                (mb_idx << MEGABYTE_SHIFT) - KERNEL_MODE_OFFSET
+                (mb_idx << MEGABYTE_SHIFT) - KERNEL_MODE_OFFSET,
+                PROT_NONE
                 );
         assert(success);
     }
@@ -98,7 +99,8 @@ void install_kernel_memory_map ()
     bool success = TranslationTableMapPage(
                 kernel_tt,
                 0xffff0000,
-                (PhysAddr_t)&__VectorStartPhysical
+                (PhysAddr_t)&__VectorStartPhysical,
+                PROT_NONE
                 );
     assert(success);
 
