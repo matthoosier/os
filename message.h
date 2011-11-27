@@ -12,6 +12,8 @@ struct Channel;
 struct Connection;
 struct Message;
 
+typedef int Channel_t;
+
 /**
  * Server object on which MsgReceive() is performed
  */

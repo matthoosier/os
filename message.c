@@ -311,13 +311,15 @@ static ssize_t TransferPayload (
     if ((VmAddr_t)source_buf >= KERNEL_MODE_OFFSET) {
         src_tt = MmuGetKernelTranslationTable();
     } else {
-        src_tt = source_thread->user_address_space;
+        assert(source_thread->process != NULL);
+        src_tt = source_thread->process->pagetable;
     }
 
     if ((VmAddr_t)dest_buf >= KERNEL_MODE_OFFSET) {
         dst_tt = MmuGetKernelTranslationTable();
     } else {
-        dst_tt = dest_thread->user_address_space;
+        assert(dest_thread->process != NULL);
+        dst_tt = dest_thread->process->pagetable;
     }
 
     return CopyWithAddressSpaces(

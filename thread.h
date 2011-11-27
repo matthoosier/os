@@ -4,7 +4,7 @@
 #include "arch.h"
 #include "decls.h"
 #include "list.h"
-#include "mmu.h"
+#include "process.h"
 
 #define ALIGNED_THREAD_STRUCT_SIZE                                  \
     /* Padded out to multiple of 8 to preserve %sp requirements */  \
@@ -63,7 +63,7 @@ struct Thread
 
     ThreadState state;
 
-    struct TranslationTable * user_address_space;
+    struct Process * process;
 
     /* For use in scheduling queues. */
     struct list_head queue_link;
@@ -75,6 +75,12 @@ extern struct Thread * ThreadCreate (
         ThreadFunc body,
         void * param
         );
+
+/**
+ * @next:       thread to be run next. Must not be currently linked into any
+ *              a ready-list
+ */
+extern void ThreadYieldNoRequeueToSpecific (struct Thread * next);
 
 extern void ThreadYieldNoRequeue (void);
 

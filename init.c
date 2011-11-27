@@ -7,6 +7,7 @@
 #include "init.h"
 #include "mmu.h"
 #include "object-cache.h"
+#include "process.h"
 #include "thread.h"
 #include "vm.h"
 
@@ -159,7 +160,7 @@ void run_first_thread ()
     first_thread->kernel_stack.ceiling  = init_stack_ceiling;
     first_thread->kernel_stack.base     = &init_stack[0];
     first_thread->kernel_stack.page     = NULL;
-    first_thread->user_address_space    = NULL;
+    first_thread->process               = NULL;
     first_thread->state                 = THREAD_STATE_RUNNING;
     INIT_LIST_HEAD(&first_thread->queue_link);
 
@@ -173,6 +174,9 @@ void run_first_thread ()
     arch_version = arch_version;
 
     second_thread = ThreadCreate(second_thread_body, "Foo!");
+
+    ProcessStartManager();
+    ProcessCreate("syscall-client");
 
     while (true) {
         ThreadAddReady(THREAD_CURRENT());

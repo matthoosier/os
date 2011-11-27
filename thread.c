@@ -15,8 +15,15 @@ static void ThreadSwitch (struct Thread * outgoing,
     uint32_t next_pc = next_pc;
     uint32_t cpsr_temp = cpsr_temp;
 
-    if (outgoing->user_address_space != incoming->user_address_space) {
-        MmuSetUserTranslationTable(incoming->user_address_space);
+    struct TranslationTable * outgoing_tt = outgoing->process
+            ? outgoing->process->pagetable
+            : NULL;
+    struct TranslationTable * incoming_tt = incoming->process
+            ? incoming->process->pagetable
+            : NULL;
+
+    if (outgoing_tt != incoming_tt) {
+        MmuSetUserTranslationTable(incoming_tt);
         MmuFlushTlb();
     }
 
@@ -76,7 +83,7 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
     descriptor->kernel_stack.ceiling = descriptor;
     descriptor->kernel_stack.base = (void *)stack_page->base_address;
     descriptor->kernel_stack.page = stack_page;
-    descriptor->user_address_space = THREAD_CURRENT()->user_address_space;
+    descriptor->process = THREAD_CURRENT()->process;
     INIT_LIST_HEAD(&descriptor->queue_link);
     descriptor->state = THREAD_STATE_READY;
 
@@ -90,10 +97,9 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
     /* Install trampoline in case the thread returns. */
     descriptor->registers[REGISTER_INDEX_LR] = (uint32_t)thread_trampoline;
 
-    /* Mark the new thread as ready, and yield so that it gets scheduled. */
-    ThreadAddReady(descriptor);
+    /* Yield immediately to new thread so that it gets initialized */
     ThreadAddReady(THREAD_CURRENT());
-    ThreadYieldNoRequeue();
+    ThreadYieldNoRequeueToSpecific(descriptor);
 
     return descriptor;
 }
@@ -119,6 +125,13 @@ void ThreadYieldNoRequeue (void)
     next = list_first_entry(&ready_queue, struct Thread, queue_link);
     next->state = THREAD_STATE_RUNNING;
     list_del_init(&next->queue_link);
+
+    ThreadSwitch(THREAD_CURRENT(), next);
+}
+
+void ThreadYieldNoRequeueToSpecific (struct Thread * next)
+{
+    assert(list_empty(&next->queue_link));
 
     ThreadSwitch(THREAD_CURRENT(), next);
 }

@@ -1,6 +1,10 @@
 all: kernel progs tools
 
-progs: syscall-client
+progs = \
+	syscall-client \
+	$(NULL)
+
+progs: $(progs)
 
 NULL =
 
@@ -41,6 +45,7 @@ kernel_c_files = \
 	mmu.c \
 	object-cache.c \
 	once.c \
+	process.c \
 	ramfs.c \
 	small-object-cache.c \
 	stdlib.c \
@@ -91,7 +96,7 @@ syscall_client_c_dep_files = \
 -include $(syscall_client_c_dep_files)
 
 syscall_client_objs = \
-	$(patsubst %.c, %.ko, $(syscall_client_c_files)) \
+	$(patsubst %.c, %.o, $(syscall_client_c_files)) \
 	$(NULL)
 
 syscall_client_asm_temps = $(patsubst %.c, %.s, $(syscall_client_c_files))
@@ -100,6 +105,12 @@ syscall_client_preproc_temps = $(patsubst %.c, %.i, $(syscall_client_c_files))
 
 syscall-client: $(syscall_client_objs)
 	$(KERNEL_LD) -nostdlib -o $@ $+ 
+
+%.o: %.c
+	@# Update dependencies
+	@$(KERNEL_CC) $(KERNEL_CFLAGS) -M -MT $@ -o .$<.depends $<
+	@# Build object
+	$(KERNEL_CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 %.ko: %.c
 	@# Update dependencies
