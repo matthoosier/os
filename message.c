@@ -8,52 +8,6 @@
 #include "once.h"
 #include "thread.h"
 
-/**
- * Server object on which MsgReceive() is performed
- */
-struct Channel
-{
-    /* Nodes are embedded inside 'struct Message' instances */
-    struct list_head send_blocked_head;
-
-    /* Nodes are embedded inside 'struct Message' instances */
-    struct list_head receive_blocked_head;
-};
-
-/**
- * Client object on which MessageSend() is performed
- */
-struct Connection
-{
-    struct Channel * channel;
-};
-
-/**
- * Represents the sender, receiver, and parameters of a message..
- */
-struct Message
-{
-    struct Connection * connection;
-    struct Thread     * sender;
-    struct Thread     * receiver;
-
-    const void * sender_msgbuf;
-    size_t sender_msgbuf_len;
-
-    void * sender_replybuf;
-    size_t sender_replybuf_len;
-
-    void * receiver_msgbuf;
-    size_t receiver_msgbuf_len;
-
-    const void * receiver_replybuf;
-    size_t receiver_replybuf_len;
-
-    int result;
-
-    struct list_head queue_link;
-};
-
 static Once_t inited = ONCE_INIT;
 
 static struct ObjectCache channel_cache;
@@ -93,6 +47,7 @@ struct Channel * ChannelAlloc (void)
     if (result) {
         INIT_LIST_HEAD(&result->send_blocked_head);
         INIT_LIST_HEAD(&result->receive_blocked_head);
+        INIT_LIST_HEAD(&result->link);
     }
 
     return result;
@@ -104,6 +59,7 @@ void ChannelFree (struct Channel * channel)
 
     assert(list_empty(&channel->send_blocked_head));
     assert(list_empty(&channel->receive_blocked_head));
+    assert(list_empty(&channel->link));
 
     ObjectCacheFree(&channel_cache, channel);
 }
