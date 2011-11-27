@@ -64,7 +64,10 @@ extern void * __KernelStart[];
 
 struct Page
 {
-    /* Always a multiple of PAGE_SIZE. */
+    /*
+    Location in the flat high-memory map of all RAM.
+    Always a multiple of PAGE_SIZE.
+    */
     VmAddr_t    base_address;
 
     /*
