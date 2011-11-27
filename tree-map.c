@@ -518,7 +518,20 @@ static int address_compare_func (
     }
 }
 
+static int signed_int_compare_func (
+        TreeMapKey_t left,
+        TreeMapKey_t right
+        )
+{
+    return (int)left - (int)right;
+}
+
 /**
  * Public API name for 'address_compare_func'
  */
 TreeMapCompareFunc TreeMapAddressCompareFunc = &address_compare_func;
+
+/**
+ * Public API name for 'signed_int_compare_func'
+ */
+TreeMapCompareFunc TreeMapSignedIntCompareFunc = &signed_int_compare_func;

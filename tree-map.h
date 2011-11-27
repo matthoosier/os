@@ -40,6 +40,12 @@ typedef void (*TreeMapForeachFunc) (
 extern TreeMapCompareFunc TreeMapAddressCompareFunc;
 
 /**
+ * Canned key-comparison function suitable for comparing
+ * keys that are signed integers.
+ */
+extern TreeMapCompareFunc TreeMapSignedIntCompareFunc;
+
+/**
  * Make a tree instance
  */
 extern struct TreeMap * TreeMapAlloc (
