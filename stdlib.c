@@ -170,3 +170,25 @@ memcpy (void * s1, const void * s2, size_t n)
 
     return s1;
 }
+
+int strcmp (const char *s1, const char *s2)
+{
+    for (;*s1 != '\0' && *s2 != '\0'; s1++, s2++) {
+        if (*s1 != *s2) {
+            return *s1 - *s2;
+        }
+    }
+
+    if (*s1 == '\0' && *s2 == '\0') {
+        /* Both strings same length. */
+        return 0;
+    }
+    else if (*s1 == '\0') {
+        /* s1 is shorter, and therefore "less" */
+        return -*s2;
+    }
+    else {
+        /* s1 is longer, and therefore "greater" */
+        return +*s1;
+    }
+}
