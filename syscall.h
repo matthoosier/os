@@ -5,8 +5,12 @@
 
 BEGIN_DECLS
 
-extern int syscall0 (int number);
-extern int syscall1 (int number, int arg0);
+#define SYS_BASE        0x100
+#define SYS_NUM_ECHO    (SYS_BASE + 0)
+
+/* Prototypes for userspace syscall stubs */
+extern int syscall0 (unsigned int number);
+extern int syscall1 (unsigned int number, int arg0);
 
 END_DECLS
 

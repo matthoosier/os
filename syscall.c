@@ -2,7 +2,7 @@
 
 #include "syscall.h"
 
-int syscall0 (int number)
+int syscall0 (unsigned int number)
 {
     int result;
 
@@ -30,7 +30,7 @@ int syscall0 (int number)
     return result;
 }
 
-int syscall1 (int number, int arg0)
+int syscall1 (unsigned int number, int arg0)
 {
     int result;
 
