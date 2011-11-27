@@ -32,8 +32,35 @@ undef_handler:
     b undef_handler
 
 swi_handler:
-    /* Echo the arg0 back as result */
-    mov r0, r1
+    /* User PC (stored in the SVC mode LR automatically by the SWI) */
+    stmfd sp!, {lr}
+
+    /* Main user registers (caret selects user registers instead of current mode's )*/
+    stmfd sp, {r0 - r14}^
+    nop
+    sub sp, sp, #60
+
+    /* Fetch user-mode CPSR into a register and push it too */
+    mrs r8, spsr
+    stmfd sp!, {r8}
+
+    /* Do actual work here... */
+    add r0, sp, #4
+    bl do_syscall
+
+    /* Restore user-mode CPSR from stack (using an intermediate register) */
+    ldmfd sp!, {r8}
+    msr spsr, r8
+
+    /* Main user registers (caret selects user registers instead of current mode's ) */
+    ldmfd sp, {r0 - r14}^
+    nop
+    add sp, sp, #60
+
+    /* Put user PC into LR in preparation for special exception-return MOVS op */
+    ldmfd sp!, {lr}
+
+    /* Atomically transfer current LR into PC, and load SPSR into CPSR */
     movs pc, lr
 
 pabt_handler:

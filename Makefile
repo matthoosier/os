@@ -35,6 +35,7 @@ kernel_c_files = \
 	assert.c \
 	early-mmu.c \
 	init.c \
+	kernel_syscall.c \
 	large-object-cache.c \
 	message.c \
 	mmu.c \
