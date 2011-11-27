@@ -26,6 +26,10 @@ kernel_asm_files = \
 	vector.S \
 	$(NULL)
 
+built_kernel_c_files = \
+	ramfs_image.c \
+	$(NULL)
+
 kernel_c_files = \
 	arch.c \
 	assert.c \
@@ -36,11 +40,13 @@ kernel_c_files = \
 	mmu.c \
 	object-cache.c \
 	once.c \
+	ramfs.c \
 	small-object-cache.c \
 	stdlib.c \
 	thread.c \
 	tree-map.c \
 	vm.c \
+	$(built_kernel_c_files) \
 	$(NULL)
 
 kernel_c_dep_files = $(patsubst %.c, .%.c.depends, $(kernel_c_files))
@@ -103,6 +109,9 @@ syscall-client: $(syscall_client_objs)
 %.ko: %.S
 	$(KERNEL_CC) $(KERNEL_ASFLAGS) -c -o $@ $<
 
+ramfs_image.c: $(progs) fs-builder
+	./fs-builder -o $@ -n RamFsImage $(progs)
+
 kernel: $(kernel_objs)
 	$(KERNEL_LD) $(KERNEL_LDFLAGS) -nostdlib -o $@ $(kernel_objs)
 
@@ -124,6 +133,7 @@ clean:
 		$(kernel_c_dep_files) \
 		$(kernel_asm_temps) \
 		$(kernel_preproc_temps) \
+		$(built_kernel_c_files) \
 		kernel \
 		$(syscall_client_objs) \
 		$(syscall_client_c_dep_files) \
