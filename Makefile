@@ -6,12 +6,17 @@ NULL =
 
 tools = \
 	elfstats \
+	fs-builder \
 	$(NULL)
 
 tools: $(tools)
 
 elfstats_objs = \
 	elfstats.host.o \
+	$(NULL)
+
+fs-builder_objs = \
+	fs-builder.host.o \
 	$(NULL)
 
 kernel_asm_files = \
@@ -54,6 +59,7 @@ CROSS_COMPILE = arm-none-eabi
 
 ASFLAGS += -g
 CFLAGS += -g
+CXXFLAGS += -g
 
 KERNEL_ASFLAGS += $(ASFLAGS) -Wall -Werror
 KERNEL_CFLAGS += $(CFLAGS) -Wall -Werror -save-temps -march=armv6
@@ -103,8 +109,14 @@ kernel: $(kernel_objs)
 %.host.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+%.host.o: %.cc
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
 elfstats: $(elfstats_objs)
 	$(CC) $(LDFLAGS) -o $@ $<
+
+fs-builder: $(fs-builder_objs)
+	$(CXX) $(LDFLAGS) -o $@ $<
 
 clean:
 	rm -f \
