@@ -37,6 +37,8 @@ typedef enum
     THREAD_STATE_READY,
     THREAD_STATE_RUNNING,
 
+    THREAD_STATE_FINISHED,
+
     /* This isn't a state, just a way to programatically calculate */
     THREAD_STATE_COUNT,
 } ThreadState;
@@ -67,6 +69,9 @@ struct Thread
 
     /* For use in scheduling queues. */
     struct list_head queue_link;
+
+    /* Thread that will wait for and reap this one */
+    struct Thread * joiner;
 };
 
 typedef void (*ThreadFunc)(void * param);
@@ -75,6 +80,12 @@ extern struct Thread * ThreadCreate (
         ThreadFunc body,
         void * param
         );
+
+/**
+ * Deallocates resources used by @thread. Must not be called while @thread
+ * is executing on the processor.
+ */
+extern void ThreadJoin (struct Thread * thread);
 
 /**
  * @next:       thread to be run next. Must not be currently linked into any

@@ -7,7 +7,7 @@
 
 static LIST_HEAD(ready_queue);
 
-static void thread_trampoline ();
+static void thread_entry (ThreadFunc func, void * param);
 
 static void ThreadSwitch (struct Thread * outgoing,
                    struct Thread * incoming)
@@ -56,6 +56,19 @@ static void ThreadSwitch (struct Thread * outgoing,
     );
 }
 
+static void thread_entry (ThreadFunc func, void * param)
+{
+    func(param);
+
+    THREAD_CURRENT()->state = THREAD_STATE_FINISHED;
+
+    if (THREAD_CURRENT()->joiner != NULL) {
+        ThreadAddReady(THREAD_CURRENT()->joiner);
+    }
+
+    ThreadYieldNoRequeue();
+}
+
 struct Thread * ThreadCreate (ThreadFunc body, void * param)
 {
     unsigned int    i;
@@ -86,16 +99,15 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
     descriptor->process = THREAD_CURRENT()->process;
     INIT_LIST_HEAD(&descriptor->queue_link);
     descriptor->state = THREAD_STATE_READY;
+    descriptor->joiner = NULL;
 
     /* Initially only the program and stack counter matter. */
-    descriptor->registers[REGISTER_INDEX_PC] = (uint32_t)body;
     descriptor->registers[REGISTER_INDEX_SP] = (uint32_t)descriptor->kernel_stack.ceiling;
 
-    /* Set up the argument value */
-    descriptor->registers[REGISTER_INDEX_R0] = (uint32_t)param;
-
-    /* Install trampoline in case the thread returns. */
-    descriptor->registers[REGISTER_INDEX_LR] = (uint32_t)thread_trampoline;
+    /* Set up the entrypoint function with argument values */
+    descriptor->registers[REGISTER_INDEX_PC]    = (uint32_t)thread_entry;
+    descriptor->registers[REGISTER_INDEX_ARG0]  = (uint32_t)body;
+    descriptor->registers[REGISTER_INDEX_ARG1]  = (uint32_t)param;
 
     /* Yield immediately to new thread so that it gets initialized */
     ThreadAddReady(THREAD_CURRENT());
@@ -104,9 +116,18 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
     return descriptor;
 }
 
-static void thread_trampoline ()
+void ThreadJoin (struct Thread * thread)
 {
-    while (1) {
+    assert(thread->joiner == NULL);
+
+    thread->joiner = THREAD_CURRENT();
+
+    while (thread->state != THREAD_STATE_FINISHED) {
+        ThreadYieldNoRequeue();
+    }
+
+    if (thread->kernel_stack.page != NULL) {
+        VmPageFree(thread->kernel_stack.page);
     }
 }
 

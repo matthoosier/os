@@ -12,7 +12,8 @@
 
     #define REGISTER_COUNT      (16 + 1)
 
-    #define REGISTER_INDEX_R0   0
+    #define REGISTER_INDEX_ARG0  0
+    #define REGISTER_INDEX_ARG1  1
     #define REGISTER_INDEX_SP   13
     #define REGISTER_INDEX_LR   14
     #define REGISTER_INDEX_PC   15
