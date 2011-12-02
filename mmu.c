@@ -252,7 +252,7 @@ static void secondlevel_table_free (struct SecondlevelTable * table)
         list_del(&table->link);
     }
 
-    ObjectCacheFree(&secondlevel_ptes_cache, &table->ptes);
+    ObjectCacheFree(&secondlevel_ptes_cache, table->ptes);
     ObjectCacheFree(&secondlevel_table_cache, table);
 }
 
