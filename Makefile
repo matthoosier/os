@@ -1,6 +1,9 @@
-all: kernel progs tools
+all: image progs tools
+
+depfile = $(dir $(1))$(patsubst %.c,.%.c.depends,$(notdir $(1)))
 
 progs = \
+	echo \
 	syscall-client \
 	$(NULL)
 
@@ -24,38 +27,38 @@ fs-builder_objs = \
 	$(NULL)
 
 kernel_asm_files = \
-	atomic.S \
-	early-entry.S \
-	high-entry.S \
-	vector.S \
+	kernel/atomic.S \
+	kernel/early-entry.S \
+	kernel/high-entry.S \
+	kernel/vector.S \
 	$(NULL)
 
 built_kernel_c_files = \
-	ramfs_image.c \
+	kernel/ramfs_image.c \
 	$(NULL)
 
 kernel_c_files = \
-	arch.c \
-	assert.c \
-	early-mmu.c \
-	init.c \
-	kernel_syscall.c \
-	large-object-cache.c \
-	message.c \
-	mmu.c \
-	object-cache.c \
-	once.c \
-	process.c \
-	ramfs.c \
-	small-object-cache.c \
-	stdlib.c \
-	thread.c \
-	tree-map.c \
-	vm.c \
+	kernel/arch.c \
+	kernel/assert.c \
+	kernel/early-mmu.c \
+	kernel/init.c \
+	kernel/kernel_syscall.c \
+	kernel/large-object-cache.c \
+	kernel/message.c \
+	kernel/mmu.c \
+	kernel/object-cache.c \
+	kernel/once.c \
+	kernel/process.c \
+	kernel/ramfs.c \
+	kernel/small-object-cache.c \
+	kernel/stdlib.c \
+	kernel/thread.c \
+	kernel/tree-map.c \
+	kernel/vm.c \
 	$(built_kernel_c_files) \
 	$(NULL)
 
-kernel_c_dep_files = $(patsubst %.c, .%.c.depends, $(kernel_c_files))
+kernel_c_dep_files = $(foreach f,$(kernel_c_files),$(call depfile,$(f)))
 
 -include $(kernel_c_dep_files)
 
@@ -70,7 +73,7 @@ kernel_preproc_temps = $(patsubst %.c, %.i, $(kernel_c_files))
 CROSS_COMPILE = arm-none-eabi
 
 ASFLAGS += -g
-CFLAGS += -g
+CFLAGS += -g -I include
 CXXFLAGS += -g
 
 KERNEL_ASFLAGS += $(ASFLAGS) -Wall -Werror
@@ -81,50 +84,77 @@ KERNEL_CC = $(CROSS_COMPILE)-gcc
 KERNEL_AS = $(CROSS_COMPILE)-as
 KERNEL_LD = $(CROSS_COMPILE)-gcc
 
-kernel: kernel.ldscript
+USER_ASFLAGS += $(ASFLAGS) -Wall -Werror
+USER_CFLAGS += $(CFLAGS) -Wall -Werror -save-temps -march=armv6
+
+USER_CC = $(CROSS_COMPILE)-gcc
+USER_AS = $(CROSS_COMPILE)-as
+USER_LD = $(CROSS_COMPILE)-gcc
+
+image: kernel.ldscript
+
+echo_c_files = \
+	crt.c \
+	echo.c \
+	syscall.c \
+	user_message.c \
+	$(NULL)
 
 syscall_client_c_files = \
 	crt.c \
 	syscall-client.c \
 	syscall.c \
+	user_message.c \
 	$(NULL)
 
-syscall_client_c_dep_files = \
-	$(patsubst %.c, .%.c.depends, $(syscall_client_c_files)) \
-	$(NULL)
+echo_c_dep_files = $(foreach f,$(echo_c_files),$(call depfile,$(f)))
 
+syscall_client_c_dep_files = $(foreach f,$(syscall_client_c_files),$(call depfile,$(f)))
+
+-include $(echo_c_dep_files)
 -include $(syscall_client_c_dep_files)
+
+echo_objs = \
+	$(patsubst %.c, %.o, $(echo_c_files)) \
+	$(NULL)
 
 syscall_client_objs = \
 	$(patsubst %.c, %.o, $(syscall_client_c_files)) \
 	$(NULL)
 
+echo_asm_temps = $(patsubst %.c, %.s, $(echo_c_files))
+
 syscall_client_asm_temps = $(patsubst %.c, %.s, $(syscall_client_c_files))
+
+echo_preproc_temps = $(patsubst %.c, %.i, $(echo_c_files))
 
 syscall_client_preproc_temps = $(patsubst %.c, %.i, $(syscall_client_c_files))
 
+echo: $(echo_objs)
+	$(USER_LD) -nostdlib -o $@ $+ -Wl,-Ttext-segment,0x10000
+
 syscall-client: $(syscall_client_objs)
-	$(KERNEL_LD) -nostdlib -o $@ $+ 
+	$(USER_LD) -nostdlib -o $@ $+ -Wl,-Ttext-segment,0x20000
 
 %.o: %.c
 	@# Update dependencies
-	@$(KERNEL_CC) $(KERNEL_CFLAGS) -M -MT $@ -o .$<.depends $<
+	@$(USER_CC) $(USER_CFLAGS) -M -MT $@ -o $(call depfile,$<) $<
 	@# Build object
-	$(KERNEL_CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(USER_CC) $(USER_CFLAGS) -c -o $@ $<
 
 %.ko: %.c
 	@# Update dependencies
-	@$(KERNEL_CC) $(KERNEL_CFLAGS) -M -MT $@ -o .$<.depends $<
+	@$(KERNEL_CC) $(KERNEL_CFLAGS) -M -MT $@ -o $(call depfile,$<) $<
 	@# Build object
 	$(KERNEL_CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 %.ko: %.S
 	$(KERNEL_CC) $(KERNEL_ASFLAGS) -c -o $@ $<
 
-ramfs_image.c: $(progs) fs-builder
+kernel/ramfs_image.c: $(progs) fs-builder
 	./fs-builder -o $@ -n RamFsImage $(progs)
 
-kernel: $(kernel_objs)
+image: $(kernel_objs)
 	$(KERNEL_LD) $(KERNEL_LDFLAGS) -nostdlib -o $@ $(kernel_objs)
 
 %.host.o: %.c
@@ -146,7 +176,12 @@ clean:
 		$(kernel_asm_temps) \
 		$(kernel_preproc_temps) \
 		$(built_kernel_c_files) \
-		kernel \
+		image \
+		$(echo_objs) \
+		$(echo_c_dep_files) \
+		$(echo_asm_temps) \
+		$(echo_preproc_temps) \
+		echo \
 		$(syscall_client_objs) \
 		$(syscall_client_c_dep_files) \
 		$(syscall_client_asm_temps) \
@@ -158,10 +193,10 @@ clean:
 		$(foreach tool,$(tools),$($(tool)_objs)) \
 		$(NULL)
 
-debug: kernel
-	$(CROSS_COMPILE)-gdb kernel --eval="target remote :1234"
+debug: image
+	$(CROSS_COMPILE)-gdb image --eval="target remote :1234"
 
-run: kernel
-	qemu-system-arm -s -S -kernel kernel -cpu arm1136
+run: image
+	qemu-system-arm -s -S -kernel image -cpu arm1136
 
 .PHONY: clean debug run

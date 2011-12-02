@@ -2,7 +2,8 @@
 #define __ELF_H__
 
 #include <stdint.h>
-#include "decls.h"
+
+#include <sys/decls.h>
 
 BEGIN_DECLS
 
