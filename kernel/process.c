@@ -15,10 +15,6 @@
 
 #include "../elf.h"
 
-#define PROCMGR_PID     1
-#define FIRST_CHID      0
-#define FIRST_COID      0
-
 /** Handed off between spawner and spawnee threads */
 struct process_creation_context
 {
@@ -111,8 +107,8 @@ static struct Process * ProcessAlloc ()
             INIT_LIST_HEAD(&p->segments_head);
             INIT_LIST_HEAD(&p->channels_head);
             INIT_LIST_HEAD(&p->connections_head);
-            p->next_chid = FIRST_CHID;
-            p->next_coid = FIRST_COID;
+            p->next_chid = FIRST_CHANNEL_ID;
+            p->next_coid = FIRST_CONNECTION_ID;
         }
         else {
             if (p->id_to_channel_map)       TreeMapFree(p->id_to_channel_map);
@@ -301,6 +297,28 @@ struct Process * exec_into_current (
     p->thread = THREAD_CURRENT();
     THREAD_CURRENT()->process = p;
 
+    /* Establish the connection to the Process Manager's single channel. */
+    struct Process * procmgr = ProcessLookup(PROCMGR_PID);
+    assert(procmgr != NULL);
+    struct Channel * procmgr_chan = ProcessLookupChannel(procmgr, FIRST_CHANNEL_ID);
+    assert(procmgr_chan != NULL);
+
+    struct Connection * procmgr_con = KConnect(procmgr_chan);
+
+    if (!procmgr_chan) {
+        goto free_process;
+    }
+
+    Connection_t procmgr_coid = ProcessRegisterConnection(p, procmgr_con);
+    
+    if (procmgr_coid < 0) {
+        /* Not enough resources to register the connection */
+        KDisconnect(procmgr_con);
+        goto free_process;
+    }
+
+    assert(procmgr_coid == PROCMGR_CONNECTION_ID);
+    
     return p;
 
 free_process:
@@ -371,6 +389,11 @@ void process_creation_thread (void * pProcessCreationContext)
 struct Process * ProcessCreate (const char executableName[])
 {
     struct process_creation_context context;
+
+    if (ProcessStartManager() == NULL) {
+        /* Something bad happened. Process manager wasn't spawned. */
+        return NULL;
+    }
 
     context.caller = THREAD_CURRENT();
     context.created = NULL;

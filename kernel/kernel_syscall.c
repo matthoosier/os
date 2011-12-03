@@ -1,7 +1,8 @@
 #include <stdint.h>
 
-#include <sys/syscall.h>
 #include <sys/error.h>
+#include <sys/syscall.h>
+#include <sys/procmgr.h>
 
 #include <kernel/message.h>
 #include <kernel/process.h>
@@ -79,7 +80,15 @@ static Connection_t DoConnect (Pid_t pid, Channel_t chid)
 
 static int DoDisconnect (Connection_t coid)
 {
-    int ret = ProcessUnregisterConnection(THREAD_CURRENT()->process, coid);
+    int ret;
+
+    /* Don't allow the process's connection to the Process Manager to be closed */
+    if (coid == PROCMGR_CONNECTION_ID) {
+        ret = -ERROR_INVALID;
+    }
+    else {
+        ret = ProcessUnregisterConnection(THREAD_CURRENT()->process, coid);
+    }
     return ret;
 }
 

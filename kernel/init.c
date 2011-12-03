@@ -176,7 +176,6 @@ void run_first_thread ()
 
     second_thread = ThreadCreate(second_thread_body, "Foo!");
 
-    ProcessStartManager();
     ProcessCreate("echo");
     ProcessCreate("syscall-client");
 

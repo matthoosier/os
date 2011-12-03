@@ -16,9 +16,8 @@ int main () {
 
     /* Terminate */
     struct ProcMgrMessage msg;
-    int procMgrCon = Connect(PROCMGR_PID, FIRST_CHANNEL_ID);
     msg.type = PROC_MGR_MESSAGE_EXIT;
-    MessageSend(procMgrCon, &msg, sizeof(msg), &msg, sizeof(msg));
+    MessageSend(PROCMGR_CONNECTION_ID, &msg, sizeof(msg), &msg, sizeof(msg));
 
     return 0;
 }

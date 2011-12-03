@@ -2,6 +2,9 @@
 #define __PROCMGR_H__
 
 #include <sys/decls.h>
+#include <sys/message.h>
+
+#define PROCMGR_CONNECTION_ID FIRST_CONNECTION_ID
 
 BEGIN_DECLS
 
