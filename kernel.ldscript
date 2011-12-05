@@ -13,6 +13,7 @@ SECTIONS
 
     .early.text :
         {
+        kernel/early-*.ko(.text.early.vector)
         kernel/early-*.ko(.text)
         }
 

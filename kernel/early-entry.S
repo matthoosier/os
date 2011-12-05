@@ -50,3 +50,55 @@ _start:
     */
     ldr r0, =_start_high
     bx r0
+
+    .section .text.early.vector
+
+early_vector:
+    /* Processor reset. Serviced in svc mode. */
+    b early_reset_handler
+
+    /* Undefined instruction. Serviced in und mode. */
+    b early_undef_handler
+
+    /* Software interrupt. Serviced in svc mode. */
+    b early_swi_handler
+
+    /* Instruction fetch memory abort. Serviced in abt mode. */
+    b early_pabt_handler
+
+    /* Data access memory abort. Serviced in abt mode. */
+    b early_dabt_handler
+
+    /* Reserved for future use. */
+    b early_reserved_handler
+
+    /* General-purpose interrupt. Serviced in irq mode. */
+    b early_irq_handler
+
+    /* Fast interrupt. Serviced in fiq mode. */
+    b early_fiq_handler
+
+early_reset_handler:
+    b early_reset_handler
+
+early_undef_handler:
+    b early_undef_handler
+
+early_swi_handler:
+    b early_swi_handler
+
+early_pabt_handler:
+    b early_pabt_handler
+
+early_dabt_handler:
+    b early_dabt_handler
+
+early_reserved_handler:
+    b early_reserved_handler
+
+early_irq_handler:
+    b early_irq_handler
+
+early_fiq_handler:
+    b early_fiq_handler
+
