@@ -29,6 +29,22 @@ enum { AN_OBJECT_CACHE_ELEMENT_SIZE = PAGE_SIZE / 2 };
 
 void Init (void)
 {
+    /* Execute global constructors */
+    extern char __init_array_start;
+    extern char __init_array_end;
+
+    typedef void (*VoidFunc) (void);
+
+    VoidFunc * ctorIter;
+
+    for (ctorIter = (VoidFunc *)&__init_array_start;
+         ctorIter < (VoidFunc *)&__init_array_end;
+         ctorIter++)
+    {
+        (*ctorIter)();
+    }
+
+
     struct Page * one = VmPageAlloc();
     struct Page * two = VmPageAlloc();
     struct Page * three = VmPageAlloc();
