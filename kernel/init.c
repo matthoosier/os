@@ -4,10 +4,12 @@
 #include <kernel/array.h>
 #include <kernel/arch.h>
 #include <kernel/assert.h>
+#include <kernel/interrupts.h>
 #include <kernel/mmu.h>
 #include <kernel/object-cache.h>
 #include <kernel/process.h>
 #include <kernel/thread.h>
+#include <kernel/timer.h>
 #include <kernel/vm.h>
 
 #include "init.h"
@@ -144,30 +146,6 @@ void install_kernel_memory_map ()
 /* Retroactively filled in */
 static struct Thread *first_thread = (struct Thread *)&init_stack[N_ELEMENTS(init_stack) - ALIGNED_THREAD_STRUCT_SIZE];
 
-/* Really forked */
-static struct Thread *second_thread;
-
-void second_thread_body (void * param)
-{
-    uint32_t saved_cpsr = saved_cpsr;
-
-    while (true) {
-
-        asm volatile(
-            ".include \"arm-defs.inc\"      \n"
-            "mrs %[saved_cpsr], cpsr        \n"
-            "cps #irq                       \n"
-            "cps #und                       \n"
-            "cps #svc                       \n"
-            "msr cpsr, %[saved_cpsr]        \n"
-            : [saved_cpsr]"+r"(saved_cpsr)
-        );
-
-        ThreadAddReady(THREAD_CURRENT());
-        ThreadYieldNoRequeue();
-    }
-}
-
 void run_first_thread ()
 {
     /*
@@ -181,16 +159,12 @@ void run_first_thread ()
     first_thread->state                 = THREAD_STATE_RUNNING;
     INIT_LIST_HEAD(&first_thread->queue_link);
 
-    int mmu_enabled;
-    int arch_version;
+    /* Device-independent */
+    InterruptsConfigure();
+    InterruptsEnable();
 
-    mmu_enabled = MmuGetEnabled();
-    arch_version = ArchGetVersion();
-
-    mmu_enabled = mmu_enabled;
-    arch_version = arch_version;
-
-    second_thread = ThreadCreate(second_thread_body, "Foo!");
+    /* Initiate some basic use of the timer */
+    TimerStartPeriodic(1000);
 
     ProcessCreate("echo");
     ProcessCreate("syscall-client");

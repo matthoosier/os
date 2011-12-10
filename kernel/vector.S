@@ -1,3 +1,4 @@
+    .include "arm-defs.inc"
     .section .text.vector
 
 vector:
@@ -44,6 +45,11 @@ swi_handler:
     mrs r8, spsr
     stmfd sp!, {r8}
 
+    /* Re-enable regular interrupts (the SWI instruction disabled them) */
+    mrs r8, cpsr
+    bic r8, r8, #cpsr_i_bit
+    msr cpsr, r8
+
     /* Do actual work here... */
     add r0, sp, #4
     bl do_syscall
@@ -73,7 +79,30 @@ reserved_handler:
     b reserved_handler
 
 irq_handler:
-    b irq_handler
+    /* Interrupted execution's PC */
+    stmfd sp!, {lr}
+
+    /* Interrupted execution's processor-status register */
+    mrs lr, spsr
+    stmfd sp!, {lr}
+
+    /* Main registers */
+    stmfd sp!, {r0 - r12}
+
+    bl InterruptHandler
+
+    /* Main registers */
+    ldmfd sp!, {r0 - r12}
+
+    /* Interrupted execution's processor-status register */
+    ldmfd sp!, {lr}
+    msr spsr, lr
+
+    /* Interrupted execution's PC */
+    ldmfd sp!, {lr}
+
+    /* The PC has run one instruction too far ahead during the IRQ dispatch machinery */
+    subs pc, lr, #4
 
 fiq_handler:
     b fiq_handler

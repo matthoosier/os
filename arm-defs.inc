@@ -7,3 +7,6 @@
 .equ abt, 0b10111   /* Abort            */
 .equ und, 0b11011   /* Undefined        */
 .equ sys, 0b11111   /* System           */
+
+.equ cpsr_i_bit, 0b10000000
+.equ cpsr_f_bit, 0b01000000

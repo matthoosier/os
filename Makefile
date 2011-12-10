@@ -42,6 +42,7 @@ kernel_c_files = \
 	kernel/assert.c \
 	kernel/early-mmu.c \
 	kernel/init.c \
+	kernel/interrupts.c \
 	kernel/kernel_syscall.c \
 	kernel/large-object-cache.c \
 	kernel/message.c \
@@ -53,6 +54,7 @@ kernel_c_files = \
 	kernel/small-object-cache.c \
 	kernel/stdlib.c \
 	kernel/thread.c \
+	kernel/timer.c \
 	kernel/tree-map.c \
 	kernel/vm.c \
 	$(built_kernel_c_files) \
@@ -197,6 +199,6 @@ debug: image
 	$(CROSS_COMPILE)-gdb image --eval="target remote :1234"
 
 run: image
-	qemu-system-arm -s -S -kernel image -cpu arm1136
+	qemu-system-arm -serial stdio -s -S -kernel image -cpu arm1136 -M versatilepb
 
 .PHONY: clean debug run
