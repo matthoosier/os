@@ -87,7 +87,7 @@ static inline void SetTTBC (uint32_t val)
 
 static inline unsigned int ap_from_prot (Prot_t prot)
 {
-    unsigned int val;
+    unsigned int val = val;
 
     switch (prot) {
         case PROT_NONE:
