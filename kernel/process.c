@@ -492,7 +492,6 @@ static void process_manager_thread (void * pProcessCreationContext)
                 sizeof(buf)
                 );
 
-        buf.type = PROC_MGR_MESSAGE_EXIT;
         if (len == sizeof(buf)) {
 
             Error_t error = ERROR_OK;
