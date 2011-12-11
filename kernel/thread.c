@@ -23,36 +23,57 @@ static void ThreadSwitch (struct Thread * outgoing,
             ? incoming->process->pagetable
             : NULL;
 
+    /* Turn off interrupts */
+    IrqSave_t prev_irq_status = InterruptsDisable();
+    assert(prev_irq_status.cpsr_interrupt_flags == 0);
+
+    /* Stash prior interrupt state in incoming thread's saved CPSR */
+    incoming->registers[REGISTER_INDEX_PSR] &= ~(SETBIT(ARM_CPSR_I_BIT) | SETBIT(ARM_CPSR_F_BIT));
+    incoming->registers[REGISTER_INDEX_PSR] |= prev_irq_status.cpsr_interrupt_flags;
+
     if (outgoing_tt != incoming_tt) {
         MmuSetUserTranslationTable(incoming_tt);
         MmuFlushTlb();
     }
 
     asm volatile(
-        "                                               \n"
-        "save_outgoing:                                 \n"
-        "    stm %[p_outgoing], {r0 - r15}              \n"
-        "    mrs %[cpsr_temp], cpsr                     \n"
-        "    str %[cpsr_temp], [%[p_outgoing_cpsr], #0] \n"
-        "    ldr %[next_pc], =resume                    \n"
-        "    str %[next_pc], [%[p_saved_pc], #0]        \n"
-        "                                               \n"
-        "restore_incoming:                              \n"
-        "    ldr %[cpsr_temp], [%[p_incoming_cpsr], #0] \n"
-        "    msr cpsr_f, %[cpsr_temp]                   \n"
-        "    ldm %[p_incoming], {r0 - r15}              \n"
-        "                                               \n"
-        "resume:                                        \n"
-        "    nop                                        \n"
-        "    nop                                        \n"
-        "                                               \n"
-        : [next_pc]"+r" (next_pc),
-          [cpsr_temp]"+r" (cpsr_temp)
-        : [p_outgoing]"r" (&outgoing->registers),
-          [p_incoming]"r" (&incoming->registers),
-          [p_saved_pc]"r" (&outgoing->registers[REGISTER_INDEX_PC]),
-          [p_outgoing_cpsr]"r" (&outgoing->registers[REGISTER_INDEX_PSR]),
-          [p_incoming_cpsr]"r" (&incoming->registers[REGISTER_INDEX_PSR])
+        "                                                   \n\t"
+        "save_outgoing$:                                    \n\t"
+        "    /* Store normal registers */                   \n\t"
+        "    stm %[p_outgoing], {r0 - r15}                  \n\t"
+        "                                                   \n\t"
+        "    /* Store CPSR modulo the IRQ mask */           \n\t"
+        "    mrs %[cpsr_temp], cpsr                         \n\t"
+        "    bic %[cpsr_temp], %[cpsr_temp], %[int_bits]    \n\t"
+        "    orr %[cpsr_temp], %[cpsr_temp], %[prev_irq]    \n\t"
+        "    str %[cpsr_temp], [%[p_outgoing_cpsr], #0]     \n\t"
+        "                                                   \n\t"
+        "    /* Patch up stored PC to be at resume point */ \n\t"
+        "    ldr %[next_pc], =resume$                       \n\t"
+        "    str %[next_pc], [%[p_saved_pc], #0]            \n\t"
+        "                                                   \n\t"
+        "restore_incoming$:                                 \n\t"
+        "    /* Restore saved CPSR into SPSR */             \n\t"
+        "    ldr %[cpsr_temp], [%[p_incoming_cpsr], #0]     \n\t"
+        "    msr spsr, %[cpsr_temp]                         \n\t"
+        "                                                   \n\t"
+        "    /* Atomically load normal regs and     */      \n\t"
+        "    /* transfer SPSR into CPSR             */      \n\t"
+        "    ldm %[p_incoming], {r0 - r15}^                 \n\t"
+        "                                                   \n\t"
+        "resume$:                                           \n\t"
+        "    nop                                            \n\t"
+        "    nop                                            \n\t"
+        "                                                   \n\t"
+        : [next_pc] "+r" (next_pc),
+          [cpsr_temp] "+r" (cpsr_temp)
+        : [p_outgoing] "r" (&outgoing->registers),
+          [p_incoming] "r" (&incoming->registers),
+          [p_saved_pc] "r" (&outgoing->registers[REGISTER_INDEX_PC]),
+          [p_outgoing_cpsr] "r" (&outgoing->registers[REGISTER_INDEX_PSR]),
+          [p_incoming_cpsr] "r" (&incoming->registers[REGISTER_INDEX_PSR]),
+          [prev_irq] "r" (prev_irq_status.cpsr_interrupt_flags),
+          [int_bits] "i" (SETBIT(ARM_CPSR_I_BIT) | SETBIT(ARM_CPSR_F_BIT))
         : "memory"
     );
 }
@@ -109,6 +130,13 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
     descriptor->registers[REGISTER_INDEX_PC]    = (uint32_t)thread_entry;
     descriptor->registers[REGISTER_INDEX_ARG0]  = (uint32_t)body;
     descriptor->registers[REGISTER_INDEX_ARG1]  = (uint32_t)param;
+
+    /* Thread is initially running in kernel mode */
+    asm volatile (
+        ".include \"arm-defs.inc\"              \n\t"
+        "mov %[cpsr], #svc                      \n\t"
+        : [cpsr] "=r" (descriptor->registers[REGISTER_INDEX_PSR])
+    );
 
     /* Yield immediately to new thread so that it gets initialized */
     ThreadAddReady(THREAD_CURRENT());
