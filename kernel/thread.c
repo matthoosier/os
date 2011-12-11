@@ -2,6 +2,7 @@
 
 #include <kernel/arch.h>
 #include <kernel/assert.h>
+#include <kernel/spinlock.h>
 #include <kernel/thread.h>
 #include <kernel/vm.h>
 
@@ -156,4 +157,36 @@ void ThreadYieldNoRequeueToSpecific (struct Thread * next)
     assert(list_empty(&next->queue_link));
 
     ThreadSwitch(THREAD_CURRENT(), next);
+}
+
+struct Thread * ThreadStructFromStackPointer (uint32_t sp)
+{
+    return THREAD_STRUCT_FROM_SP(sp);
+}
+
+/**
+ * Set to true by interrupt handlers when something has happened
+ * that makes the scheduler algorithm need to be re-run at
+ * the time that a syscall is being returned from.
+ */
+static bool         need_resched        = false;
+static Spinlock_t   need_resched_lock   = SPINLOCK_INIT;
+
+void ThreadSetNeedResched ()
+{
+    SpinlockLock(&need_resched_lock);
+    need_resched = true;
+    SpinlockUnlock(&need_resched_lock);
+}
+
+bool ThreadResetNeedResched ()
+{
+    bool ret;
+
+    SpinlockLock(&need_resched_lock);
+    ret = need_resched;
+    need_resched = false;
+    SpinlockUnlock(&need_resched_lock);
+
+    return ret;
 }

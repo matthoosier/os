@@ -98,6 +98,16 @@ extern void ThreadYieldNoRequeue (void);
 
 extern void ThreadAddReady (struct Thread * thread);
 
+/**
+ * A version of THREAD_STRUCT_FROM_SP(), but implemented as a symbol
+ * for calling from places where macros aren't available (e.g., assembly).
+ */
+extern struct Thread * ThreadStructFromStackPointer (uint32_t sp);
+
+extern void ThreadSetNeedResched (void);
+
+extern bool ThreadResetNeedResched (void);
+
 END_DECLS
 
 #endif /* __THREAD_H__ */

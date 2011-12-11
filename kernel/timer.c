@@ -2,6 +2,7 @@
 #include <kernel/mmu.h>
 #include <kernel/once.h>
 #include <kernel/timer.h>
+#include <kernel/thread.h>
 
 struct Sp804
 {
@@ -54,6 +55,9 @@ static void OnTimerInterrupt ()
 {
     /* Clear the interrupt */
     *GetSp804()->IntClr = 0;
+
+    /* Boot the current task */
+    ThreadSetNeedResched();
 }
 
 void TimerStartPeriodic (unsigned int period_ms)

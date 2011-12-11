@@ -79,7 +79,8 @@ reserved_handler:
     b reserved_handler
 
 irq_handler:
-    /* Interrupted execution's PC */
+    /* Interrupted execution's PC. On ARM IRQ's the PC is too far ahead by one word */
+    sub lr, lr, #4
     stmfd sp!, {lr}
 
     /* Interrupted execution's processor-status register */
@@ -91,6 +92,37 @@ irq_handler:
 
     bl InterruptHandler
 
+    /* Fetch interrupted task's kernel stack pointer */
+    mrs r1, cpsr
+    cps #svc
+    mov r0, sp
+    msr cpsr, r1
+
+    /* Deduce kernel thread structure location from the task's stack pointer */
+    bl ThreadStructFromStackPointer
+
+    /* Figure out execution mode processor was in before IRQ arrived        */
+    ldr r1, [sp, #52]       /* r1 := spsr           */
+    bic r1, r1, #0xffffffe0 /* r1 := spsr & 0b11111 */
+
+    teq r1, #usr
+    beq irq_do_user_preempted$
+
+    teq r1, #svc
+    beq irq_do_kernel_preempted$
+
+    b irq_normal_exit$
+
+irq_do_user_preempted$:
+    /* Synthesize a system call for current task, load new task's registers */
+    b irq_normal_exit$
+
+irq_do_kernel_preempted$:
+    /* Kernel isn't preemptible for now */
+    b irq_normal_exit$
+
+irq_normal_exit$:
+
     /* Main registers */
     ldmfd sp!, {r0 - r12}
 
@@ -101,8 +133,9 @@ irq_handler:
     /* Interrupted execution's PC */
     ldmfd sp!, {lr}
 
-    /* The PC has run one instruction too far ahead during the IRQ dispatch machinery */
-    subs pc, lr, #4
+    /* Atomically transfer saved PC to live register and move SPSR into CPSR */
+    subs pc, lr, #0
 
 fiq_handler:
     b fiq_handler
+

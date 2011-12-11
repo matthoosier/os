@@ -219,4 +219,14 @@ void do_syscall (uint32_t * p_regs)
             p_regs[0] = -ERROR_NO_SYS;
             break;
     }
+
+    /*
+    Check whether any interrupts handlers decided that the scheduling
+    algorithm needs to run and pick a new next task.
+    */
+    if (ThreadResetNeedResched()) {
+        ThreadAddReady(THREAD_CURRENT());
+        ThreadYieldNoRequeue();
+    }
 }
+
