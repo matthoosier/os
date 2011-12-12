@@ -166,6 +166,7 @@ void run_first_thread ()
     /* Initiate some basic use of the timer */
     TimerStartPeriodic(1000);
 
+    ProcessStartManager();
     ProcessCreate("echo");
     ProcessCreate("syscall-client");
 

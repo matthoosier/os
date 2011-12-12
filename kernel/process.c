@@ -390,7 +390,7 @@ struct Process * ProcessCreate (const char executableName[])
 {
     struct process_creation_context context;
 
-    if (ProcessStartManager() == NULL) {
+    if (ProcessGetManager() == NULL) {
         /* Something bad happened. Process manager wasn't spawned. */
         return NULL;
     }
@@ -547,36 +547,36 @@ static void process_manager_thread (void * pProcessCreationContext)
     }
 }
 
+static struct Process * managerProcess = NULL;
+
 struct Process * ProcessStartManager ()
 {
-    static Once_t once = ONCE_INIT;
-    static struct Process * managerProcess;
+    struct process_creation_context context;
 
-    void startup_process_manager (void * ptrPtrProcess)
-    {
-        struct Process ** p;
-        struct process_creation_context context;
+    assert(managerProcess == NULL);
 
-        p = (struct Process **)ptrPtrProcess;
+    context.caller = THREAD_CURRENT();
+    context.created = NULL;
+    context.executableName = NULL;
+    context.caller_should_release = false;
 
-        context.caller = THREAD_CURRENT();
-        context.created = NULL;
-        context.executableName = NULL;
-        context.caller_should_release = false;
+    /* Resulting process object will be stored into context->created */
+    ThreadCreate(process_manager_thread, &context);
 
-        /* Resulting process object will be stored into context->created */
-        ThreadCreate(process_manager_thread, &context);
-
-        /* Forked thread will wake us back up when the process creation is done */
-        while (!context.caller_should_release) {
-            ThreadAddReady(THREAD_CURRENT());
-            ThreadYieldNoRequeue();
-        }
-
-        *p = context.created;
+    /* Forked thread will wake us back up when the process creation is done */
+    while (!context.caller_should_release) {
+        ThreadAddReady(THREAD_CURRENT());
+        ThreadYieldNoRequeue();
     }
 
-    Once(&once, startup_process_manager, &managerProcess);
+    managerProcess = context.created;
+
+    return managerProcess;
+}
+
+struct Process * ProcessGetManager ()
+{
+    assert(managerProcess != NULL);
     return managerProcess;
 }
 

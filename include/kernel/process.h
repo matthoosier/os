@@ -46,7 +46,17 @@ struct Process
     Connection_t                next_coid;
 };
 
+/**
+ * Called one time at startup to initialize the privileged kernel thread
+ * that implements the responses to basic process-service message API.
+ */
 struct Process * ProcessStartManager ();
+
+/**
+ * Called any time after startup, to fetch the privileged kernel running
+ * the ProcMgr.
+ */
+struct Process * ProcessGetManager ();
 
 struct Process * ProcessCreate (const char executableName[]);
 
