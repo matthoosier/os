@@ -670,3 +670,8 @@ struct Connection * ProcessLookupConnection (
 {
     return TreeMapLookup(p->id_to_connection_map, (TreeMapKey_t)id);
 }
+
+struct TranslationTable * ProcessGetTranslationTable (struct Process * process)
+{
+    return process->pagetable;
+}

@@ -98,10 +98,16 @@ irq_handler:
     mov r0, sp
     msr cpsr, r1
 
-    /* Deduce kernel thread structure location from the task's stack pointer */
-    bl ThreadStructFromStackPointer
+    /**
+     * Deduce kernel thread structure location from the task's stack pointer.
+     */
 
-    /* Figure out execution mode processor was in before IRQ arrived        */
+    mov r2, r0                      /* r2 := interrupted task's SP          */
+    bl ThreadStructFromStackPointer /* r0 := 'struct Thread *'              */
+
+    /**
+     * Figure out execution mode processor was in before IRQ arrived.
+     */
     ldr r1, [sp, #52]       /* r1 := spsr           */
     bic r1, r1, #0xffffffe0 /* r1 := spsr & 0b11111 */
 
@@ -118,8 +124,208 @@ irq_do_user_preempted$:
     b irq_normal_exit$
 
 irq_do_kernel_preempted$:
-    /* Kernel isn't preemptible for now */
-    b irq_normal_exit$
+    /**
+     * Copy current task's registers to kernel thread register-save area.
+     */
+
+    /* SPSR */
+    ldr r3, [sp, #(13 * 4)]     /* Load from staged SPSR on IRQ stack   */
+    str r3, [r0, #(16 * 4)]     /* Store to kernel thread structure     */
+
+    /* R15 */
+    ldr r3, [sp, #(14 * 4)]     /* Load from IRQ stack                  */
+    str r3, [r0, #(15 * 4)]     /* Store to kernel thread structure     */
+
+    /* R14 */
+    mrs r4, cpsr
+    cps #svc
+    mov r3, r14
+    msr cpsr, r4                /* Load from banked register            */
+    str r3, [r0, #(14 * 4)]     /* Store to kernel thread structure     */
+
+    /* R13 */
+    mrs r4, cpsr
+    cps #svc
+    mov r3, r13
+    msr cpsr, r4                /* Load from banked register            */
+    str r3, [r0, #(13 * 4)]     /* Store to kernel thread structure     */
+
+    /* R12 */
+    ldr r3, [sp, #(12 * 4)]     /* Load from IRQ stack                  */
+    str r3, [r0, #(12 * 4)]     /* Store to kernel thread structure     */
+
+    /* R11 */
+    ldr r3, [sp, #(11 * 4)]     /* Load from IRQ stack                  */
+    str r3, [r0, #(11 * 4)]     /* Store to kernel thread structure     */
+
+    /* R10 */
+    ldr r3, [sp, #(10 * 4)]     /* Load from IRQ stack                  */
+    str r3, [r0, #(10 * 4)]     /* Store to kernel thread structure     */
+
+    /* R9 */
+    ldr r3, [sp, #(9 * 4)]      /* Load from IRQ stack                  */
+    str r3, [r0, #(9 * 4)]      /* Store to kernel thread structure     */
+
+    /* R8 */
+    ldr r3, [sp, #(8 * 4)]      /* Load from IRQ stack                  */
+    str r3, [r0, #(8 * 4)]      /* Store to kernel thread structure     */
+
+    /* R7 */
+    ldr r3, [sp, #(7 * 4)]      /* Load from IRQ stack                  */
+    str r3, [r0, #(7 * 4)]      /* Store to kernel thread structure     */
+
+    /* R6 */
+    ldr r3, [sp, #(6 * 4)]      /* Load from IRQ stack                  */
+    str r3, [r0, #(6 * 4)]      /* Store to kernel thread structure     */
+
+    /* R5 */
+    ldr r3, [sp, #(5 * 4)]      /* Load from IRQ stack                  */
+    str r3, [r0, #(5 * 4)]      /* Store to kernel thread structure     */
+
+    /* R4 */
+    ldr r3, [sp, #(4 * 4)]      /* Load from IRQ stack                  */
+    str r3, [r0, #(4 * 4)]      /* Store to kernel thread structure     */
+
+    /* R3 */
+    ldr r3, [sp, #(3 * 4)]      /* Load from IRQ stack                  */
+    str r3, [r0, #(3 * 4)]      /* Store to kernel thread structure     */
+
+    /* R2 */
+    ldr r3, [sp, #(2 * 4)]      /* Load from IRQ stack                  */
+    str r3, [r0, #(2 * 4)]      /* Store to kernel thread structure     */
+
+    /* R1 */
+    ldr r3, [sp, #(1 * 4)]      /* Load from IRQ stack                  */
+    str r3, [r0, #(1 * 4)]      /* Store to kernel thread structure     */
+
+    /* R0 */
+    ldr r3, [sp, #(0 * 4)]      /* Load from IRQ stack                  */
+    str r3, [r0, #(0 * 4)]      /* Store to kernel thread structure     */
+
+
+    /**
+     * Mark the booted thread as ready to run
+     */
+    push {r0}
+    bl ThreadAddReady           /* r0 still holds 'struct Thread *' */
+    pop {r0}
+
+    /**
+     * Find out pagetable used by outgoing thread
+     */
+    bl ThreadGetProcess             /* r0 := 'struct Process *'         */
+    teq r0, #0                      /* Is r0 NULL?                      */
+    blne ProcessGetTranslationTable /* r0 := 'struct TranslationTable *'*/
+    mov r8, r0                      /* r8 := 'struct TranslationTable *'*/
+
+
+    /**
+     * Fetch next thread to run
+     */
+    bl ThreadDequeueReady       /* r0 := 'struct Thread *'          */
+
+    /**
+     * Copy next task's registers out of kernel save area and into
+     * IRQ stack's staging area. Normal exit path from IRQ handler
+     * will restore them to the actual machine registers.
+     */
+
+    /* SPSR */
+    ldr r3, [r0, #(16 * 4)]     /* Load from kernel thread structure    */
+    str r3, [sp, #(13 * 4)]     /* Store as staged SPSR on IRQ stack    */
+
+    /* R15 */
+    ldr r3, [r0, #(15 * 4)]     /* Load from kernel thread structure    */
+    str r3, [sp, #(14 * 4)]     /* Store on IRQ stack                   */
+
+    /* R14 */
+    ldr r3, [r0, #(14 * 4)]     /* Load from kernel thread structure    */
+    mrs r4, cpsr
+    cps #svc
+    mov r14, r3                 /* Store in banked register             */
+    msr cpsr, r4
+
+    /* R13 */
+    ldr r3, [r0, #(13 * 4)]     /* Load from kernel thread structure    */
+    mrs r4, cpsr
+    cps #svc
+    mov r13, r3                 /* Store in banked register             */
+    msr cpsr, r4
+
+    /* R12 */
+    ldr r3, [r0, #(12 * 4)]     /* Load from kernel thread structure    */
+    str r3, [sp, #(12 * 4)]     /* Store on IRQ stack                   */
+
+    /* R11 */
+    ldr r3, [r0, #(11 * 4)]     /* Load from kernel thread structure    */
+    str r3, [sp, #(11 * 4)]     /* Store on IRQ stack                   */
+
+    /* R10 */
+    ldr r3, [r0, #(10 * 4)]     /* Load from kernel thread structure    */
+    str r3, [sp, #(10 * 4)]     /* Store on IRQ stack                   */
+
+    /* R9 */
+    ldr r3, [r0, #(9 * 4)]      /* Load from kernel thread structure    */
+    str r3, [sp, #(9 * 4)]      /* Store on IRQ stack                   */
+
+    /* R8 */
+    ldr r3, [r0, #(8 * 4)]      /* Load from kernel thread structure    */
+    str r3, [sp, #(8 * 4)]      /* Store on IRQ stack                   */
+
+    /* R7 */
+    ldr r3, [r0, #(7 * 4)]      /* Load from kernel thread structure    */
+    str r3, [sp, #(7 * 4)]      /* Store on IRQ stack                   */
+
+    /* R6 */
+    ldr r3, [r0, #(6 * 4)]      /* Load from kernel thread structure    */
+    str r3, [sp, #(6 * 4)]      /* Store on IRQ stack                   */
+
+    /* R5 */
+    ldr r3, [r0, #(5 * 4)]      /* Load from kernel thread structure    */
+    str r3, [sp, #(5 * 4)]      /* Store on IRQ stack                   */
+
+    /* R4 */
+    ldr r3, [r0, #(4 * 4)]      /* Load from kernel thread structure    */
+    str r3, [sp, #(4 * 4)]      /* Store on IRQ stack                   */
+
+    /* R3 */
+    ldr r3, [r0, #(3 * 4)]      /* Load from kernel thread structure    */
+    str r3, [sp, #(3 * 4)]      /* Store on IRQ stack                   */
+
+    /* R2 */
+    ldr r3, [r0, #(2 * 4)]      /* Load from kernel thread structure    */
+    str r3, [sp, #(2 * 4)]      /* Store on IRQ stack                   */
+
+    /* R1 */
+    ldr r3, [r0, #(1 * 4)]      /* Load from kernel thread structure    */
+    str r3, [sp, #(1 * 4)]      /* Store on IRQ stack                   */
+
+    /* R0 */
+    ldr r3, [r0, #(0 * 4)]      /* Load from kernel thread structure    */
+    str r3, [sp, #(0 * 4)]      /* Store on IRQ stack                   */
+
+    /**
+     * Find out pagetable used by outgoing thread
+     */
+    bl ThreadGetProcess             /* r0 := 'struct Process *'         */
+    teq r0, #0                      /* Is r0 NULL?                      */
+    blne ProcessGetTranslationTable /* r0 := 'struct TranslationTable *'*/
+    mov r9, r0                      /* r9 := 'struct TranslationTable *'*/
+
+    /**
+     * Pagetable swap
+     */
+    teq r8, r9                      /* Are outgoing and incoming        */
+                                    /* pagetables the same?             */
+
+    beq irq_normal_exit$            /* If so, we're done.               */
+
+    mov r0, r9                      /* r0 := address of incoming        */
+                                    /* thread's pagetable               */
+
+    bl MmuSetUserTranslationTable   /* Install new pagetable...         */
+    bl MmuFlushTlb                  /* ... and flush TLB                */
+    b irq_normal_exit$              /* Done.                            */
 
 irq_normal_exit$:
 

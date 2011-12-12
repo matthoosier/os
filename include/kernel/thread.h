@@ -91,12 +91,21 @@ extern void ThreadJoin (struct Thread * thread);
 /**
  * @next:       thread to be run next. Must not be currently linked into any
  *              a ready-list
+ *
+ * Yield to a specific (runnable) thread. Must not be called with interrupts
+ * disabled.
  */
 extern void ThreadYieldNoRequeueToSpecific (struct Thread * next);
 
+/**
+ * Yield to some other runnable thread. Must not be called with interrupts
+ * disabled.
+ */
 extern void ThreadYieldNoRequeue (void);
 
 extern void ThreadAddReady (struct Thread * thread);
+
+extern struct Thread * ThreadDequeueReady (void);
 
 /**
  * A version of THREAD_STRUCT_FROM_SP(), but implemented as a symbol
@@ -104,7 +113,16 @@ extern void ThreadAddReady (struct Thread * thread);
  */
 extern struct Thread * ThreadStructFromStackPointer (uint32_t sp);
 
+/**
+ * A symbol that fetches the value of the 'process' field on a Thread
+ * object, but implemented as a symbol for uses where C structures'
+ * field names can't be used (e.g., assembly).
+ */
+extern struct Process * ThreadGetProcess (struct Thread *);
+
 extern void ThreadSetNeedResched (void);
+
+extern bool ThreadGetNeedResched (void);
 
 extern bool ThreadResetNeedResched (void);
 

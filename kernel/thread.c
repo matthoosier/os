@@ -161,21 +161,28 @@ void ThreadJoin (struct Thread * thread)
     }
 }
 
-extern void ThreadAddReady (struct Thread * thread)
+void ThreadAddReady (struct Thread * thread)
 {
     list_add_tail(&thread->queue_link, &ready_queue);
 }
 
-void ThreadYieldNoRequeue (void)
+struct Thread * ThreadDequeueReady (void)
 {
     struct Thread * next;
 
     assert(!list_empty(&ready_queue));
 
-    /* Pop off thread at front of run-queue */
     next = list_first_entry(&ready_queue, struct Thread, queue_link);
     next->state = THREAD_STATE_RUNNING;
     list_del_init(&next->queue_link);
+
+    return next;
+}
+
+void ThreadYieldNoRequeue (void)
+{
+    /* Pop off thread at front of run-queue */
+    struct Thread * next = ThreadDequeueReady();
 
     ThreadSwitch(THREAD_CURRENT(), next);
 }
@@ -190,6 +197,11 @@ void ThreadYieldNoRequeueToSpecific (struct Thread * next)
 struct Thread * ThreadStructFromStackPointer (uint32_t sp)
 {
     return THREAD_STRUCT_FROM_SP(sp);
+}
+
+struct Process * ThreadGetProcess (struct Thread * thread)
+{
+    return thread->process;
 }
 
 /**

@@ -6,11 +6,9 @@
 
 #include <sys/decls.h>
 
+#include <kernel/arch.h>
 #include <kernel/bits.h>
 #include <kernel/compiler.h>
-
-#define ARM_CPSR_I_BIT  7   /* If set, disables normal IRQs */
-#define ARM_CPSR_F_BIT  6   /* If set, disables fast IRQs   */
 
 BEGIN_DECLS
 
