@@ -54,6 +54,7 @@ swi_handler:
     add r0, sp, #4
     bl do_syscall
 
+swi_handler__exit$:
     /* Restore user-mode CPSR from stack (using an intermediate register) */
     ldmfd sp!, {r8}
     msr spsr, r8
@@ -92,6 +93,13 @@ irq_handler:
 
     bl InterruptHandler
 
+    /* Did the interrupt handler decide that a different task needs to run? */
+    bl ThreadResetNeedResched       /* r0 := boolean result                 */
+
+    /* If not, we're done */
+    teq r0, #0
+    beq irq_handler__normal_exit$
+
     /* Fetch interrupted task's kernel stack pointer */
     mrs r1, cpsr
     cps #svc
@@ -108,25 +116,134 @@ irq_handler:
     /**
      * Figure out execution mode processor was in before IRQ arrived.
      */
-    ldr r1, [sp, #52]       /* r1 := spsr           */
-    bic r1, r1, #0xffffffe0 /* r1 := spsr & 0b11111 */
+    ldr r1, [sp, #52]               /* r1 := spsr                           */
+    bic r1, r1, #0xffffffe0         /* r1 := spsr & 0b11111                 */
 
     teq r1, #usr
-    beq irq_do_user_preempted$
+    beq irq_handler__do_boot_user$
 
     teq r1, #svc
-    beq irq_do_kernel_preempted$
+    beq irq_handler__do_boot_kernel$
 
-    b irq_normal_exit$
+    b irq_handler__normal_exit$
 
-irq_do_user_preempted$:
-    /* Synthesize a system call for current task, load new task's registers */
-    b irq_normal_exit$
+/**
+ * Copy current user process's registers to its kernel stack
+ * (where they normally get stored during a syscall).
+ *
+ * Requirements:
+ *
+ * r2: Interrupted task's SP
+ * sp:  Bottom of IRQ stack's saved-register area
+ */
+irq_handler__do_boot_user$:
 
-irq_do_kernel_preempted$:
+    /* R15 */
+    ldr r3, [sp, #(14 * 4)]     /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R14 */
+    stmfd sp, {r14}^            /* Load from banked register            */
+    nop
+    sub sp, sp, #4              /* (Stack is very temp. storage)        */
+    ldmfd sp!, {r3}
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R13 */
+    stmfd sp, {r13}^            /* Load from banked register            */
+    nop
+    sub sp, sp, #4              /* (Stack is very temp. storage)        */
+    ldmfd sp!, {r3}
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R12 */
+    ldr r3, [sp, #(12 * 4)]     /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R11 */
+    ldr r3, [sp, #(11 * 4)]     /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R10 */
+    ldr r3, [sp, #(10 * 4)]     /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R9 */
+    ldr r3, [sp, #(9 * 4)]      /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R8 */
+    ldr r3, [sp, #(8 * 4)]      /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R7 */
+    ldr r3, [sp, #(7 * 4)]      /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R6 */
+    ldr r3, [sp, #(6 * 4)]      /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R5 */
+    ldr r3, [sp, #(5 * 4)]      /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R4 */
+    ldr r3, [sp, #(4 * 4)]      /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R3 */
+    ldr r3, [sp, #(3 * 4)]      /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R2 */
+    ldr r3, [sp, #(2 * 4)]      /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R1 */
+    ldr r3, [sp, #(1 * 4)]      /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* R0 */
+    ldr r3, [sp, #(0 * 4)]      /* Load from IRQ stack                  */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
+    /* SPSR */
+    ldr r3, [sp, #(13 * 4)]     /* Load from staged SPSR on IRQ stack   */
+    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+
     /**
-     * Copy current task's registers to kernel thread register-save area.
+     * Because the task we're ejecting from the CPU was running in user
+     * mode, its kernel thread had no meaningful state (except a stack
+     * pointer). This means that we are free to designate whatever entry
+     * point we want for the thread when the scheduler next gets around
+     * to resuming it, without losing any state.
+     *
+     * We'll strategically set the pre-empted task's kernel thread PC to
+     * be the pointer during the syscall return sequence that unravels the
+     * stored registers and returns back to the spot in user-space where
+     * the task was interrupted.
+     *
+     * r0: still holds address of the interrupted task's kernel thread
+     * r2: holds the value of interrupted task's SP_svc less the space
+     *     required to hold the user-space saved registers we just stored
+     *     on the task's kernel stack.
      */
+    str r2, [r0, #(4 * 13)]     /* Kernel threadstack pointer           */
+    ldr r2, =swi_handler__exit$ /* R2 := Strategic resume point         */
+    str r2, [r0, #(4 * 15)]     /* Kernel thread program counter        */
+
+    b irq_handler__do_load_next_task$
+
+/**
+ * Copy current task's registers to kernel thread register-save area.
+ *
+ * Requirements:
+ *
+ * r2: Interrupted task's SP
+ * sp:  Bottom of IRQ stack's saved-register area
+ */
+irq_handler__do_boot_kernel$:
 
     /* SPSR */
     ldr r3, [sp, #(13 * 4)]     /* Load from staged SPSR on IRQ stack   */
@@ -203,11 +320,18 @@ irq_do_kernel_preempted$:
     str r3, [r0, #(0 * 4)]      /* Store to kernel thread structure     */
 
 
+/**
+ * Requirements:
+ *
+ * r0: holds address of outgoing tasks' kernel 'struct Thread'
+ */
+irq_handler__do_load_next_task$:
+
     /**
      * Mark the booted thread as ready to run
      */
     push {r0}
-    bl ThreadAddReady           /* r0 still holds 'struct Thread *' */
+    bl ThreadAddReady               /* r0 still holds 'struct Thread *' */
     pop {r0}
 
     /**
@@ -225,9 +349,15 @@ irq_do_kernel_preempted$:
     bl ThreadDequeueReady       /* r0 := 'struct Thread *'          */
 
     /**
-     * Copy next task's registers out of kernel save area and into
-     * IRQ stack's staging area. Normal exit path from IRQ handler
+     * Copy next task's registers out of kernel-thread register save area
+     * and into IRQ stack's staging area. Normal exit path from IRQ handler
      * will restore them to the actual machine registers.
+     *
+     * Requirements:
+     *
+     * r0:  Base address of incoming's 'struct Thread'
+     * r8:  Base address of outgoing's 'struct TranslationTable'
+     * sp:  Bottom of IRQ stack's saved-register area
      */
 
     /* SPSR */
@@ -318,16 +448,21 @@ irq_do_kernel_preempted$:
     teq r8, r9                      /* Are outgoing and incoming        */
                                     /* pagetables the same?             */
 
-    beq irq_normal_exit$            /* If so, we're done.               */
+    beq irq_handler__normal_exit$   /* If so, we're done.               */
 
     mov r0, r9                      /* r0 := address of incoming        */
                                     /* thread's pagetable               */
 
     bl MmuSetUserTranslationTable   /* Install new pagetable...         */
     bl MmuFlushTlb                  /* ... and flush TLB                */
-    b irq_normal_exit$              /* Done.                            */
+    b irq_handler__normal_exit$     /* Done.                            */
 
-irq_normal_exit$:
+/**
+ * Normal unraveling point. Assumes that the only thing on the
+ * IRQ stack at this point are the registers of the task to be
+ * resumed.
+ */
+irq_handler__normal_exit$:
 
     /* Main registers */
     ldmfd sp!, {r0 - r12}
