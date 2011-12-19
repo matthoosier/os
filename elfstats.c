@@ -5,7 +5,7 @@
 #include <sys/mman.h>
 #include <stdlib.h>
 
-#include "elf.h"
+#include <sys/elf.h>
 
 static void checkCode (const char description[], int code) {
     if (code < 0) {

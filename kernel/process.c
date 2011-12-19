@@ -1,5 +1,6 @@
 #include <string.h>
 
+#include <sys/elf.h>
 #include <sys/error.h>
 #include <sys/procmgr.h>
 
@@ -12,8 +13,6 @@
 #include <kernel/ramfs.h>
 #include <kernel/thread.h>
 #include <kernel/tree-map.h>
-
-#include "../elf.h"
 
 /** Handed off between spawner and spawnee threads */
 struct process_creation_context
