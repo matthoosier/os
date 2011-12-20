@@ -125,6 +125,57 @@ void KMessageFree (struct Message * context)
     ObjectCacheFree(&message_cache, context);
 }
 
+ssize_t KMessageSendAsync (
+        struct Connection * connection,
+        uint32_t payload
+        )
+{
+    struct Message * message;
+
+    Once(&inited, init, NULL);
+
+    if (list_empty(&connection->channel->receive_blocked_head)) {
+        /* No receiver thread is waiting on the channel at the moment */
+        message = KMessageAlloc();
+
+        if (message == NULL) {
+            return -ERROR_NO_MEM;
+        }
+
+        message->connection = connection;
+        message->sender = NULL;
+        message->send_data.async.payload = payload;
+
+        message->receiver = NULL;
+
+        /* Enqueue message for delivery whenever receiver asks for it */
+        list_add_tail(
+                &message->queue_link,
+                &connection->channel->send_blocked_head
+                );
+    }
+    else {
+        /* Receiver thread is ready to go */
+        message = list_first_entry(
+                &connection->channel->receive_blocked_head,
+                struct Message,
+                queue_link
+                );
+        list_del_init(&message->queue_link);
+
+        assert(message->receiver != NULL);
+
+        message->connection = connection;
+        message->sender = NULL;
+        message->send_data.async.payload = payload;
+
+        /* Allow receiver to wake up */
+        message->receiver->state = THREAD_STATE_READY;
+        ThreadAddReadyFirst(message->receiver);
+    }
+
+    return ERROR_OK;
+}
 ssize_t KMessageSend (
         struct Connection * connection,
         const void * msgbuf,
@@ -144,10 +195,10 @@ ssize_t KMessageSend (
 
         message->connection = connection;
         message->sender = THREAD_CURRENT();
-        message->sender_msgbuf = msgbuf;
-        message->sender_msgbuf_len = msgbuf_len;
-        message->sender_replybuf = replybuf;
-        message->sender_replybuf_len = replybuf_len;
+        message->send_data.sync.sender_msgbuf = msgbuf;
+        message->send_data.sync.sender_msgbuf_len = msgbuf_len;
+        message->send_data.sync.sender_replybuf = replybuf;
+        message->send_data.sync.sender_replybuf_len = replybuf_len;
 
         message->receiver = NULL;
 
@@ -173,10 +224,10 @@ ssize_t KMessageSend (
 
         message->connection = connection;
         message->sender = THREAD_CURRENT();
-        message->sender_msgbuf = msgbuf;
-        message->sender_msgbuf_len = msgbuf_len;
-        message->sender_replybuf = replybuf;
-        message->sender_replybuf_len = replybuf_len;
+        message->send_data.sync.sender_msgbuf = msgbuf;
+        message->send_data.sync.sender_msgbuf_len = msgbuf_len;
+        message->send_data.sync.sender_replybuf = replybuf;
+        message->send_data.sync.sender_replybuf_len = replybuf_len;
 
         /*
         Don't explicity add THREAD_CURRENT (the sender) to any scheduling
@@ -216,7 +267,7 @@ ssize_t KMessageReceive (
     Once(&inited, init, NULL);
 
     if (list_empty(&channel->send_blocked_head)) {
-        /* No sender thread is waiting on the channel at the moment */
+        /* No message is waiting in the channel at the moment */
         message = KMessageAlloc();
 
         message->receiver = THREAD_CURRENT();
@@ -236,7 +287,7 @@ ssize_t KMessageReceive (
         ThreadYieldNoRequeue();
     }
     else {
-        /* Sender thread is ready to go */
+        /* Some message is waiting in the channel already */
         message = list_first_entry(
                 &channel->send_blocked_head,
                 struct Message,
@@ -244,23 +295,47 @@ ssize_t KMessageReceive (
                 );
         list_del_init(&message->queue_link);
 
-        assert(message->sender != NULL);
-
         message->receiver = THREAD_CURRENT();
         message->receiver_msgbuf = msgbuf;
         message->receiver_msgbuf_len = msgbuf_len;
     }
 
-    *context = message;
+    if (message->sender != NULL) {
+        /* Synchronous message */
+        *context = message;
 
-    num_copied = TransferPayload(
-            message->sender,
-            message->sender_msgbuf,
-            message->sender_msgbuf_len,
-            message->receiver,
-            message->receiver_msgbuf,
-            message->receiver_msgbuf_len
-            );
+        num_copied = TransferPayload(
+                message->sender,
+                message->send_data.sync.sender_msgbuf,
+                message->send_data.sync.sender_msgbuf_len,
+                message->receiver,
+                message->receiver_msgbuf,
+                message->receiver_msgbuf_len
+                );
+    }
+    else {
+        /* Asynchronous message */
+        *context = NULL;
+
+        /*
+        Slight hack. Just need to nominate some thread (the current one
+        will do) whose pagetable can be used for the upcoming TransferPayload()
+        call.
+        */
+        struct Thread * sender_pagetable_thread = THREAD_CURRENT();
+
+        num_copied = TransferPayload(
+                sender_pagetable_thread,
+                &message->send_data.async.payload,
+                sizeof(message->send_data.async.payload),
+                message->receiver,
+                message->receiver_msgbuf,
+                message->receiver_msgbuf_len
+                );
+
+        /* There will be no reply, so free the Message struct now */
+        KMessageFree(message);
+    }
 
     /* Mark sender as reply-blocked */
     message->sender->state = THREAD_STATE_REPLY;
@@ -296,8 +371,8 @@ ssize_t KMessageReply (
                 context->receiver_replybuf,
                 context->receiver_replybuf_len,
                 context->sender,
-                context->sender_replybuf,
-                context->sender_replybuf_len
+                context->send_data.sync.sender_replybuf,
+                context->send_data.sync.sender_replybuf_len
                 );
         context->result = result;
     } else {

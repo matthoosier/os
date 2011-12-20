@@ -105,6 +105,8 @@ extern void ThreadYieldNoRequeue (void);
 
 extern void ThreadAddReady (struct Thread * thread);
 
+extern void ThreadAddReadyFirst (struct Thread * thread);
+
 extern struct Thread * ThreadDequeueReady (void);
 
 /**

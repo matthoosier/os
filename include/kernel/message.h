@@ -1,6 +1,7 @@
 #ifndef __MESSAGE_H__
 #define __MESSAGE_H__
 
+#include <stdint.h>
 #include <string.h>
 #include <sys/types.h>
 
@@ -15,16 +16,17 @@ struct Process;
 
 typedef int Channel_t;
 typedef int Connection_t;
+typedef int Message_t;
 
 /**
  * Server object on which MsgReceive() is performed
  */
 struct Channel
 {
-    /* Nodes are embedded inside 'struct Message' instances */
+    /* List of Message.queue_link nodes: one for each sender blocked on this channel */
     struct list_head send_blocked_head;
 
-    /* Nodes are embedded inside 'struct Message' instances */
+    /* List of Message.queue_link nodes; one for each receiver blocked on this channel */
     struct list_head receive_blocked_head;
 
     /*
@@ -52,14 +54,33 @@ struct Connection
 struct Message
 {
     struct Connection * connection;
+
+    /**
+     * If non-NULL, a synchronous message that must be replied to. Message
+     * and reply buffer are in send_data.sync.
+     *
+     * If NULL, an asychronous message that accepts to reply. Message payload
+     * is in send_data.async.
+     */
     struct Thread     * sender;
+
     struct Thread     * receiver;
 
-    const void * sender_msgbuf;
-    size_t sender_msgbuf_len;
+    union
+    {
+        struct
+        {
+            const void * sender_msgbuf;
+            size_t sender_msgbuf_len;
 
-    void * sender_replybuf;
-    size_t sender_replybuf_len;
+            void * sender_replybuf;
+            size_t sender_replybuf_len;
+        } sync;
+        struct
+        {
+            uint32_t payload;
+        } async;
+    } send_data;
 
     void * receiver_msgbuf;
     size_t receiver_msgbuf_len;
@@ -90,6 +111,14 @@ extern ssize_t KMessageSend (
         size_t msgbuf_len,
         void * replybuf,
         size_t replybuf_len
+        );
+
+/**
+ * @return (-status) if error, or 0 on success
+ */
+extern ssize_t KMessageSendAsync (
+        struct Connection * connection,
+        uint32_t payload
         );
 
 /**

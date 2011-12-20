@@ -167,6 +167,11 @@ void ThreadAddReady (struct Thread * thread)
     list_add_tail(&thread->queue_link, &ready_queue);
 }
 
+void ThreadAddReadyFirst (struct Thread * thread)
+{
+    list_add(&thread->queue_link, &ready_queue);
+}
+
 struct Thread * ThreadDequeueReady (void)
 {
     struct Thread * next;
