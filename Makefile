@@ -38,7 +38,6 @@ built_kernel_c_files = \
 	$(NULL)
 
 kernel_c_files = \
-	kernel/arch.c \
 	kernel/assert.c \
 	kernel/early-mmu.c \
 	kernel/init.c \

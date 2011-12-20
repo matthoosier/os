@@ -43,10 +43,4 @@
 #define ALIGN(_val, _pow)                                       \
         ((((_val) + ((1 << (_pow)) - 1)) >> (_pow)) << (_pow))
 
-BEGIN_DECLS
-
-extern int ArchGetVersion (void);
-
-END_DECLS
-
 #endif /* __ARCH_H__ */
