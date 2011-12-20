@@ -1,4 +1,5 @@
 #include <kernel/assert.h>
+#include <kernel/interrupt-handler.h>
 #include <kernel/mmu.h>
 #include <kernel/once.h>
 #include <kernel/timer.h>
@@ -82,7 +83,7 @@ void TimerStartPeriodic (unsigned int period_ms)
     /*
     Now install hooks for handling the timer interrupt
     */
-    InterruptInstallIrqHandler(TIMER0_IRQ, OnTimerInterrupt);
+    InterruptAttachKernelHandler(TIMER0_IRQ, OnTimerInterrupt);
     InterruptUnmaskIrq(TIMER0_IRQ);
 
     /*

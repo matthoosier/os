@@ -22,16 +22,6 @@ typedef struct
 /* Should be passable by-value as a simple word */
 COMPILER_ASSERT(sizeof(IrqSave_t) <= sizeof(int));
 
-/**
- * Signature of an IRQ handler function.
- */
-typedef void (*IrqHandlerFunc) ();
-
-/**
- * Set up the stacks used for interrupt handling
- */
-void InterruptsConfigure();
-
 __attribute__((optimize(2)))
 static inline IrqSave_t InterruptsDisable ()
 {
@@ -96,14 +86,6 @@ static inline void InterruptsRestore (IrqSave_t saved_state)
         : "cc"
     );
 }
-
-void InterruptInstallIrqHandler (int n, IrqHandlerFunc f);
-
-void InterruptHandler ();
-
-void InterruptUnmaskIrq ();
-
-void InterruptMaskIrq ();
 
 END_DECLS
 
