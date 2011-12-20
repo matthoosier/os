@@ -6,9 +6,8 @@
 
 #include <sys/arch.h>
 #include <sys/bits.h>
+#include <sys/compiler.h>
 #include <sys/decls.h>
-
-#include <kernel/compiler.h>
 
 BEGIN_DECLS
 
