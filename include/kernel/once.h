@@ -4,8 +4,7 @@
 #include <stdbool.h>
 
 #include <sys/decls.h>
-
-#include <kernel/spinlock.h>
+#include <sys/spinlock.h>
 
 BEGIN_DECLS
 

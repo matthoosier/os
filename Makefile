@@ -78,7 +78,7 @@ CFLAGS += -g -I include
 CXXFLAGS += -g
 
 KERNEL_ASFLAGS += $(ASFLAGS) -Wall -Werror
-KERNEL_CFLAGS += $(CFLAGS) -Wall -Werror -save-temps -march=armv6
+KERNEL_CFLAGS += $(CFLAGS) -Wall -Werror -save-temps -march=armv6 -D__KERNEL__
 KERNEL_LDFLAGS += $(LDFLAGS) -Wl,-T,kernel.ldscript
 
 KERNEL_CC = $(CROSS_COMPILE)-gcc

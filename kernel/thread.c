@@ -1,9 +1,9 @@
 #include <stdlib.h>
 
 #include <sys/arch.h>
+#include <sys/spinlock.h>
 
 #include <kernel/assert.h>
-#include <kernel/spinlock.h>
 #include <kernel/thread.h>
 #include <kernel/vm.h>
 

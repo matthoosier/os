@@ -4,6 +4,7 @@
 #include <strings.h>
 
 #include <sys/arch.h>
+#include <sys/spinlock.h>
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
@@ -13,7 +14,6 @@
 #include <kernel/object-cache.h>
 #include <kernel/once.h>
 #include <kernel/process.h>
-#include <kernel/spinlock.h>
 
 enum
 {

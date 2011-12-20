@@ -1,10 +1,13 @@
 #ifndef __SPINLOCK_H__
 #define __SPINLOCK_H__
 
+#include <sys/atomic.h>
 #include <sys/decls.h>
+#include <sys/interrupts.h>
 
-#include <kernel/atomic.h>
-#include <kernel/interrupts.h>
+#ifdef __KERNEL__
+    #include <kernel/assert.h>
+#endif
 
 BEGIN_DECLS
 
@@ -30,6 +33,10 @@ static inline void SpinlockInit (Spinlock_t * lock)
 
 static inline void SpinlockLock (Spinlock_t * lock)
 {
+    #ifdef __KERNEL__
+        assert(SPINLOCK_LOCKVAL_UNLOCKED == lock->lockval);
+    #endif
+
     /* On UP systems, this line alone does all the real work. */
     lock->irq_saved_state = InterruptsDisable();
 
@@ -40,6 +47,10 @@ static inline void SpinlockLock (Spinlock_t * lock)
 
 static inline void SpinlockUnlock (Spinlock_t * lock)
 {
+    #ifdef __KERNEL__
+        assert(SPINLOCK_LOCKVAL_UNLOCKED != lock->lockval);
+    #endif
+
     while (!AtomicCompareAndExchange(&lock->lockval, SPINLOCK_LOCKVAL_LOCKED, SPINLOCK_LOCKVAL_UNLOCKED))
     {
     }
