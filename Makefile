@@ -43,7 +43,7 @@ kernel_c_files = \
 	kernel/early-mmu.c \
 	kernel/init.c \
 	kernel/interrupts.c \
-	kernel/kernel_syscall.c \
+	kernel/syscall.c \
 	kernel/large-object-cache.c \
 	kernel/message.c \
 	kernel/mmu.c \
