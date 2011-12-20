@@ -2,9 +2,9 @@
 #include <string.h>
 #include <strings.h>
 
+#include <sys/arch.h>
 #include <sys/error.h>
 
-#include <kernel/arch.h>
 #include <kernel/array.h>
 #include <kernel/assert.h>
 #include <kernel/bits.h>

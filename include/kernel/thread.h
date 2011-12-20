@@ -1,9 +1,9 @@
 #ifndef __THREAD_H__
 #define __THREAD_H__
 
+#include <sys/arch.h>
 #include <sys/decls.h>
 
-#include <kernel/arch.h>
 #include <kernel/list.h>
 #include <kernel/process.h>
 

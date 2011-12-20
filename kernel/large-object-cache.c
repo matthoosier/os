@@ -1,6 +1,7 @@
 #include <stdint.h>
 
-#include <kernel/arch.h>
+#include <sys/arch.h>
+
 #include <kernel/assert.h>
 #include <kernel/list.h>
 #include <kernel/once.h>

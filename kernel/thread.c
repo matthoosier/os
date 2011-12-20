@@ -1,6 +1,7 @@
 #include <stdlib.h>
 
-#include <kernel/arch.h>
+#include <sys/arch.h>
+
 #include <kernel/assert.h>
 #include <kernel/spinlock.h>
 #include <kernel/thread.h>

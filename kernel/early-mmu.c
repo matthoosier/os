@@ -1,6 +1,7 @@
 #include <stdint.h>
 
-#include <kernel/arch.h>
+#include <sys/arch.h>
+
 #include <kernel/array.h>
 #include <kernel/bits.h>
 #include <kernel/mmu.h>

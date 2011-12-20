@@ -1,7 +1,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <kernel/arch.h>
+#include <sys/arch.h>
+
 #include <kernel/array.h>
 #include <kernel/bits.h>
 #include <kernel/list.h>

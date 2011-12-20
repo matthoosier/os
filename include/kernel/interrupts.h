@@ -4,9 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <sys/arch.h>
 #include <sys/decls.h>
 
-#include <kernel/arch.h>
 #include <kernel/bits.h>
 #include <kernel/compiler.h>
 

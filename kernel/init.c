@@ -1,8 +1,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include <sys/arch.h>
+
 #include <kernel/array.h>
-#include <kernel/arch.h>
 #include <kernel/assert.h>
 #include <kernel/interrupts.h>
 #include <kernel/mmu.h>

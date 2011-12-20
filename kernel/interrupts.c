@@ -2,7 +2,8 @@
 #include <stdint.h>
 #include <strings.h>
 
-#include <kernel/arch.h>
+#include <sys/arch.h>
+
 #include <kernel/array.h>
 #include <kernel/assert.h>
 #include <kernel/interrupts.h>

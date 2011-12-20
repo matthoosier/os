@@ -1,10 +1,10 @@
 #include <string.h>
 
+#include <sys/arch.h>
 #include <sys/elf.h>
 #include <sys/error.h>
 #include <sys/procmgr.h>
 
-#include <kernel/arch.h>
 #include <kernel/array.h>
 #include <kernel/assert.h>
 #include <kernel/object-cache.h>
