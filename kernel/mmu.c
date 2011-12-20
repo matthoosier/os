@@ -3,11 +3,11 @@
 #include <strings.h>
 
 #include <sys/arch.h>
+#include <sys/bits.h>
 #include <sys/error.h>
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
-#include <kernel/bits.h>
 #include <kernel/compiler.h>
 #include <kernel/minmax.h>
 #include <kernel/mmu.h>

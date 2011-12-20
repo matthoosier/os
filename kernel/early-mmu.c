@@ -1,9 +1,9 @@
 #include <stdint.h>
 
 #include <sys/arch.h>
+#include <sys/bits.h>
 
 #include <kernel/array.h>
-#include <kernel/bits.h>
 #include <kernel/mmu.h>
 #include <kernel/vm.h>
 

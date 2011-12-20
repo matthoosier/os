@@ -2,9 +2,9 @@
 #include <stdlib.h>
 
 #include <sys/arch.h>
+#include <sys/bits.h>
 
 #include <kernel/array.h>
-#include <kernel/bits.h>
 #include <kernel/list.h>
 #include <kernel/once.h>
 #include <kernel/vm.h>
