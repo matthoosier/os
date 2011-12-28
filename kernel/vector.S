@@ -454,7 +454,6 @@ irq_handler__do_load_next_task$:
                                     /* thread's pagetable               */
 
     bl MmuSetUserTranslationTable   /* Install new pagetable...         */
-    bl MmuFlushTlb                  /* ... and flush TLB                */
     b irq_handler__normal_exit$     /* Done.                            */
 
 /**

@@ -17,9 +17,6 @@ static void ThreadSwitch (struct Thread * outgoing,
     uint32_t next_pc = next_pc;
     uint32_t cpsr_temp = cpsr_temp;
 
-    struct TranslationTable * outgoing_tt = outgoing->process
-            ? outgoing->process->pagetable
-            : NULL;
     struct TranslationTable * incoming_tt = incoming->process
             ? incoming->process->pagetable
             : NULL;
@@ -32,10 +29,8 @@ static void ThreadSwitch (struct Thread * outgoing,
     incoming->registers[REGISTER_INDEX_PSR] &= ~(SETBIT(ARM_CPSR_I_BIT) | SETBIT(ARM_CPSR_F_BIT));
     incoming->registers[REGISTER_INDEX_PSR] |= prev_irq_status.cpsr_interrupt_flags;
 
-    if (outgoing_tt != incoming_tt) {
-        MmuSetUserTranslationTable(incoming_tt);
-        MmuFlushTlb();
-    }
+    /* Only flushes TLB if the new data structure isn't the same as the old one */
+    MmuSetUserTranslationTable(incoming_tt);
 
     asm volatile(
         "                                                   \n\t"
