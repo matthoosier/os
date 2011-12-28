@@ -7,6 +7,7 @@
 
 BEGIN_DECLS
 
+#define SELF_PID            0
 #define PROCMGR_PID         1
 #define FIRST_CHANNEL_ID    0
 #define FIRST_CONNECTION_ID 0

@@ -51,7 +51,11 @@ static Connection_t DoConnect (Pid_t pid, Channel_t chid)
     struct Channel * chan;
     Connection_t ret;
 
-    other = ProcessLookup(pid);
+    if (pid == SELF_PID) {
+        other = THREAD_CURRENT()->process;
+    } else {
+        other = ProcessLookup(pid);
+    }
 
     if (!other) {
         return -ERROR_INVALID;

@@ -9,12 +9,11 @@ BEGIN_DECLS
 
 struct IoNotificationSink
 {
-    int         pid;
     int         connection_id;
     uint32_t    payload;
 };
 
-typedef struct IoNotificationSink * (*InterruptHandlerFunc) (void);
+typedef const struct IoNotificationSink * (*InterruptHandlerFunc) (void);
 
 typedef int InterruptHandler_t;
 

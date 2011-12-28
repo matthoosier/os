@@ -162,12 +162,12 @@ void InterruptHandler ()
         kernel_irq_handlers[which]();
     }
 
-    /* Execute any user-install IRQ handlers */
+    /* Execute any user-installed IRQ handlers */
     list_for_each (cursor, &user_irq_handlers[which]) {
 
         struct TranslationTable * prev_pagetable;
         struct Process * process;
-        struct IoNotificationSink * message;
+        const struct IoNotificationSink * message;
 
         struct UserInterruptHandlerRecord * record = list_entry(
                 cursor,
@@ -188,17 +188,12 @@ void InterruptHandler ()
         message = record->func();
 
         if (message != NULL) {
-            struct Process        * receiver_process;
             struct Connection     * connection;
             bool                    ok = true;
 
-            receiver_process = ProcessLookup(message->pid);
-
-            ok = ok && (receiver_process != NULL);
-
             if (ok) {
                 connection = ProcessLookupConnection(
-                        receiver_process,
+                        process,
                         message->connection_id
                         );
 
