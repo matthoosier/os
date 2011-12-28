@@ -201,7 +201,7 @@ void InterruptHandler ()
             }
 
             if (ok) {
-                KMessageSendAsync(connection, message->payload);
+                KMessageSendAsync(connection, (uintptr_t)message->arg);
             }
         }
 

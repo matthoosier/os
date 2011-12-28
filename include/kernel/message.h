@@ -78,7 +78,7 @@ struct Message
         } sync;
         struct
         {
-            uint32_t payload;
+            uintptr_t payload;
         } async;
     } send_data;
 
@@ -118,7 +118,7 @@ extern ssize_t KMessageSend (
  */
 extern ssize_t KMessageSendAsync (
         struct Connection * connection,
-        uint32_t payload
+        uintptr_t payload
         );
 
 /**

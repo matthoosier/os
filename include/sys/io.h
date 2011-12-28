@@ -1,6 +1,7 @@
 #ifndef __IO_H__
 #define __IO_H__
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <sys/decls.h>
@@ -10,7 +11,7 @@ BEGIN_DECLS
 struct IoNotificationSink
 {
     int         connection_id;
-    uint32_t    payload;
+    void *      arg;
 };
 
 typedef const struct IoNotificationSink * (*InterruptHandlerFunc) (void);

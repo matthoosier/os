@@ -127,7 +127,7 @@ void KMessageFree (struct Message * context)
 
 ssize_t KMessageSendAsync (
         struct Connection * connection,
-        uint32_t payload
+        uintptr_t payload
         )
 {
     struct Message * message;
