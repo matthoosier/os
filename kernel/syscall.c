@@ -116,7 +116,7 @@ static ssize_t DoMessageSend (
 
 static ssize_t DoMessageReceive (
         Channel_t chid,
-        uintptr_t * rcvid,
+        uintptr_t * msgid,
         void * msgbuf,
         size_t msgbuf_len
         )
@@ -134,16 +134,21 @@ static ssize_t DoMessageReceive (
     ret = KMessageReceive(c, &m, msgbuf, msgbuf_len);
 
     if (ret < 0) {
-        *rcvid = -1;
+        *msgid = -1;
     } else {
-        *rcvid = (uintptr_t)m;
+        if (m == NULL) {
+            *msgid = 0;
+        }
+        else {
+            *msgid = ProcessRegisterMessage(THREAD_CURRENT()->process, m);
+        }
     }
 
     return ret;
 }
 
 static ssize_t DoMessageReply (
-        uintptr_t rcvid,
+        uintptr_t msgid,
         unsigned int status,
         void * replybuf,
         size_t replybuf_len
@@ -152,7 +157,9 @@ static ssize_t DoMessageReply (
     struct Message * m;
     int ret;
 
-    m = (struct Message *)rcvid;
+    m = ProcessLookupMessage(THREAD_CURRENT()->process, msgid);
+    ProcessUnregisterMessage(THREAD_CURRENT()->process, msgid);
+
     ret = KMessageReply(m, status, replybuf, replybuf_len);
 
     return ret;

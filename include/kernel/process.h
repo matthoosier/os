@@ -6,6 +6,7 @@
 
 #include <kernel/list.h>
 #include <kernel/message.h>
+#include <kernel/message.h>
 #include <kernel/mmu.h>
 #include <kernel/tree-map.h>
 #include <kernel/vm.h>
@@ -38,12 +39,14 @@ struct Process
 
     struct TreeMap            * id_to_channel_map;
     struct list_head            channels_head;
+    Channel_t                   next_chid;
 
     struct TreeMap            * id_to_connection_map;
     struct list_head            connections_head;
-
-    Channel_t                   next_chid;
     Connection_t                next_coid;
+
+    struct TreeMap            * id_to_message_map;
+    int                         next_msgid;
 };
 
 /**
@@ -97,6 +100,21 @@ int ProcessUnregisterConnection (
 struct Connection * ProcessLookupConnection (
         struct Process * p,
         Connection_t id
+        );
+
+Message_t ProcessRegisterMessage (
+        struct Process * p,
+        struct Message * m
+        );
+
+int ProcessUnregisterMessage (
+        struct Process * p,
+        Message_t id
+        );
+
+struct Message * ProcessLookupMessage (
+        struct Process * p,
+        Message_t id
         );
 
 END_DECLS

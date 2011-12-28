@@ -99,19 +99,22 @@ static struct Process * ProcessAlloc ()
     if (p) {
         memset(p, 0, sizeof(*p));
 
-        p->id_to_channel_map = TreeMapAlloc(TreeMapSignedIntCompareFunc);
+        p->id_to_channel_map    = TreeMapAlloc(TreeMapSignedIntCompareFunc);
         p->id_to_connection_map = TreeMapAlloc(TreeMapSignedIntCompareFunc);
+        p->id_to_message_map    = TreeMapAlloc(TreeMapSignedIntCompareFunc);
 
-        if (p->id_to_channel_map && p->id_to_connection_map) {
+        if (p->id_to_channel_map && p->id_to_connection_map && p->id_to_message_map) {
             INIT_LIST_HEAD(&p->segments_head);
             INIT_LIST_HEAD(&p->channels_head);
             INIT_LIST_HEAD(&p->connections_head);
             p->next_chid = FIRST_CHANNEL_ID;
             p->next_coid = FIRST_CONNECTION_ID;
+            p->next_msgid = 1;
         }
         else {
             if (p->id_to_channel_map)       TreeMapFree(p->id_to_channel_map);
             if (p->id_to_connection_map)    TreeMapFree(p->id_to_connection_map);
+            if (p->id_to_message_map)       TreeMapFree(p->id_to_message_map);
 
             ObjectCacheFree(&process_cache, p);
             p = NULL;
@@ -145,8 +148,11 @@ static void ProcessFree (struct Process * process)
         KDisconnect(connection);
     }
 
+    /* XXX: Free all messages that the process has received but not yet responded to */
+
     TreeMapFree(process->id_to_channel_map);
     TreeMapFree(process->id_to_connection_map);
+    TreeMapFree(process->id_to_message_map);
     
     /* Deallocate virtual memory of the process */
     while (!list_empty(&process->segments_head)) {
@@ -668,6 +674,49 @@ struct Connection * ProcessLookupConnection (
         )
 {
     return TreeMapLookup(p->id_to_connection_map, (TreeMapKey_t)id);
+}
+
+Message_t ProcessRegisterMessage (
+        struct Process * p,
+        struct Message * m
+        )
+{
+    int msgid = p->next_msgid++;
+
+    if (TreeMapLookup(p->id_to_message_map, (TreeMapKey_t)msgid) != NULL) {
+        assert(false);
+        return -ERROR_INVALID;
+    }
+
+    TreeMapInsert(p->id_to_message_map, (TreeMapKey_t)msgid, m);
+
+    if (TreeMapLookup(p->id_to_message_map, (TreeMapKey_t)msgid) != m) {
+        return -ERROR_NO_MEM;
+    }
+
+    return msgid;
+}
+
+int ProcessUnregisterMessage (
+        struct Process * p,
+        Message_t id
+        )
+{
+    struct Message * m = TreeMapRemove(p->id_to_message_map, (TreeMapKey_t)id);
+
+    if (!m) {
+        return -ERROR_INVALID;
+    }
+
+    return ERROR_OK;
+}
+
+struct Message * ProcessLookupMessage (
+        struct Process * p,
+        Message_t id
+        )
+{
+    return TreeMapLookup(p->id_to_message_map, (TreeMapKey_t)id);
 }
 
 struct TranslationTable * ProcessGetTranslationTable (struct Process * process)

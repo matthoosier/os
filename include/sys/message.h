@@ -29,13 +29,13 @@ int MessageSend (
 
 int MessageReceive (
         int chid,
-        int * rcvid,
+        int * msgid,
         void * msgbuf,
         size_t msgbuf_len
         );
 
 int MessageReply (
-        int rcvid,
+        int msgid,
         unsigned int status,
         void * replybuf,
         size_t replybuf_len
