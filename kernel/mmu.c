@@ -339,6 +339,9 @@ struct TranslationTable * TranslationTableAlloc (void)
         table->firstlevel_ptes[i] = PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
     }
 
+    /* Mark address of first unused page */
+    table->first_unmapped_page = 0;
+
     /* Successful case */
     return table;
 
@@ -348,6 +351,7 @@ cleanup_pages:
 
 cleanup_table:
     ObjectCacheFree(&translation_table_cache, table);
+
     return NULL;
 }
 
@@ -529,6 +533,32 @@ bool TranslationTableUnmapSection (
     }
 }
 
+bool TranslationTableMapNextPage (
+        struct TranslationTable * table,
+        VmAddr_t * pVirt,
+        PhysAddr_t phys,
+        Prot_t prot
+        )
+{
+    bool        ret;
+    VmAddr_t    vmaddr;
+
+    vmaddr = table->first_unmapped_page;
+
+    ret = TranslationTableMapPage(
+            table,
+            vmaddr,
+            phys,
+            prot
+            );
+
+    if (ret) {
+        *pVirt = vmaddr;
+    }
+
+    return ret;
+}
+
 bool TranslationTableMapPage (
         struct TranslationTable * table,
         VmAddr_t virt,
@@ -621,6 +651,11 @@ bool TranslationTableMapPage (
 
     secondlevel_table->num_mapped_pages++;
 
+    /* Update cursor to next available page */
+    if (virt >= table->first_unmapped_page) {
+        table->first_unmapped_page = virt + PAGE_SIZE;
+    }
+
     return true;
 }
 
@@ -693,6 +728,11 @@ bool TranslationTableUnmapPage (
                 );
 
         assert(secondlevel_table != NULL);
+    }
+
+    /* If this was the highest-mapped page, then decrement the next-page pointer */
+    if (table->first_unmapped_page == virt + PAGE_SIZE) {
+        table->first_unmapped_page = virt;
     }
 
     return true;

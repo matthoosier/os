@@ -67,6 +67,13 @@ extern bool TranslationTableMapPage (
         Prot_t prot
         );
 
+extern bool TranslationTableMapNextPage (
+        struct TranslationTable * table,
+        VmAddr_t * pVirt,
+        PhysAddr_t phys,
+        Prot_t prot
+        );
+
 extern bool TranslationTableUnmapPage (
         struct TranslationTable * table,
         VmAddr_t virt
@@ -123,6 +130,12 @@ struct TranslationTable
      *        0x00e00000 -> (SecondlevelTable *)<struct address>
      */
     struct TreeMap * sparse_secondlevel_map;
+
+    /*
+     * Virtual address of the first byte of the first page in the virtual
+     * address space, that is not mapped.
+     */
+    VmAddr_t first_unmapped_page;
 };
 
 struct SecondlevelTable
