@@ -168,6 +168,7 @@ void run_first_thread ()
     ProcessStartManager();
     ProcessCreate("echo");
     ProcessCreate("syscall-client");
+    ProcessCreate("uio");
 
     while (true) {
         ThreadAddReady(THREAD_CURRENT());

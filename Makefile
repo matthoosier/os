@@ -5,6 +5,7 @@ depfile = $(dir $(1))$(patsubst %.c,.%.c.depends,$(notdir $(1)))
 progs = \
 	echo \
 	syscall-client \
+	uio \
 	$(NULL)
 
 progs: $(progs)
@@ -113,12 +114,20 @@ syscall_client_c_files = \
 	$(libc_files) \
 	$(NULL)
 
+uio_c_files = \
+	uio.c \
+	$(libc_files) \
+	$(NULL)
+
 echo_c_dep_files = $(foreach f,$(echo_c_files),$(call depfile,$(f)))
 
 syscall_client_c_dep_files = $(foreach f,$(syscall_client_c_files),$(call depfile,$(f)))
 
+uio_c_dep_files = $(foreach f,$(uio_c_files),$(call depfile,$(f)))
+
 -include $(echo_c_dep_files)
 -include $(syscall_client_c_dep_files)
+-include $(uio_c_dep_files)
 
 echo_objs = \
 	$(patsubst %.c, %.o, $(echo_c_files)) \
@@ -128,19 +137,30 @@ syscall_client_objs = \
 	$(patsubst %.c, %.o, $(syscall_client_c_files)) \
 	$(NULL)
 
+uio_objs = \
+	$(patsubst %.c, %.o, $(uio_c_files)) \
+	$(NULL)
+
 echo_asm_temps = $(patsubst %.c, %.s, $(echo_c_files))
 
 syscall_client_asm_temps = $(patsubst %.c, %.s, $(syscall_client_c_files))
 
+uio_asm_temps = $(patsubst %.c, %.s, $(uio_c_files))
+
 echo_preproc_temps = $(patsubst %.c, %.i, $(echo_c_files))
 
 syscall_client_preproc_temps = $(patsubst %.c, %.i, $(syscall_client_c_files))
+
+uio_preproc_temps = $(patsubst %.c, %.i, $(uio_c_files))
 
 echo: $(echo_objs)
 	$(USER_LD) -nostdlib -o $@ $+ -Wl,-Ttext-segment,0x10000
 
 syscall-client: $(syscall_client_objs)
 	$(USER_LD) -nostdlib -o $@ $+ -Wl,-Ttext-segment,0x20000
+
+uio: $(uio_objs)
+	$(USER_LD) -nostdlib -o $@ $+ -Wl,-Ttext-segment,0x30000
 
 %.o: %.c
 	@# Update dependencies
@@ -193,6 +213,11 @@ clean:
 		$(syscall_client_asm_temps) \
 		$(syscall_client_preproc_temps) \
 		syscall-client \
+		$(uio_objs) \
+		$(uio_c_dep_files) \
+		$(uio_asm_temps) \
+		$(uio_preproc_temps) \
+		uio \
 		$(NULL)
 	rm -f \
 		$(foreach tool,$(tools),$(tool)) \
