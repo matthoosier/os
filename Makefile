@@ -95,20 +95,22 @@ USER_LD = $(CROSS_COMPILE)-gcc
 
 image: kernel.ldscript
 
-echo_c_files = \
+libc_files = \
 	libc/crt.c \
 	libc/user_io.c \
 	libc/user_message.c \
+	libc/user_process.c \
 	libc/syscall.c \
+	$(NULL)
+
+echo_c_files = \
 	echo.c \
+	$(libc_files) \
 	$(NULL)
 
 syscall_client_c_files = \
-	libc/crt.c \
-	libc/user_io.c \
-	libc/user_message.c \
-	libc/syscall.c \
 	syscall-client.c \
+	$(libc_files) \
 	$(NULL)
 
 echo_c_dep_files = $(foreach f,$(echo_c_files),$(call depfile,$(f)))
