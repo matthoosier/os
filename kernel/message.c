@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include <sys/error.h>
+#include <sys/spinlock.h>
 
 #include <kernel/assert.h>
 #include <kernel/list.h>
@@ -12,9 +13,14 @@
 
 static Once_t inited = ONCE_INIT;
 
-static struct ObjectCache channel_cache;
-static struct ObjectCache connection_cache;
-static struct ObjectCache message_cache;
+static struct ObjectCache   channel_cache;
+static Spinlock_t           channel_cache_lock = SPINLOCK_INIT;
+
+static struct ObjectCache   connection_cache;
+static Spinlock_t           connection_cache_lock = SPINLOCK_INIT;
+
+static struct ObjectCache   message_cache;
+static Spinlock_t           message_cache_lock = SPINLOCK_INIT;
 
 static struct Connection * ConnectionAlloc (void);
 static void ConnectionFree (struct Connection * connection);
@@ -41,7 +47,9 @@ struct Channel * KChannelAlloc (void)
 
     Once(&inited, init, NULL);
 
+    SpinlockLock(&channel_cache_lock);
     result = ObjectCacheAlloc(&channel_cache);
+    SpinlockUnlock(&channel_cache_lock);
 
     if (result) {
         memset(result, 0, sizeof(*result));
@@ -61,7 +69,9 @@ void KChannelFree (struct Channel * channel)
     assert(list_empty(&channel->receive_blocked_head));
     assert(list_empty(&channel->link));
 
+    SpinlockLock(&channel_cache_lock);
     ObjectCacheFree(&channel_cache, channel);
+    SpinlockUnlock(&channel_cache_lock);
 }
 
 static struct Connection * ConnectionAlloc (void)
@@ -70,7 +80,9 @@ static struct Connection * ConnectionAlloc (void)
 
     Once(&inited, init, NULL);
 
+    SpinlockLock(&connection_cache_lock);
     c = ObjectCacheAlloc(&connection_cache);
+    SpinlockUnlock(&connection_cache_lock);
 
     if (c) {
         memset(c, 0, sizeof(*c));
@@ -84,7 +96,9 @@ static void ConnectionFree (struct Connection * connection)
 {
     Once(&inited, init, NULL);
 
+    SpinlockLock(&connection_cache_lock);
     ObjectCacheFree(&connection_cache, connection);
+    SpinlockUnlock(&connection_cache_lock);
 }
 
 struct Connection * KConnect (struct Channel * channel)
@@ -109,7 +123,9 @@ struct Message * KMessageAlloc (void)
 
     Once(&inited, init, NULL);
 
+    SpinlockLock(&message_cache_lock);
     message = ObjectCacheAlloc(&message_cache);
+    SpinlockUnlock(&message_cache_lock);
 
     if (message) {
         memset(message, 0, sizeof(*message));
@@ -122,7 +138,10 @@ struct Message * KMessageAlloc (void)
 void KMessageFree (struct Message * context)
 {
     Once(&inited, init, NULL);
+
+    SpinlockLock(&message_cache_lock);
     ObjectCacheFree(&message_cache, context);
+    SpinlockUnlock(&message_cache_lock);
 }
 
 ssize_t KMessageSendAsync (

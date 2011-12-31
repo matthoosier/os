@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include <sys/arch.h>
+#include <sys/spinlock.h>
 
 #include <kernel/assert.h>
 #include <kernel/list.h>
@@ -16,6 +17,7 @@ storage. Prevents terrible space waste for large (>= PAGE_SIZE / 2)
 objects.
 */
 struct ObjectCache slabs_cache;
+Spinlock_t         slabs_cache_lock = SPINLOCK_INIT;
 
 static Once_t init_control = ONCE_INIT;
 
@@ -53,7 +55,9 @@ static struct Slab * large_objects_try_allocate_slab (struct ObjectCache * cache
         return NULL;
     }
 
+    SpinlockLock(&slabs_cache_lock);
     new_slab = ObjectCacheAlloc(&slabs_cache);
+    SpinlockUnlock(&slabs_cache_lock);
 
     if (!new_slab) {
         VmPageFree(new_page);
@@ -113,7 +117,9 @@ static void large_objects_free_slab (struct ObjectCache * cache, struct Slab * s
         VmPageFree(slab->page);
 
         /* Finally free the slab, which is allocated from an object cache. */
+        SpinlockLock(&slabs_cache_lock);
         ObjectCacheFree(&slabs_cache, slab);
+        SpinlockUnlock(&slabs_cache_lock);
     }
 }
 

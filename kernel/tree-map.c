@@ -1,3 +1,5 @@
+#include <sys/spinlock.h>
+
 #include <kernel/assert.h>
 #include <kernel/minmax.h>
 #include <kernel/object-cache.h>
@@ -7,10 +9,12 @@
 static Once_t init_control = ONCE_INIT;
 
 /* Allocates internal_node's */
-struct ObjectCache internal_node_cache;
+static struct ObjectCache   internal_node_cache;
+static Spinlock_t           internal_node_cache_lock = SPINLOCK_INIT;
 
 /* Allocates tree_map's */
-struct ObjectCache tree_map_cache;
+static struct ObjectCache   tree_map_cache;
+static Spinlock_t           tree_map_cache_lock = SPINLOCK_INIT;
 
 /* Forward declaration */
 struct _internal_node;
@@ -100,8 +104,13 @@ static void internal_foreach (
  */
 static void tree_map_static_init (void * param)
 {
+    SpinlockLock(&internal_node_cache_lock);
     ObjectCacheInit(&internal_node_cache, sizeof(internal_node));
+    SpinlockUnlock(&internal_node_cache_lock);
+
+    SpinlockLock(&tree_map_cache_lock);
     ObjectCacheInit(&tree_map_cache, sizeof(struct TreeMap));
+    SpinlockUnlock(&tree_map_cache_lock);
 }
 
 struct TreeMap * TreeMapAlloc (TreeMapCompareFunc comparator)
@@ -110,7 +119,10 @@ struct TreeMap * TreeMapAlloc (TreeMapCompareFunc comparator)
 
     Once(&init_control, tree_map_static_init, NULL);
 
+    SpinlockLock(&tree_map_cache_lock);
     result = ObjectCacheAlloc(&tree_map_cache);
+    SpinlockUnlock(&tree_map_cache_lock);
+
     result->root = NULL;
     result->comparator = comparator;
     result->size = 0;
@@ -122,7 +134,10 @@ void TreeMapFree (struct TreeMap * tree)
 {
     assert(tree != NULL);
     internal_free_node(tree, tree->root);
+
+    SpinlockLock(&tree_map_cache_lock);
     ObjectCacheFree(&tree_map_cache, tree);
+    SpinlockUnlock(&tree_map_cache_lock);
 }
 
 static void check_subtree_balance (
@@ -259,7 +274,9 @@ static internal_node * internal_insert (
         }
     }
     else {
+        SpinlockLock(&internal_node_cache_lock);
         internal_node * new_node = ObjectCacheAlloc(&internal_node_cache);
+        SpinlockUnlock(&internal_node_cache_lock);
 
         new_node->left = NULL;
         new_node->right = NULL;
@@ -290,18 +307,27 @@ static internal_node * internal_remove (
 
             if (!node->left && !node->right) {
                 /* Both subtrees are empty */
+                SpinlockLock(&internal_node_cache_lock);
                 ObjectCacheFree(&internal_node_cache, node);
+                SpinlockUnlock(&internal_node_cache_lock);
+
                 result = NULL;
             }
             else if (node->left && !node->right) {
                 /* Only left subtree is nonempty */
                 result = node->left;
+
+                SpinlockLock(&internal_node_cache_lock);
                 ObjectCacheFree(&internal_node_cache, node);
+                SpinlockUnlock(&internal_node_cache_lock);
             }
             else if (!node->left && node->right) {
                 /* Only right subtree is nonempty */
                 result = node->right;
+
+                SpinlockLock(&internal_node_cache_lock);
                 ObjectCacheFree(&internal_node_cache, node);
+                SpinlockUnlock(&internal_node_cache_lock);
             }
             else {
                 /*
@@ -311,7 +337,10 @@ static internal_node * internal_remove (
                 node->left = internal_unlink_max(tree, node->left, &result);
                 result->left = node->left;
                 result->right = node->right;
+
+                SpinlockLock(&internal_node_cache_lock);
                 ObjectCacheFree(&internal_node_cache, node);
+                SpinlockUnlock(&internal_node_cache_lock);
             }
         }
         else if (compare_val > 0) {
@@ -390,7 +419,10 @@ static void internal_free_node (
     if (node) {
         internal_free_node(tree, node->left);
         internal_free_node(tree, node->right);
+
+        SpinlockLock(&internal_node_cache_lock);
         ObjectCacheFree(&internal_node_cache, node);
+        SpinlockUnlock(&internal_node_cache_lock);
     }
 }
 

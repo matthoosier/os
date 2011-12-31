@@ -3,6 +3,7 @@
 
 #include <sys/decls.h>
 #include <sys/error.h>
+#include <sys/spinlock.h>
 
 #include <kernel/list.h>
 #include <kernel/message.h>
@@ -30,6 +31,8 @@ struct Segment
 
 struct Process
 {
+    Spinlock_t                  lock;
+
     struct TranslationTable   * pagetable;
     VmAddr_t                    entry;
     char                        comm[16];

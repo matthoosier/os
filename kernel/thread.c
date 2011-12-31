@@ -8,6 +8,7 @@
 #include <kernel/vm.h>
 
 static LIST_HEAD(ready_queue);
+static Spinlock_t ready_queue_lock = SPINLOCK_INIT;
 
 static void thread_entry (ThreadFunc func, void * param);
 
@@ -159,12 +160,16 @@ void ThreadJoin (struct Thread * thread)
 
 void ThreadAddReady (struct Thread * thread)
 {
+    SpinlockLock(&ready_queue_lock);
     list_add_tail(&thread->queue_link, &ready_queue);
+    SpinlockUnlock(&ready_queue_lock);
 }
 
 void ThreadAddReadyFirst (struct Thread * thread)
 {
+    SpinlockLock(&ready_queue_lock);
     list_add(&thread->queue_link, &ready_queue);
+    SpinlockUnlock(&ready_queue_lock);
 }
 
 struct Thread * ThreadDequeueReady (void)
@@ -173,9 +178,11 @@ struct Thread * ThreadDequeueReady (void)
 
     assert(!list_empty(&ready_queue));
 
+    SpinlockLock(&ready_queue_lock);
     next = list_first_entry(&ready_queue, struct Thread, queue_link);
     next->state = THREAD_STATE_RUNNING;
     list_del_init(&next->queue_link);
+    SpinlockUnlock(&ready_queue_lock);
 
     return next;
 }

@@ -3,6 +3,7 @@
 
 #include <sys/arch.h>
 #include <sys/bits.h>
+#include <sys/spinlock.h>
 
 #include <kernel/array.h>
 #include <kernel/list.h>
@@ -30,6 +31,7 @@ static buddylist_level buddylists[NUM_BUDDYLIST_LEVELS];
 static unsigned int     num_pages;
 static struct Page *    page_structs;
 static VmAddr_t         pages_base;
+static Spinlock_t       lock = SPINLOCK_INIT;
 
 static Once_t           init_control = ONCE_INIT;
 
@@ -201,12 +203,24 @@ struct Page * vm_pages_alloc_internal (
 
 struct Page * VmPageAlloc ()
 {
-    return VmPagesAlloc(0);
+    struct Page * ret;
+
+    SpinlockLock(&lock);
+    ret = vm_pages_alloc_internal(0, true);
+    SpinlockUnlock(&lock);
+
+    return ret;
 }
 
 struct Page * VmPagesAlloc (unsigned int order)
 {
-    return vm_pages_alloc_internal(order, true);
+    struct Page * ret;
+
+    SpinlockLock(&lock);
+    ret = vm_pages_alloc_internal(order, true);
+    SpinlockUnlock(&lock);
+
+    return ret;
 }
 
 static void try_merge_block (struct Page * block, unsigned int order)
@@ -254,6 +268,8 @@ void VmPageFree (struct Page * page)
 
     Once(&init_control, vm_init, NULL);
 
+    SpinlockLock(&lock);
+
     /*
     Figure out the chunkiest possible buddylist level this block could
     belong to, based on its address.
@@ -274,9 +290,13 @@ void VmPageFree (struct Page * page)
             list_add(&page->list_link, &buddylists[order].freelist_head);
             BitmapClear(buddylists[order].bitmap.elements, idx);
             try_merge_block(page, order);
-            return;
+            goto done;
         }
     }
 
     while (1) {}
+
+done:
+    SpinlockUnlock(&lock);
+    return;
 }

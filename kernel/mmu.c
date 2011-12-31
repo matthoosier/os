@@ -6,6 +6,7 @@
 #include <sys/bits.h>
 #include <sys/compiler.h>
 #include <sys/error.h>
+#include <sys/spinlock.h>
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
@@ -228,13 +229,16 @@ void MmuFlushTlb (void)
 }
 
 /* Allocates translation_table's */
-struct ObjectCache translation_table_cache;
+static struct ObjectCache   translation_table_cache;
+static Spinlock_t           translation_table_cache_lock = SPINLOCK_INIT;
 
 /* Allocates secondlevel_table's */
-struct ObjectCache secondlevel_table_cache;
+static struct ObjectCache   secondlevel_table_cache;
+static Spinlock_t           secondlevel_table_cache_lock = SPINLOCK_INIT;
 
 /* Allocates secondlevel_ptes's */
-struct ObjectCache secondlevel_ptes_cache;
+static struct ObjectCache   secondlevel_ptes_cache;
+static Spinlock_t           secondlevel_ptes_cache_lock = SPINLOCK_INIT;
 
 static Once_t mmu_init_control = ONCE_INIT;
 
@@ -249,18 +253,26 @@ static struct SecondlevelTable * secondlevel_table_alloc ()
 {
     struct SecondlevelTable * table;
 
+    SpinlockLock(&secondlevel_table_cache_lock);
     table = ObjectCacheAlloc(&secondlevel_table_cache);
+    SpinlockUnlock(&secondlevel_table_cache_lock);
 
     if (table)
     {
         unsigned int i;
 
         INIT_LIST_HEAD(&table->link);
+
+        SpinlockLock(&secondlevel_ptes_cache_lock);
         table->ptes = ObjectCacheAlloc(&secondlevel_ptes_cache);
+        SpinlockUnlock(&secondlevel_ptes_cache_lock);
 
         if (!table->ptes)
         {
+            SpinlockLock(&secondlevel_table_cache_lock);
             ObjectCacheFree(&secondlevel_table_cache, table);
+            SpinlockUnlock(&secondlevel_table_cache_lock);
+
             table = NULL;
         }
         else
@@ -284,8 +296,13 @@ static void secondlevel_table_free (struct SecondlevelTable * table)
         list_del(&table->link);
     }
 
+    SpinlockLock(&secondlevel_ptes_cache_lock);
     ObjectCacheFree(&secondlevel_ptes_cache, table->ptes);
+    SpinlockUnlock(&secondlevel_ptes_cache_lock);
+
+    SpinlockLock(&secondlevel_table_cache_lock);
     ObjectCacheFree(&secondlevel_table_cache, table);
+    SpinlockUnlock(&secondlevel_table_cache_lock);
 }
 
 struct TranslationTable * TranslationTableAlloc (void)
@@ -313,7 +330,9 @@ struct TranslationTable * TranslationTableAlloc (void)
 
     Once(&mmu_init_control, mmu_static_init, NULL);
 
+    SpinlockLock(&translation_table_cache_lock);
     table = ObjectCacheAlloc(&translation_table_cache);
+    SpinlockUnlock(&translation_table_cache_lock);
 
     if (!table) {
         return NULL;
@@ -350,7 +369,9 @@ cleanup_pages:
     VmPageFree(table->firstlevel_ptes_pages);
 
 cleanup_table:
+    SpinlockLock(&translation_table_cache_lock);
     ObjectCacheFree(&translation_table_cache, table);
+    SpinlockUnlock(&translation_table_cache_lock);
 
     return NULL;
 }
@@ -398,7 +419,10 @@ void TranslationTableFree (struct TranslationTable * table)
     table->firstlevel_ptes = NULL;
     TreeMapFree(table->sparse_secondlevel_map);
     VmPageFree(table->firstlevel_ptes_pages);
+
+    SpinlockLock(&translation_table_cache_lock);
     ObjectCacheFree(&translation_table_cache, table);
+    SpinlockUnlock(&translation_table_cache_lock);
 }
 
 static struct TranslationTable * kernel_translation_table = NULL;

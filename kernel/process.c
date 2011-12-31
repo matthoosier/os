@@ -104,6 +104,8 @@ static struct Process * ProcessAlloc ()
     if (p) {
         memset(p, 0, sizeof(*p));
 
+        SpinlockInit(&p->lock);
+
         p->id_to_channel_map    = TreeMapAlloc(TreeMapSignedIntCompareFunc);
         p->id_to_connection_map = TreeMapAlloc(TreeMapSignedIntCompareFunc);
         p->id_to_message_map    = TreeMapAlloc(TreeMapSignedIntCompareFunc);
