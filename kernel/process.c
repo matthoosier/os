@@ -7,11 +7,14 @@
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
+#include <kernel/interrupt-handler.h>
+#include <kernel/kmalloc.h>
 #include <kernel/object-cache.h>
 #include <kernel/once.h>
 #include <kernel/process.h>
 #include <kernel/ramfs.h>
 #include <kernel/thread.h>
+#include <kernel/timer.h>
 #include <kernel/tree-map.h>
 
 /** Handed off between spawner and spawnee threads */
@@ -35,7 +38,9 @@ static Once_t               caches_init_control = ONCE_INIT;
 static Pid_t get_next_pid (void);
 
 /** Fetches Pid_t -> (struct Process *) mappings */
-static struct TreeMap * pid_map (void);
+static struct Process * PidMapLookup (Pid_t key);
+static struct Process * PidMapInsert (Pid_t key, struct Process * process);
+static struct Process * PidMapRemove (Pid_t key);
 
 static void init_caches (void * ignored)
 {
@@ -296,7 +301,7 @@ struct Process * exec_into_current (
 
     /* Allocate, assign, and record Pid */
     p->pid = get_next_pid();
-    TreeMapInsert(pid_map(), (TreeMapKey_t)p->pid, p);
+    PidMapInsert(p->pid, p);
 
     /* Okay. Save reference to this process object into the current thread */
     p->thread = THREAD_CURRENT();
@@ -424,23 +429,59 @@ static Pid_t get_next_pid ()
     return counter++;
 }
 
-static struct TreeMap * pid_map ()
-{
-    static struct TreeMap * map;
-    static Once_t init_control = ONCE_INIT;
+static Spinlock_t pid_map_lock = SPINLOCK_INIT;
 
-    void init (void * ignored)
+static struct TreeMap * get_pid_map ()
+{
+    static struct TreeMap * pid_map;
+    static Once_t           pid_map_once = ONCE_INIT;
+
+    void alloc_pid_map (void * ignored)
     {
-        map = TreeMapAlloc(TreeMapSignedIntCompareFunc);
+        pid_map = TreeMapAlloc(TreeMapSignedIntCompareFunc);
+        assert(pid_map != NULL);
     }
 
-    Once(&init_control, init, NULL);
-    return map;
+    Once(&pid_map_once, alloc_pid_map, NULL);
+    return pid_map;
+}
+
+static struct Process * PidMapLookup (Pid_t key)
+{
+    struct Process * ret;
+
+    SpinlockLock(&pid_map_lock);
+    ret = TreeMapLookup(get_pid_map(), (TreeMapKey_t)key);
+    SpinlockUnlock(&pid_map_lock);
+
+    return ret;
+}
+
+static struct Process * PidMapInsert (Pid_t key, struct Process * process)
+{
+    struct Process * ret;
+
+    SpinlockLock(&pid_map_lock);
+    ret = TreeMapInsert(get_pid_map(), (TreeMapKey_t)key, process);
+    SpinlockUnlock(&pid_map_lock);
+
+    return ret;
+}
+
+static struct Process * PidMapRemove (Pid_t key)
+{
+    struct Process * ret;
+
+    SpinlockLock(&pid_map_lock);
+    ret = TreeMapRemove(get_pid_map(), (TreeMapKey_t)key);
+    SpinlockUnlock(&pid_map_lock);
+
+    return ret;
 }
 
 struct Process * ProcessLookup (Pid_t pid)
 {
-    return TreeMapLookup(pid_map(), (TreeMapKey_t)pid);
+    return PidMapLookup(pid);
 }
 
 static void process_manager_thread (void * pProcessCreationContext)
@@ -473,8 +514,8 @@ static void process_manager_thread (void * pProcessCreationContext)
 
     /* Allocate, assign, and record Pid */
     p->pid = PROCMGR_PID;
-    TreeMapInsert(pid_map(), (TreeMapKey_t)p->pid, p);
-    assert(TreeMapLookup(pid_map(), (TreeMapKey_t)p->pid) == p);
+    PidMapInsert(p->pid, p);
+    assert(PidMapLookup(p->pid) == p);
 
     /* Okay. Save reference to this process object into the current thread */
     p->thread = THREAD_CURRENT();
@@ -485,6 +526,9 @@ static void process_manager_thread (void * pProcessCreationContext)
     assert(TreeMapLookup(p->id_to_channel_map, (TreeMapKey_t)p->next_chid) == channel);
     p->next_chid++;
 
+    /* Start periodic timer to use for pre-emption */
+    TimerStartPeriodic(1000);
+  
     /* Release the spawner now that we have the resulting Process object */
     caller_context->caller_should_release = true;
 
@@ -510,15 +554,12 @@ static void process_manager_thread (void * pProcessCreationContext)
 
                     /* Get rid of mapping */
                     assert(
-                        TreeMapLookup(
-                                pid_map(),
-                                (TreeMapKey_t)m->sender->process->pid
-                        )
+                        PidMapLookup(m->sender->process->pid)
                         ==
                         m->sender->process
                         );
 
-                    TreeMapRemove(pid_map(), (TreeMapKey_t)m->sender->process->pid);
+                    PidMapRemove(m->sender->process->pid);
 
                     /* Reclaim all userspace resources */
                     ProcessFree(m->sender->process);
@@ -534,6 +575,133 @@ static void process_manager_thread (void * pProcessCreationContext)
                     KMessageFree(m);
 
                     /* All done. Sender no longer exists to be replied to. */
+                    break;
+                }
+
+                case PROC_MGR_MESSAGE_GETPID:
+                {
+                    memset(&reply, 0, sizeof(reply));
+                    reply.payload.getpid.pid = m->sender->process->pid;
+                    KMessageReply(m, ERROR_OK, &reply, sizeof(reply));
+                    break;
+                }
+
+                case PROC_MGR_MESSAGE_INTERRUPT_ATTACH:
+                {
+                    struct UserInterruptHandlerRecord * rec;
+
+                    rec = UserInterruptHandlerRecordAlloc();
+
+                    if (!rec) {
+                        KMessageReply(m, ERROR_NO_MEM, &reply, 0);
+                    } else {
+                        rec->func = buf.payload.interrupt_attach.func;
+                        rec->pid = m->sender->process->pid;
+
+                        InterruptAttachUserHandler(
+                                buf.payload.interrupt_attach.irq_number,
+                                rec
+                                );
+
+                        reply.payload.interrupt_attach.handler = (uintptr_t)rec;
+
+                        KMessageReply(m, ERROR_OK, &reply, sizeof(reply));
+                    }
+                    break;
+                }
+
+                case PROC_MGR_MESSAGE_INTERRUPT_DETACH:
+                {
+                    break;
+                }
+
+                case PROC_MGR_MESSAGE_MAP_PHYS:
+                {
+                    PhysAddr_t      phys;
+                    size_t          len;
+                    VmAddr_t        virt;
+                    bool            mapped;
+                    unsigned int    i;
+
+                    phys = buf.payload.map_phys.physaddr;
+                    len = buf.payload.map_phys.len;
+
+                    if ((phys % PAGE_SIZE != 0) || (len < 0)) {
+                        KMessageReply(m, ERROR_INVALID, &reply, 0);
+                    }
+                    else {
+
+                        struct mapped_page
+                        {
+                            VmAddr_t            page_base;
+                            struct list_head    link;
+                        };
+
+                        struct list_head mapped_pages = LIST_HEAD_INIT(mapped_pages);
+                        struct mapped_page * page;
+
+                        for (i = 0; i < len; i += PAGE_SIZE) {
+
+                            page = kmalloc(sizeof(*page));
+
+                            if (!page) {
+                                break;
+                            }
+
+                            mapped = TranslationTableMapNextPage(
+                                    m->sender->process->pagetable,
+                                    &virt,
+                                    phys,
+                                    PROT_USER_READWRITE
+                                    );
+
+                            /*
+                            First allocation is the base address of the whole
+                            thing.
+                            */
+                            if (i == 0 && mapped) {
+                                reply.payload.map_phys.vmaddr = virt;
+                            }
+
+                            if (mapped) {
+                                page->page_base = virt;
+                                INIT_LIST_HEAD(&page->link);
+                                list_add_tail(&page->link, &mapped_pages);
+                            }
+                            else if (!mapped) {
+
+                                /* Back out all the existing mappings */
+                                while (!list_empty(&mapped_pages)) {
+                                    page = list_first_entry(&mapped_pages, struct mapped_page, link);
+                                    TranslationTableUnmapPage(
+                                            m->sender->process->pagetable,
+                                            page->page_base
+                                            );
+                                    list_del_init(&page->link);
+
+                                    /* Free the block hosting the list node */
+                                    kfree(page, sizeof(*page));
+                                }
+
+                                break;
+                            }
+                        }
+
+                        if (list_empty(&mapped_pages)) {
+                            KMessageReply(m, ERROR_INVALID, &reply, sizeof(reply));
+                        } else {
+                            KMessageReply(m, ERROR_OK, &reply, sizeof(reply));
+
+                            /* List of partial pages no longer needed */
+                            while (!list_empty(&mapped_pages)) {
+                                page = list_first_entry(&mapped_pages, struct mapped_page, link);
+                                list_del_init(&page->link);
+
+                                /* Free the block hosting the list node */
+                                kfree(page, sizeof(*page));
+                            }
+                        }
+                    }
                     break;
                 }
 

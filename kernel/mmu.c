@@ -468,6 +468,11 @@ void MmuSetUserTranslationTable (struct TranslationTable * table)
 
     /* Install modified register back */
     SetTTBR0(ttbr0);
+
+    if (user_translation_table != table) {
+        MmuFlushTlb();
+    }
+
     user_translation_table = table;
 }
 

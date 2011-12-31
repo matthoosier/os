@@ -27,6 +27,11 @@ int InterruptDetach (
         InterruptHandler_t id
         );
 
+void * MapPhysical (
+        uintptr_t physaddr,
+        size_t  len
+        );
+
 END_DECLS
 
 #endif /* __IO_H__ */

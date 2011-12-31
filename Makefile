@@ -43,6 +43,7 @@ kernel_c_files = \
 	kernel/init.c \
 	kernel/interrupts.c \
 	kernel/syscall.c \
+	kernel/kmalloc.c \
 	kernel/large-object-cache.c \
 	kernel/message.c \
 	kernel/mmu.c \
@@ -95,17 +96,19 @@ USER_LD = $(CROSS_COMPILE)-gcc
 image: kernel.ldscript
 
 echo_c_files = \
-	crt.c \
+	libc/crt.c \
+	libc/user_io.c \
+	libc/user_message.c \
+	libc/syscall.c \
 	echo.c \
-	syscall.c \
-	user_message.c \
 	$(NULL)
 
 syscall_client_c_files = \
-	crt.c \
+	libc/crt.c \
+	libc/user_io.c \
+	libc/user_message.c \
+	libc/syscall.c \
 	syscall-client.c \
-	syscall.c \
-	user_message.c \
 	$(NULL)
 
 echo_c_dep_files = $(foreach f,$(echo_c_files),$(call depfile,$(f)))

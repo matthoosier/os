@@ -9,9 +9,9 @@
 #include <kernel/interrupt-handler.h>
 #include <kernel/mmu.h>
 #include <kernel/object-cache.h>
+#include <kernel/once.h>
 #include <kernel/process.h>
 #include <kernel/thread.h>
-#include <kernel/timer.h>
 #include <kernel/vm.h>
 
 #include "init.h"
@@ -164,9 +164,6 @@ void run_first_thread ()
     /* Device-independent */
     InterruptsConfigure();
     InterruptsEnable();
-
-    /* Initiate some basic use of the timer */
-    TimerStartPeriodic(1000);
 
     ProcessStartManager();
     ProcessCreate("echo");
