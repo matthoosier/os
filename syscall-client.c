@@ -1,6 +1,7 @@
 #include <sys/procmgr.h>
 #include <sys/syscall.h>
 #include <sys/message.h>
+#include <sys/process.h>
 
 int main () {
     /* Test out basic syscall mechanism */
@@ -15,9 +16,7 @@ int main () {
     MessageSend(echoCon, send, sizeof(send), reply, sizeof(reply));
 
     /* Terminate */
-    struct ProcMgrMessage msg;
-    msg.type = PROC_MGR_MESSAGE_EXIT;
-    MessageSend(PROCMGR_CONNECTION_ID, &msg, sizeof(msg), &msg, sizeof(msg));
+    Exit();
 
     return 0;
 }
