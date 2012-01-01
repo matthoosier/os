@@ -359,11 +359,11 @@ void process_creation_thread (void * pProcessCreationContext)
 
         /* Configure the SPSR to be user-mode execution */
         asm volatile(
-            ".include \"arm-defs.inc\"  \n\t"
-            "mrs %[spsr], spsr          \n\t"
-            "mov %[spsr], #usr          \n\t"
-            "msr spsr, %[spsr]          \n\t"
+            "mrs %[spsr], spsr              \n\t"
+            "mov %[spsr], %[usr_mode_bits]  \n\t"
+            "msr spsr, %[spsr]              \n\t"
             : [spsr] "=r" (spsr)
+            : [usr_mode_bits] "i" (ARM_USR_MODE_BITS)
         );
 
         /* Jump to user mode (SPSR becomes the user-mode CPSR */

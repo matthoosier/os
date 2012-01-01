@@ -30,6 +30,14 @@
     #define ARM_CPSR_I_BIT  7   /* If set, disables normal IRQs */
     #define ARM_CPSR_F_BIT  6   /* If set, disables fast IRQs   */
 
+    #define ARM_USR_MODE_BITS   0b10000
+    #define ARM_FIQ_MODE_BITS   0b10001
+    #define ARM_IRQ_MODE_BITS   0b10010
+    #define ARM_SVC_MODE_BITS   0b10011
+    #define ARM_ABT_MODE_BITS   0b10111
+    #define ARM_UND_MODE_BITS   0b11011
+    #define ARM_SYS_MODE_BITS   0b11111
+
 #else
     #error
 #endif

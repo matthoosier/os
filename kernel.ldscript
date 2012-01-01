@@ -13,14 +13,14 @@ SECTIONS
 
     .early.text :
         {
-        kernel/early-*.ko(.text.early.vector)
-        kernel/early-*.ko(.text)
+        kernel/early-*.o(.text.early.vector)
+        kernel/early-*.o(.text)
         }
 
     .early.data :
         {
-        kernel/early-*.ko(.data .data.*)
-        kernel/early-*.ko(.bss .bss.*)
+        kernel/early-*.o(.data .data.*)
+        kernel/early-*.o(.bss .bss.*)
         }
 
     . = ALIGN(CONSTANT(MAXPAGESIZE));

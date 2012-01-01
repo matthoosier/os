@@ -130,9 +130,9 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
 
     /* Thread is initially running in kernel mode */
     asm volatile (
-        ".include \"arm-defs.inc\"              \n\t"
-        "mov %[cpsr], #svc                      \n\t"
+        "mov %[cpsr], %[svc_mode_bits]          \n\t"
         : [cpsr] "=r" (descriptor->registers[REGISTER_INDEX_PSR])
+        : [svc_mode_bits] "i" (ARM_SVC_MODE_BITS)
     );
 
     /* Yield immediately to new thread so that it gets initialized */

@@ -78,20 +78,18 @@ void InterruptsConfigure ()
          * Install stack pointer for IRQ mode
          */
         asm volatile (
-            ".include \"arm-defs.inc\"  \n\t"
-            "                           \n\t"
-
             /* Save current execution mode                  */
             "mrs v1, cpsr               \n\t"
 
             /* Switch to IRQ mode and install stack pointer */
-            "cps #irq                   \n\t"
+            "cps %[irq_mode_bits]       \n\t"
             "mov sp, %[irq_sp]          \n\t"
 
             /* Restore previous execution mode              */
             "msr cpsr, v1               \n\t"
             :
             : [irq_sp] "r" (&irq_stack[0] + sizeof(irq_stack))
+            , [irq_mode_bits] "i" (ARM_IRQ_MODE_BITS)
             : "memory", "v1"
         );
 

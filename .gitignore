@@ -1,6 +1,4 @@
-.*.depends
-*.i
-*.s
-*.o
-*.ko
 .*.swp
+.waf-*
+.lock-waf*
+build/
