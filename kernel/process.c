@@ -7,11 +7,10 @@
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
-#include <kernel/interrupt-handler.h>
-#include <kernel/kmalloc.h>
 #include <kernel/object-cache.h>
 #include <kernel/once.h>
 #include <kernel/process.h>
+#include <kernel/procmgr.h>
 #include <kernel/ramfs.h>
 #include <kernel/thread.h>
 #include <kernel/timer.h>
@@ -493,7 +492,6 @@ static void process_manager_thread (void * pProcessCreationContext)
     struct Channel * channel;
 
     struct ProcMgrMessage   buf;
-    struct ProcMgrReply     reply;
     struct Message        * m;
 
     caller_context = (struct process_creation_context *)pProcessCreationContext;
@@ -534,7 +532,6 @@ static void process_manager_thread (void * pProcessCreationContext)
     /* Release the spawner now that we have the resulting Process object */
     caller_context->caller_should_release = true;
 
-    /* TODO: replace with message-receiving loop */
     while (true) {
         ssize_t len = KMessageReceive(
                 channel,
@@ -545,173 +542,12 @@ static void process_manager_thread (void * pProcessCreationContext)
 
         if (len == sizeof(buf)) {
 
-            Error_t error = ERROR_OK;
+            ProcMgrOperationFunc handler = ProcMgrGetMessageHandler(buf.type);
 
-            switch (buf.type) {
-
-                case PROC_MGR_MESSAGE_EXIT:
-                {
-                    /* Syscalls are always invoked by processes */
-                    assert(m->sender->process != NULL);
-
-                    /* Get rid of mapping */
-                    assert(
-                        PidMapLookup(m->sender->process->pid)
-                        ==
-                        m->sender->process
-                        );
-
-                    PidMapRemove(m->sender->process->pid);
-
-                    /* Reclaim all userspace resources */
-                    ProcessFree(m->sender->process);
-                    m->sender->process = NULL;
-
-                    /* Force sender's kernel thread to appear done */
-                    m->sender->state = THREAD_STATE_FINISHED;
-
-                    /* Reap sender's kernel thread */
-                    ThreadJoin(m->sender);
-
-                    /* No MessageReply(), so manually free the Message */
-                    KMessageFree(m);
-
-                    /* All done. Sender no longer exists to be replied to. */
-                    break;
-                }
-
-                case PROC_MGR_MESSAGE_GETPID:
-                {
-                    memset(&reply, 0, sizeof(reply));
-                    reply.payload.getpid.pid = m->sender->process->pid;
-                    KMessageReply(m, ERROR_OK, &reply, sizeof(reply));
-                    break;
-                }
-
-                case PROC_MGR_MESSAGE_INTERRUPT_ATTACH:
-                {
-                    struct UserInterruptHandlerRecord * rec;
-
-                    rec = UserInterruptHandlerRecordAlloc();
-
-                    if (!rec) {
-                        KMessageReply(m, ERROR_NO_MEM, &reply, 0);
-                    } else {
-                        rec->func = buf.payload.interrupt_attach.func;
-                        rec->pid = m->sender->process->pid;
-
-                        InterruptAttachUserHandler(
-                                buf.payload.interrupt_attach.irq_number,
-                                rec
-                                );
-
-                        reply.payload.interrupt_attach.handler = (uintptr_t)rec;
-
-                        KMessageReply(m, ERROR_OK, &reply, sizeof(reply));
-                    }
-                    break;
-                }
-
-                case PROC_MGR_MESSAGE_INTERRUPT_DETACH:
-                {
-                    break;
-                }
-
-                case PROC_MGR_MESSAGE_MAP_PHYS:
-                {
-                    PhysAddr_t      phys;
-                    size_t          len;
-                    VmAddr_t        virt;
-                    bool            mapped;
-                    unsigned int    i;
-
-                    phys = buf.payload.map_phys.physaddr;
-                    len = buf.payload.map_phys.len;
-
-                    if ((phys % PAGE_SIZE != 0) || (len < 0)) {
-                        KMessageReply(m, ERROR_INVALID, &reply, 0);
-                    }
-                    else {
-
-                        struct mapped_page
-                        {
-                            VmAddr_t            page_base;
-                            struct list_head    link;
-                        };
-
-                        struct list_head mapped_pages = LIST_HEAD_INIT(mapped_pages);
-                        struct mapped_page * page;
-
-                        for (i = 0; i < len; i += PAGE_SIZE) {
-
-                            page = kmalloc(sizeof(*page));
-
-                            if (!page) {
-                                break;
-                            }
-
-                            mapped = TranslationTableMapNextPage(
-                                    m->sender->process->pagetable,
-                                    &virt,
-                                    phys,
-                                    PROT_USER_READWRITE
-                                    );
-
-                            /*
-                            First allocation is the base address of the whole
-                            thing.
-                            */
-                            if (i == 0 && mapped) {
-                                reply.payload.map_phys.vmaddr = virt;
-                            }
-
-                            if (mapped) {
-                                page->page_base = virt;
-                                INIT_LIST_HEAD(&page->link);
-                                list_add_tail(&page->link, &mapped_pages);
-                            }
-                            else if (!mapped) {
-
-                                /* Back out all the existing mappings */
-                                while (!list_empty(&mapped_pages)) {
-                                    page = list_first_entry(&mapped_pages, struct mapped_page, link);
-                                    TranslationTableUnmapPage(
-                                            m->sender->process->pagetable,
-                                            page->page_base
-                                            );
-                                    list_del_init(&page->link);
-
-                                    /* Free the block hosting the list node */
-                                    kfree(page, sizeof(*page));
-                                }
-
-                                break;
-                            }
-                        }
-
-                        if (list_empty(&mapped_pages)) {
-                            KMessageReply(m, ERROR_INVALID, &reply, sizeof(reply));
-                        } else {
-                            KMessageReply(m, ERROR_OK, &reply, sizeof(reply));
-
-                            /* List of partial pages no longer needed */
-                            while (!list_empty(&mapped_pages)) {
-                                page = list_first_entry(&mapped_pages, struct mapped_page, link);
-                                list_del_init(&page->link);
-
-                                /* Free the block hosting the list node */
-                                kfree(page, sizeof(*page));
-                            }
-                        }
-                    }
-                    break;
-                }
-
-                default:
-                    error = error;
-                    reply = reply;
-                    KMessageReply(m, ERROR_NO_SYS, &buf, 0);
-                    break;
+            if (handler != NULL ) {
+                handler(m, &buf);
+            } else {
+                KMessageReply(m, ERROR_NO_SYS, &buf, 0);
             }
 
         }
@@ -893,3 +729,39 @@ struct TranslationTable * ProcessGetTranslationTable (struct Process * process)
 {
     return process->pagetable;
 }
+
+/**
+ * Handler for PROC_MGR_MESSAGE_EXIT.
+ */
+static void HandleExit (
+        struct Message * message,
+        const struct ProcMgrMessage * buf
+        )
+{
+    /* Syscalls are always invoked by processes */
+    assert(message->sender->process != NULL);
+
+    /* Get rid of mapping */
+    assert(
+        PidMapLookup(message->sender->process->pid)
+        ==
+        message->sender->process
+        );
+
+    PidMapRemove(message->sender->process->pid);
+
+    /* Reclaim all userspace resources */
+    ProcessFree(message->sender->process);
+    message->sender->process = NULL;
+
+    /* Force sender's kernel thread to appear done */
+    message->sender->state = THREAD_STATE_FINISHED;
+
+    /* Reap sender's kernel thread */
+    ThreadJoin(message->sender);
+
+    /* No MessageReply(), so manually free the Message */
+    KMessageFree(message);
+}
+
+PROC_MGR_OPERATION(PROC_MGR_MESSAGE_EXIT, HandleExit)

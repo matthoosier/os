@@ -365,7 +365,7 @@ ssize_t KMessageReceive (
 ssize_t KMessageReply (
         struct Message * context,
         unsigned int status,
-        void * replybuf,
+        const void * replybuf,
         size_t replybuf_len
         )
 {

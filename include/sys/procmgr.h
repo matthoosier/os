@@ -1,5 +1,5 @@
-#ifndef __PROCMGR_H__
-#define __PROCMGR_H__
+#ifndef __SYS_PROCMGR_H__
+#define __SYS_PROCMGR_H__
 
 #include <stdint.h>
 
@@ -13,12 +13,16 @@ BEGIN_DECLS
 
 enum ProcMgrMessageType
 {
-    PROC_MGR_MESSAGE_DUMMY,
-    PROC_MGR_MESSAGE_EXIT,
+    PROC_MGR_MESSAGE_EXIT = 0,
     PROC_MGR_MESSAGE_GETPID,
     PROC_MGR_MESSAGE_INTERRUPT_ATTACH,
     PROC_MGR_MESSAGE_INTERRUPT_DETACH,
     PROC_MGR_MESSAGE_MAP_PHYS,
+
+    /**
+     * Not a message. Just a count.
+     */
+    PROC_MGR_MESSAGE_COUNT,
 };
 
 struct ProcMgrMessage
@@ -83,4 +87,4 @@ struct ProcMgrReply
 
 END_DECLS
 
-#endif /* __PROCMGR_H__ */
+#endif /* __SYS_PROCMGR_H__ */
