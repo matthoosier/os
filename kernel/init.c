@@ -171,7 +171,6 @@ void run_first_thread ()
     ProcessCreate("uio");
 
     while (true) {
-        ThreadAddReady(THREAD_CURRENT());
-        ThreadYieldNoRequeue();
+        ThreadYieldWithRequeue();
     }
 }

@@ -236,8 +236,7 @@ void do_syscall (uint32_t * p_regs)
     algorithm needs to run and pick a new next task.
     */
     if (ThreadResetNeedResched()) {
-        ThreadAddReady(THREAD_CURRENT());
-        ThreadYieldNoRequeue();
+        ThreadYieldWithRequeue();
     }
 }
 

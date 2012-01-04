@@ -416,8 +416,7 @@ struct Process * ProcessCreate (const char executableName[])
 
     /* Forked thread will wake us back up when the process creation is done */
     while (!context.caller_should_release) {
-        ThreadAddReady(THREAD_CURRENT());
-        ThreadYieldNoRequeue();
+        ThreadYieldWithRequeue();
     }
 
     return context.created;
@@ -576,8 +575,7 @@ struct Process * ProcessStartManager ()
 
     /* Forked thread will wake us back up when the process creation is done */
     while (!context.caller_should_release) {
-        ThreadAddReady(THREAD_CURRENT());
-        ThreadYieldNoRequeue();
+        ThreadYieldWithRequeue();
     }
 
     managerProcess = context.created;

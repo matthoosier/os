@@ -349,6 +349,22 @@ irq_handler__do_load_next_task$:
     bl ThreadDequeueReady       /* r0 := 'struct Thread *'          */
 
     /**
+     * Enforce that the dequeue call found a thread -- at worst, it
+     * should find the one we just booted.
+     */
+    push {r0}
+    teq r0, #0                  /* Is r0 == NULL?                   */
+    moveq r0, #0                /* If so, r0 := FALSE               */
+    movne r0, #1                /* If not, r0 := TRUE               */
+    bl assert                   /* assert(r0)                       */
+    pop {r0}
+
+
+    push {r0}
+    bl ThreadSetStateRunning
+    pop {r0}
+
+    /**
      * Copy next task's registers out of kernel-thread register save area
      * and into IRQ stack's staging area. Normal exit path from IRQ handler
      * will restore them to the actual machine registers.

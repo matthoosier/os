@@ -12,11 +12,19 @@ static Spinlock_t ready_queue_lock = SPINLOCK_INIT;
 
 static void thread_entry (ThreadFunc func, void * param);
 
-static void ThreadSwitch (struct Thread * outgoing,
-                   struct Thread * incoming)
+void ThreadYieldNoRequeueToSpecific (struct Thread * next);
+
+typedef void (*ThreadSwitchPreFunc) (void *param);
+
+static void ThreadSwitch (
+        struct Thread * outgoing,
+        struct Thread * incoming,
+        ThreadSwitchPreFunc func,
+        void * funcParam
+        )
 {
-    uint32_t next_pc = next_pc;
-    uint32_t cpsr_temp = cpsr_temp;
+    uint32_t next_pc = next_pc;         /* Used by assembly fragment    */
+    uint32_t cpsr_temp = cpsr_temp;     /* Used by assembly fragment    */
 
     struct TranslationTable * incoming_tt = incoming->process
             ? incoming->process->pagetable
@@ -26,12 +34,19 @@ static void ThreadSwitch (struct Thread * outgoing,
     IrqSave_t prev_irq_status = InterruptsDisable();
     assert(prev_irq_status.cpsr_interrupt_flags == 0);
 
+    if (func != NULL) {
+        func(funcParam);
+    }
+
     /* Stash prior interrupt state in incoming thread's saved CPSR */
     incoming->registers[REGISTER_INDEX_PSR] &= ~(SETBIT(ARM_CPSR_I_BIT) | SETBIT(ARM_CPSR_F_BIT));
     incoming->registers[REGISTER_INDEX_PSR] |= prev_irq_status.cpsr_interrupt_flags;
 
     /* Only flushes TLB if the new data structure isn't the same as the old one */
     MmuSetUserTranslationTable(incoming_tt);
+
+    /* Mark incoming thread as running */
+    incoming->state = THREAD_STATE_RUNNING;
 
     asm volatile(
         "                                                   \n\t"
@@ -136,8 +151,7 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
     );
 
     /* Yield immediately to new thread so that it gets initialized */
-    ThreadAddReady(THREAD_CURRENT());
-    ThreadYieldNoRequeueToSpecific(descriptor);
+    ThreadSwitch(THREAD_CURRENT(), descriptor, (ThreadSwitchPreFunc)ThreadAddReady, THREAD_CURRENT());
 
     return descriptor;
 }
@@ -162,6 +176,7 @@ void ThreadAddReady (struct Thread * thread)
 {
     SpinlockLock(&ready_queue_lock);
     list_add_tail(&thread->queue_link, &ready_queue);
+    thread->state = THREAD_STATE_READY;
     SpinlockUnlock(&ready_queue_lock);
 }
 
@@ -169,6 +184,7 @@ void ThreadAddReadyFirst (struct Thread * thread)
 {
     SpinlockLock(&ready_queue_lock);
     list_add(&thread->queue_link, &ready_queue);
+    thread->state = THREAD_STATE_READY;
     SpinlockUnlock(&ready_queue_lock);
 }
 
@@ -176,12 +192,15 @@ struct Thread * ThreadDequeueReady (void)
 {
     struct Thread * next;
 
-    assert(!list_empty(&ready_queue));
-
     SpinlockLock(&ready_queue_lock);
-    next = list_first_entry(&ready_queue, struct Thread, queue_link);
-    next->state = THREAD_STATE_RUNNING;
-    list_del_init(&next->queue_link);
+
+    if (!list_empty(&ready_queue)) {
+        next = list_first_entry(&ready_queue, struct Thread, queue_link);
+        list_del_init(&next->queue_link);
+    } else {
+        next = NULL;
+    }
+
     SpinlockUnlock(&ready_queue_lock);
 
     return next;
@@ -192,24 +211,28 @@ void ThreadYieldNoRequeue (void)
     /* Pop off thread at front of run-queue */
     struct Thread * next = ThreadDequeueReady();
 
-    ThreadSwitch(THREAD_CURRENT(), next);
+    /* Since we're not requeuing, there had better be somebody runnable */
+    assert(next != NULL);
+
+    ThreadSwitch(THREAD_CURRENT(), next, NULL, NULL);
+}
+
+void ThreadYieldWithRequeue (void)
+{
+    /* Pop off thread at front of run-queue */
+    struct Thread * next = ThreadDequeueReady();
+
+    /* Since we're requeuing, it's OK if there were no other runnable threads */
+    if (next != NULL) {
+        ThreadSwitch(THREAD_CURRENT(), next, (ThreadSwitchPreFunc)ThreadAddReady, THREAD_CURRENT());
+    }
 }
 
 void ThreadYieldNoRequeueToSpecific (struct Thread * next)
 {
     assert(list_empty(&next->queue_link));
 
-    ThreadSwitch(THREAD_CURRENT(), next);
-}
-
-struct Thread * ThreadStructFromStackPointer (uint32_t sp)
-{
-    return THREAD_STRUCT_FROM_SP(sp);
-}
-
-struct Process * ThreadGetProcess (struct Thread * thread)
-{
-    return thread->process;
+    ThreadSwitch(THREAD_CURRENT(), next, NULL, NULL);
 }
 
 /**
@@ -237,4 +260,24 @@ bool ThreadResetNeedResched ()
     SpinlockUnlock(&need_resched_lock);
 
     return ret;
+}
+
+struct Thread * ThreadStructFromStackPointer (uint32_t sp)
+{
+    return THREAD_STRUCT_FROM_SP(sp);
+}
+
+struct Process * ThreadGetProcess (struct Thread * thread)
+{
+    return thread->process;
+}
+
+void ThreadSetStateReady (struct Thread * thread)
+{
+    thread->state = THREAD_STATE_READY;
+}
+
+void ThreadSetStateRunning (struct Thread * thread)
+{
+    thread->state = THREAD_STATE_RUNNING;
 }

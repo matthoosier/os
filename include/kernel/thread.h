@@ -89,25 +89,32 @@ extern struct Thread * ThreadCreate (
 extern void ThreadJoin (struct Thread * thread);
 
 /**
- * @next:       thread to be run next. Must not be currently linked into any
- *              a ready-list
- *
- * Yield to a specific (runnable) thread. Must not be called with interrupts
- * disabled.
- */
-extern void ThreadYieldNoRequeueToSpecific (struct Thread * next);
-
-/**
  * Yield to some other runnable thread. Must not be called with interrupts
  * disabled.
  */
 extern void ThreadYieldNoRequeue (void);
+
+/**
+ * Yield to some other runnable thread, and automatically mark the
+ * current thread as ready-to-run.
+ */
+extern void ThreadYieldWithRequeue (void);
 
 extern void ThreadAddReady (struct Thread * thread);
 
 extern void ThreadAddReadyFirst (struct Thread * thread);
 
 extern struct Thread * ThreadDequeueReady (void);
+
+extern void ThreadSetNeedResched (void);
+
+extern bool ThreadGetNeedResched (void);
+
+extern bool ThreadResetNeedResched (void);
+
+/*----------------------------------------------------------
+Convenience routines for use from assembly code
+----------------------------------------------------------*/
 
 /**
  * A version of THREAD_STRUCT_FROM_SP(), but implemented as a symbol
@@ -122,11 +129,12 @@ extern struct Thread * ThreadStructFromStackPointer (uint32_t sp);
  */
 extern struct Process * ThreadGetProcess (struct Thread *);
 
-extern void ThreadSetNeedResched (void);
-
-extern bool ThreadGetNeedResched (void);
-
-extern bool ThreadResetNeedResched (void);
+extern void ThreadSetStateReady (struct Thread *);
+extern void ThreadSetStateRunning (struct Thread *);
+extern void ThreadSetStateSend (struct Thread *);
+extern void ThreadSetStateReply (struct Thread *);
+extern void ThreadSetStateReceive (struct Thread *);
+extern void ThreadSetStateFinished (struct Thread *);
 
 END_DECLS
 
