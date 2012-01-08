@@ -17,6 +17,22 @@ static inline bool AtomicCompareAndExchange (
     return __sync_bool_compare_and_swap(ptr, oldval, newval);
 }
 
+static inline int AtomicAddAndFetch (
+        int   * ptr,
+        int     amount
+        )
+{
+    return __sync_add_and_fetch(ptr, amount);
+}
+
+static inline int AtomicSubAndFetch (
+        int   * ptr,
+        int     amount
+        )
+{
+    return __sync_sub_and_fetch(ptr, amount);
+}
+
 END_DECLS
 
 #endif /* __ATOMIC_H__ */
