@@ -44,6 +44,14 @@ typedef enum
     THREAD_STATE_COUNT,
 } ThreadState;
 
+typedef enum
+{
+    THREAD_PRIORITY_NORMAL  = 0,
+    THREAD_PRIORITY_IO,
+
+    THREAD_PRIORITY_COUNT,
+} ThreadPriority;
+
 /*
 The main control and saved-state for kernel threads. Each thread's
 instance of this structure is housed inside the top of the VM page
@@ -73,6 +81,12 @@ struct Thread
 
     /* Thread that will wait for and reap this one */
     struct Thread * joiner;
+
+    /* "Natural" priority of this thread. */
+    ThreadPriority assigned_priority;
+
+    /* Ceiling of the priorities of all threads blocked by this one. */ 
+    ThreadPriority effective_priority;
 };
 
 typedef void (*ThreadFunc)(void * param);
@@ -81,6 +95,12 @@ extern struct Thread * ThreadCreate (
         ThreadFunc body,
         void * param
         );
+
+/**
+ * For use in implementing priority inheritance; install an artifically higher
+ * priority for this thread than its natural one.
+ */
+extern void ThreadSetEffectivePriority (struct Thread * thread, ThreadPriority priority);
 
 /**
  * Deallocates resources used by @thread. Must not be called while @thread

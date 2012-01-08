@@ -255,6 +255,11 @@ ssize_t KMessageSend (
         */
 
         message->receiver->state = THREAD_STATE_READY;
+
+        /* Temporarily gift our priority to the message-handling thread */
+        ThreadSetEffectivePriority(message->receiver, THREAD_CURRENT()->effective_priority);
+
+        /* Now allow handler to run */
         ThreadAddReady(message->receiver);
 
         message->sender->state = THREAD_STATE_REPLY;
@@ -403,6 +408,9 @@ ssize_t KMessageReply (
     /* Sender will get to run again whenever a scheduling decision happens */
     context->sender->state = THREAD_STATE_READY;
     ThreadAddReady(context->sender);
+
+    /* Abandon any temporary priority boost we had now that the sender is unblocked */
+    ThreadSetEffectivePriority(THREAD_CURRENT(), THREAD_CURRENT()->assigned_priority);
 
     /* Sender frees the message after fetching the return value from it */
     return result;

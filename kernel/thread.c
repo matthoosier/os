@@ -7,8 +7,19 @@
 #include <kernel/thread.h>
 #include <kernel/vm.h>
 
-static LIST_HEAD(ready_queue);
+static LIST_HEAD(normal_ready_queue);
+static LIST_HEAD(io_ready_queue);
 static Spinlock_t ready_queue_lock = SPINLOCK_INIT;
+
+static inline struct list_head * queue_for_thread (struct Thread * t)
+{
+    if (t->assigned_priority == THREAD_PRIORITY_IO || t->effective_priority == THREAD_PRIORITY_IO) {
+        return &io_ready_queue;
+    }
+    else {
+        return &normal_ready_queue;
+    }
+}
 
 static void thread_entry (ThreadFunc func, void * param);
 
@@ -134,6 +145,8 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
     INIT_LIST_HEAD(&descriptor->queue_link);
     descriptor->state = THREAD_STATE_READY;
     descriptor->joiner = NULL;
+    descriptor->assigned_priority = THREAD_PRIORITY_NORMAL;
+    descriptor->effective_priority = THREAD_PRIORITY_NORMAL;
 
     /* Initially only the program and stack counter matter. */
     descriptor->registers[REGISTER_INDEX_SP] = (uint32_t)descriptor->kernel_stack.ceiling;
@@ -172,10 +185,15 @@ void ThreadJoin (struct Thread * thread)
     }
 }
 
+void ThreadSetEffectivePriority (struct Thread * thread, ThreadPriority priority)
+{
+    thread->effective_priority = priority;
+}
+
 void ThreadAddReady (struct Thread * thread)
 {
     SpinlockLock(&ready_queue_lock);
-    list_add_tail(&thread->queue_link, &ready_queue);
+    list_add_tail(&thread->queue_link, queue_for_thread(thread));
     thread->state = THREAD_STATE_READY;
     SpinlockUnlock(&ready_queue_lock);
 }
@@ -183,7 +201,7 @@ void ThreadAddReady (struct Thread * thread)
 void ThreadAddReadyFirst (struct Thread * thread)
 {
     SpinlockLock(&ready_queue_lock);
-    list_add(&thread->queue_link, &ready_queue);
+    list_add(&thread->queue_link, queue_for_thread(thread));
     thread->state = THREAD_STATE_READY;
     SpinlockUnlock(&ready_queue_lock);
 }
@@ -194,8 +212,12 @@ struct Thread * ThreadDequeueReady (void)
 
     SpinlockLock(&ready_queue_lock);
 
-    if (!list_empty(&ready_queue)) {
-        next = list_first_entry(&ready_queue, struct Thread, queue_link);
+    if (!list_empty(&io_ready_queue)) {
+        next = list_first_entry(&io_ready_queue, struct Thread, queue_link);
+        list_del_init(&next->queue_link);
+    }
+    else if (!list_empty(&normal_ready_queue)) {
+        next = list_first_entry(&normal_ready_queue, struct Thread, queue_link);
         list_del_init(&next->queue_link);
     } else {
         next = NULL;
