@@ -22,13 +22,16 @@ static void HandleInterruptAttach (
     if (!rec) {
         KMessageReply(message, ERROR_NO_MEM, &reply, 0);
     } else {
-        rec->func = buf->payload.interrupt_attach.func;
-        rec->pid = message->sender->process->pid;
+        rec->handler_info.irq_number = buf->payload.interrupt_attach.irq_number;
+        rec->handler_info.pid = message->sender->process->pid;
+        rec->handler_info.coid = buf->payload.interrupt_attach.connection_id;
+        rec->handler_info.param = (uintptr_t)buf->payload.interrupt_attach.param;
 
         InterruptAttachUserHandler(
-                buf->payload.interrupt_attach.irq_number,
                 rec
                 );
+
+        message->sender->assigned_priority = THREAD_PRIORITY_IO;
 
         reply.payload.interrupt_attach.handler = (uintptr_t)rec;
 
@@ -37,6 +40,25 @@ static void HandleInterruptAttach (
 }
 
 PROC_MGR_OPERATION(PROC_MGR_MESSAGE_INTERRUPT_ATTACH, HandleInterruptAttach)
+
+static void HandleInterruptComplete (
+        struct Message * message,
+        const struct ProcMgrMessage * buf
+        )
+{
+    struct UserInterruptHandlerRecord * rec;
+
+    rec = (struct UserInterruptHandlerRecord *)buf->payload.interrupt_complete.handler;
+
+    if (rec) {
+        KMessageReply(message, InterruptCompleteUserHandler(rec), buf, 0);
+    }
+    else {
+        KMessageReply(message, ERROR_INVALID, buf, 0);
+    }
+}
+
+PROC_MGR_OPERATION(PROC_MGR_MESSAGE_INTERRUPT_COMPLETE, HandleInterruptComplete)
 
 static void HandleInterruptDetach (
         struct Message * message,

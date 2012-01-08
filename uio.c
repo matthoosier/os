@@ -4,24 +4,18 @@
 #include <sys/procmgr.h>
 #include <sys/spinlock.h>
 
-struct IoNotificationSink ntfctn;
-
-const struct IoNotificationSink * OnInterrupt ()
-{
-    return &ntfctn;
-}
-
 int main (int argc, char *argv[]) {
 
     int chid;
+    int coid;
 
     chid = ChannelCreate();
-    ntfctn.connection_id = Connect(SELF_PID, chid);
+    coid = Connect(SELF_PID, chid);
 
     void * zeroPtr = MapPhysical(0, 4096 * 4);
     zeroPtr = zeroPtr;
 
-    InterruptHandler_t id = InterruptAttach(OnInterrupt, 4);
+    InterruptHandler_t id = InterruptAttach(coid, 4, NULL);
 
     for (;;) {
         int msgid;
@@ -36,6 +30,7 @@ int main (int argc, char *argv[]) {
         else {
             // Pulse received
             id = id;
+            InterruptComplete(id);
         }
 
         num = num;

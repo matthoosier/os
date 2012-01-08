@@ -4,6 +4,7 @@
 #include <strings.h>
 
 #include <sys/arch.h>
+#include <sys/atomic.h>
 #include <sys/spinlock.h>
 
 #include <kernel/array.h>
@@ -60,9 +61,28 @@ static IrqKernelHandlerFunc kernel_irq_handlers[NUM_IRQS];
 static struct list_head user_irq_handlers[NUM_IRQS];
 
 /**
+ * Tracks how many times a particular IRQ has been masked.
+ */
+static unsigned int irq_mask_counts[NUM_IRQS] = { 0 };
+
+/**
  * Lock to protect lists of IRQ handlers
  */
 static Spinlock_t irq_handlers_lock = SPINLOCK_INIT;
+
+static void decrement_irq_mask (unsigned int irq_number)
+{
+    if (AtomicSubAndFetch((int *)&irq_mask_counts[irq_number], 1) == 0) {
+        InterruptUnmaskIrq(irq_number);
+    }
+}
+
+static void increment_irq_mask (unsigned int irq_number)
+{
+    if (AtomicAddAndFetch((int *)&irq_mask_counts[irq_number], 1) == 1) {
+        InterruptMaskIrq(irq_number);
+    }
+}
 
 static struct Pl190 * GetPl190 ();
 
@@ -124,18 +144,73 @@ void InterruptAttachKernelHandler (int irq_number, IrqKernelHandlerFunc f)
 }
 
 void InterruptAttachUserHandler (
-        int irq_number,
         struct UserInterruptHandlerRecord * handler
         )
 {
     assert(list_empty(&handler->link));
-    assert(irq_number < NUM_IRQS && irq_number >= 0);
+    assert(handler->handler_info.irq_number < NUM_IRQS && handler->handler_info.irq_number >= 0);
+
+    handler->state_info.masked = false;
+
+    /* Acquire interrupt protection */
+    SpinlockLock(&irq_handlers_lock);
+
+    list_add_tail(&handler->link, &user_irq_handlers[handler->handler_info.irq_number]);
+
+    /*
+    Blip the mask count up and then down again to trigger the interrupt
+    controller to unmask it (on the downward stroke) if there are no
+    other masks against it right now.
+    */
+    increment_irq_mask(handler->handler_info.irq_number);
+    decrement_irq_mask(handler->handler_info.irq_number);
+
+    /* Drop interrupt protection */
+    SpinlockUnlock(&irq_handlers_lock);
+}
+
+void InterruptDetachUserHandler (
+        struct UserInterruptHandlerRecord * record
+        )
+{
+    unsigned int n = record->handler_info.irq_number;
 
     SpinlockLock(&irq_handlers_lock);
 
-    list_add_tail(&handler->link, &user_irq_handlers[irq_number]);
+    list_del_init(&record->link);
+
+    /* Flush out any outstanding per-drive interrupt masks */
+    if (record->state_info.masked) {
+        decrement_irq_mask(n);
+    }
+
+    /* Mask the IRQ if there are no other handlers */
+    if (list_empty(&user_irq_handlers[n]) && kernel_irq_handlers[n] == NULL) {
+
+        /*
+        All other handlers are detached, so there had better not be
+        any pending masks.
+        */
+        assert(irq_mask_counts[n] == 0);
+
+        InterruptMaskIrq(n);
+    }
 
     SpinlockUnlock(&irq_handlers_lock);
+}
+
+int InterruptCompleteUserHandler (
+    struct UserInterruptHandlerRecord * handler
+    )
+{
+    if (!handler->state_info.masked) {
+        return ERROR_INVALID;
+    }
+    else {
+        handler->state_info.masked = false;
+        decrement_irq_mask(handler->handler_info.irq_number);
+        return ERROR_OK;
+    }
 }
 
 void InterruptHandler ()
@@ -163,9 +238,8 @@ void InterruptHandler ()
     /* Execute any user-installed IRQ handlers */
     list_for_each (cursor, &user_irq_handlers[which]) {
 
-        struct TranslationTable * prev_pagetable;
-        struct Process * process;
-        const struct IoNotificationSink * message;
+        struct Process            * process;
+        struct Connection         * connection;
 
         struct UserInterruptHandlerRecord * record = list_entry(
                 cursor,
@@ -173,37 +247,26 @@ void InterruptHandler ()
                 link
                 );
 
-        process = ProcessLookup(record->pid);
+        assert(!record->state_info.masked);
+
+        process = ProcessLookup(record->handler_info.pid);
 
         if (process == NULL) {
             continue;
         }
 
-        prev_pagetable = MmuGetUserTranslationTable();
+        connection = ProcessLookupConnection(
+                process,
+                record->handler_info.coid
+                );
 
-        MmuSetUserTranslationTable(process->pagetable);
-
-        message = record->func();
-
-        if (message != NULL) {
-            struct Connection     * connection;
-            bool                    ok = true;
-
-            if (ok) {
-                connection = ProcessLookupConnection(
-                        process,
-                        message->connection_id
-                        );
-
-                ok = ok && (connection != NULL);
-            }
-
-            if (ok) {
-                KMessageSendAsync(connection, (uintptr_t)message->arg);
+        if (connection != NULL) {
+            int result = KMessageSendAsync(connection, (uintptr_t)record->handler_info.param);
+            if (result == ERROR_OK) {
+                record->state_info.masked = true;
+                increment_irq_mask(record->handler_info.irq_number);
             }
         }
-
-        MmuSetUserTranslationTable(prev_pagetable);
     }
 
     SpinlockUnlock(&irq_handlers_lock);

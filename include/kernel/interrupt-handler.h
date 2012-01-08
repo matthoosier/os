@@ -1,10 +1,14 @@
 #ifndef __INTERRUPT_HANDLER_H__
 #define __INTERRUPT_HANDLER_H__
 
+#include <stdbool.h>
+
 #include <sys/decls.h>
 #include <sys/io.h>
 
 #include <kernel/list.h>
+#include <kernel/message.h>
+#include <kernel/process.h>
 
 BEGIN_DECLS
 
@@ -18,10 +22,20 @@ typedef void (*IrqKernelHandlerFunc) ();
  */
 struct UserInterruptHandlerRecord
 {
-    InterruptHandlerFunc    func;
-    int                     pid;
+    struct
+    {
+        int             irq_number;
+        Pid_t           pid;
+        Connection_t    coid;
+        uintptr_t       param;
+    } handler_info;
 
-    struct list_head        link;
+    struct
+    {
+        bool            masked;
+    } state_info;
+
+    struct list_head link;
 };
 
 /**
@@ -32,7 +46,14 @@ void InterruptsConfigure();
 void InterruptAttachKernelHandler (int irq_number, IrqKernelHandlerFunc f);
 
 void InterruptAttachUserHandler (
-        int irq_number,
+        struct UserInterruptHandlerRecord * handler
+        );
+
+int InterruptCompleteUserHandler (
+        struct UserInterruptHandlerRecord * handler
+        );
+
+void InterruptDetachUserHandler (
         struct UserInterruptHandlerRecord * handler
         );
 

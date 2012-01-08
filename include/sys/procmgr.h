@@ -17,6 +17,7 @@ enum ProcMgrMessageType
     PROC_MGR_MESSAGE_GETPID,
     PROC_MGR_MESSAGE_INTERRUPT_ATTACH,
     PROC_MGR_MESSAGE_INTERRUPT_DETACH,
+    PROC_MGR_MESSAGE_INTERRUPT_COMPLETE,
     PROC_MGR_MESSAGE_MAP_PHYS,
 
     /**
@@ -41,13 +42,18 @@ struct ProcMgrMessage
         } getpid;
 
         struct {
-            InterruptHandlerFunc func;
+            int connection_id;
             int irq_number;
+            void * param;
         } interrupt_attach;
 
         struct {
             InterruptHandler_t handler;
         } interrupt_detach;
+
+        struct {
+            InterruptHandler_t handler;
+        } interrupt_complete;
 
         struct {
             uintptr_t physaddr;
