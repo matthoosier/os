@@ -1,16 +1,37 @@
 #ifndef __ARCH_H__
 #define __ARCH_H__
 
+/*! \file sys/arch.h */
+
 #include <stdint.h>
 
 #include <sys/decls.h>
 
 #ifdef __arm__
-    #define PAGE_SHIFT          12          /* One page is 2 ** 12 bytes */
+
+    /**
+     * \brief   Base-2 log of the number bytes in one MMU page.
+     *
+     * That is, one page is 2<sup>#PAGE_SIZE</sup> bytes long.
+     */
+    #define PAGE_SHIFT          12
+
+    /**
+     * \brief   Mask with which an address can be bitwise-ANDed
+     *          in order to round an address down to the nearest
+     *          #PAGE_SIZE boundary. 
+     */
     #define PAGE_MASK           0xfffff000  /* The 20 most sig. bits */
 
+    /**
+     * \brief   The number of bytes contained in the linear range
+     *          of memory addressable by the ARM MMU as one "section"
+     */
     #define SECTION_SIZE        (1 << MEGABYTE_SHIFT)
 
+    /**
+     * \brief   Number of registers kept in context-save area for ARM
+     */
     #define REGISTER_COUNT      (16 + 1)
 
     #define REGISTER_INDEX_ARG0  0
@@ -20,6 +41,9 @@
     #define REGISTER_INDEX_PC   15
     #define REGISTER_INDEX_PSR  16
 
+    /**
+     * \brief   Fetch the current stack pointer value
+     */
     #define CURRENT_STACK_POINTER()                     \
         ({                                              \
         uint32_t sp;                                    \
@@ -42,12 +66,39 @@
     #error
 #endif
 
+/**
+ * \brief   The number of bytes contained in one MMU page.
+ *
+ * This is the fundamental unit of currency for all virtual memory
+ * management. All memory is allocated, deallocated, mapped, and manipulated
+ * in PAGE_SIZE chunks.
+ *
+ * See #Page for the basic API to manipulate virtual memory pages.
+ */
 #define PAGE_SIZE                   (1 << PAGE_SHIFT)
+
+/**
+ * \brief   Compute the number of pages completely filled
+ *          by \em _sz bytes
+ */
 #define PAGE_COUNT_FROM_SIZE(_sz)   ((_sz) >> PAGE_SHIFT)
 
+/**
+ * \brief   Base-2 log of one binary megabyte (2<sup>20</sup> bytes)
+ */
 #define MEGABYTE_SHIFT              20
+
+/**
+ * \brief   Mask with which an address can be bitwise-ANDed
+ *          in order to round an address down to the nearest
+ *          one-megabyte boundary. 
+ */
 #define MEGABYTE_MASK               0xfff00000
 
+/**
+ * \brief   Compute the nearest address not less than \em _val
+ *          which is a multiple of 2<sup>\em _pow</sup>
+ */
 #define ALIGN(_val, _pow)                                       \
         ((((_val) + ((1 << (_pow)) - 1)) >> (_pow)) << (_pow))
 
