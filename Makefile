@@ -8,4 +8,7 @@ run:
 	./waf
 	qemu-system-arm -serial stdio -s -S -kernel build/image -cpu arm1136 -M versatilepb
 
-.PHONY: debug run
+doc:
+	doxygen Doxyfile
+
+.PHONY: debug run doc

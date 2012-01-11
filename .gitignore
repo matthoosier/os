@@ -2,3 +2,4 @@
 .waf-*
 .lock-waf*
 build/
+doc/
