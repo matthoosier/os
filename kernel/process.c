@@ -248,8 +248,9 @@ struct Process * exec_into_current (
                 goto free_process;
             }
 
-            segment->base = phdr->p_vaddr;
-            segment->length = phdr->p_memsz;
+            /* Handle segments that don't line up on page boundaries */
+            segment->base = phdr->p_vaddr & PAGE_MASK;
+            segment->length = phdr->p_memsz + (phdr->p_vaddr - segment->base);
 
             /* All the address space of the process must be in user memory range */
             assert(segment->base + segment->length <= KERNEL_MODE_OFFSET);
@@ -282,7 +283,7 @@ struct Process * exec_into_current (
 
             /* ... first the explicitly initialized part */
             memcpy(
-                (void *)segment->base,
+                (void *)phdr->p_vaddr,
                 image->fileStart + phdr->p_offset,
                 phdr->p_filesz
                 );
@@ -290,7 +291,7 @@ struct Process * exec_into_current (
             /* ... now fill the zero-init part */
             if (phdr->p_filesz < phdr->p_memsz) {
                 memset(
-                    (void *)(segment->base + phdr->p_filesz),
+                    (void *)(phdr->p_vaddr + phdr->p_filesz),
                     0,
                     phdr->p_memsz - phdr->p_filesz
                     );

@@ -102,8 +102,8 @@ def build(ctx):
     progs = []
 
     libc = ctx.stlib(
-        source      =   [ 'libc/crt.c', 'libc/syscall.c', 'libc/user_io.c', 'libc/user_message.c', 'libc/user_process.c' ],
-        target      =   'c',
+        source      =   libc_sources,
+        target      =   'my_c',
         includes    =   [ 'include' ],
         env         =   ctx.all_envs['cross'].derive(),
     )
@@ -113,8 +113,8 @@ def build(ctx):
             source      =   src_list,
             target      =   p,
             includes    =   [ 'include' ],
-            linkflags   =   [ '-nostdlib', '-Wl,-Ttext-segment,0x%x' % link_base_addr ],
-            use         =   'c',
+            linkflags   =   [ '-nostartfiles', '-Wl,-Ttext-segment,0x%x' % link_base_addr ],
+            use         =   'my_c',
             env         =   ctx.all_envs['cross'].derive(),
         )
         p_tgen.post()
