@@ -169,6 +169,7 @@ void run_first_thread ()
     ProcessCreate("echo");
     ProcessCreate("syscall-client");
     ProcessCreate("uio");
+    ProcessCreate("pl011");
 
     while (true) {
         ThreadYieldWithRequeue();

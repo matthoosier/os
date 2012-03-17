@@ -44,6 +44,7 @@ user_progs = [
     ('echo',            [ 'echo.c' ],           0x10000),
     ('syscall-client',  [ 'syscall-client.c' ], 0x20000),
     ('uio',             [ 'uio.c' ],            0x30000),
+    ('pl011',           [ 'pl011.c' ],          0x40000),
 ]
 
 def options(opt):
