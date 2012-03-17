@@ -154,6 +154,8 @@ static void ProcessFree (struct Process * process)
         KDisconnect(connection);
     }
 
+    /* XXX: Free the message (if any) the process has sent but not yet been replied */
+
     /* XXX: Free all messages that the process has received but not yet responded to */
 
     TreeMapFree(process->id_to_channel_map);

@@ -75,13 +75,13 @@ def configure(conf):
     # on the build machine's OS
     conf.env.DEST_OS = ''
 
-    conf.env.AS = 'arm-none-eabi-as'
-    conf.env.AR = 'arm-none-eabi-ar'
-    conf.env.CC = 'arm-none-eabi-gcc'
-    conf.env.LD = 'arm-none-eabi-ld'
+    conf.find_program('arm-none-eabi-as', var='AS')
+    conf.find_program('arm-none-eabi-ar', var='AR')
+    conf.find_program('arm-none-eabi-gcc', var='CC')
+    conf.find_program('arm-none-eabi-ld', var='LD')
 
-    conf.env.CFLAGS     = [ '-march=armv6', '-g', '-Wall', '-Werror' ]
-    conf.env.ASFLAGS    = [ '-march=armv6', '-g' ]
+    conf.env.append_unique('CFLAGS', [ '-march=armv6', '-g', '-Wall', '-Werror' ])
+    conf.env.append_unique('ASFLAGS', [ '-march=armv6', '-g' ])
 
     conf.load('gcc')
     conf.load('gas')
