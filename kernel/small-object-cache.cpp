@@ -79,10 +79,10 @@ static struct Slab * small_objects_try_allocate_slab (struct ObjectCache * cache
 }
 
 const struct ObjectCacheOps small_objects_ops = {
-    .StaticInit = static_init,
-    .Constructor = constructor,
-    .Destructor = destructor,
-    .TryAllocateSlab = small_objects_try_allocate_slab,
-    .TryFreeSlab = small_objects_free_slab,
-    .MapBufctlToSlab = small_objects_slab_from_bufctl,
+    /* StaticInit       */  static_init,
+    /* Constructor      */  constructor,
+    /* Destructor       */  destructor,
+    /* TryAllocateSlab  */  small_objects_try_allocate_slab,
+    /* TryFreeSlab      */  small_objects_free_slab,
+    /* MapBufctlToSlab  */  small_objects_slab_from_bufctl,
 };

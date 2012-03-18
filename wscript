@@ -1,30 +1,33 @@
 top = '.'
 out = 'build'
 
+CROSS   = 'cross'
+NATIVE  = 'native'
+
 kernel_sources = [
-    'kernel/assert.c',
-    'kernel/early-mmu.c',
-    'kernel/init.c',
-    'kernel/interrupts.c',
-    'kernel/kmalloc.c',
-    'kernel/large-object-cache.c',
-    'kernel/message.c',
-    'kernel/mmu.c',
-    'kernel/object-cache.c',
-    'kernel/once.c',
-    'kernel/process.c',
-    'kernel/procmgr.c',
-    'kernel/procmgr_getpid.c',
-    'kernel/procmgr_interrupts.c',
-    'kernel/procmgr_map.c',
-    'kernel/ramfs.c',
-    'kernel/small-object-cache.c',
+    'kernel/assert.cpp',
+    'kernel/early-mmu.cpp',
+    'kernel/init.cpp',
+    'kernel/interrupts.cpp',
+    'kernel/kmalloc.cpp',
+    'kernel/large-object-cache.cpp',
+    'kernel/message.cpp',
+    'kernel/mmu.cpp',
+    'kernel/object-cache.cpp',
+    'kernel/once.cpp',
+    'kernel/process.cpp',
+    'kernel/procmgr.cpp',
+    'kernel/procmgr_getpid.cpp',
+    'kernel/procmgr_interrupts.cpp',
+    'kernel/procmgr_map.cpp',
+    'kernel/ramfs.cpp',
+    'kernel/small-object-cache.cpp',
     'kernel/stdlib.c',
     'kernel/syscall.c',
-    'kernel/thread.c',
-    'kernel/timer.c',
-    'kernel/tree-map.c',
-    'kernel/vm.c',
+    'kernel/thread.cpp',
+    'kernel/timer.cpp',
+    'kernel/tree-map.cpp',
+    'kernel/vm.cpp',
 
     'kernel/atomic.S',
     'kernel/early-entry.S',
@@ -59,7 +62,7 @@ def configure(conf):
     # used to preprocess artifacts for inclusion into the target system.
     #
 
-    conf.setenv('native')
+    conf.setenv(NATIVE)
 
     conf.load('compiler_c')
     conf.load('compiler_cxx')
@@ -69,7 +72,7 @@ def configure(conf):
     # user programs and kernel.
     #
 
-    conf.setenv('cross')
+    conf.setenv(CROSS)
 
     # Suppress Waf from automatically inserting some linker flags based
     # on the build machine's OS
@@ -78,12 +81,18 @@ def configure(conf):
     conf.find_program('arm-none-eabi-as', var='AS')
     conf.find_program('arm-none-eabi-ar', var='AR')
     conf.find_program('arm-none-eabi-gcc', var='CC')
+    conf.find_program('arm-none-eabi-g++', var='CXX')
     conf.find_program('arm-none-eabi-ld', var='LD')
 
-    conf.env.append_unique('CFLAGS', [ '-march=armv6', '-g', '-Wall', '-Werror' ])
-    conf.env.append_unique('ASFLAGS', [ '-march=armv6', '-g' ])
+    cflags = [ '-march=armv6', '-g', '-Wall', '-Werror' ]
+    asflags = [ '-march=armv6', '-g' ]
+
+    conf.env.append_unique('CFLAGS', cflags)
+    conf.env.append_unique('CXXFLAGS', cflags + ['-fno-exceptions'])
+    conf.env.append_unique('ASFLAGS', asflags)
 
     conf.load('gcc')
+    conf.load('gxx')
     conf.load('gas')
 
     # Override defaults from Waf's GCC support
@@ -106,7 +115,7 @@ def build(ctx):
         source      =   libc_sources,
         target      =   'my_c',
         includes    =   [ 'include' ],
-        env         =   ctx.all_envs['cross'].derive(),
+        env         =   ctx.all_envs[CROSS].derive(),
     )
 
     for (p, src_list, link_base_addr) in user_progs:
@@ -116,7 +125,7 @@ def build(ctx):
             includes    =   [ 'include' ],
             linkflags   =   [ '-nostartfiles', '-Wl,-Ttext-segment,0x%x' % link_base_addr ],
             use         =   'my_c',
-            env         =   ctx.all_envs['cross'].derive(),
+            env         =   ctx.all_envs[CROSS].derive(),
         )
         p_tgen.post()
         progs += [ p_tgen ]
@@ -128,7 +137,7 @@ def build(ctx):
     fs_builder = ctx.program(
         source      =   'fs-builder.cc',
         target      =   'fs-builder',
-        env         =   ctx.all_envs['native'].derive(),
+        env         =   ctx.all_envs[NATIVE].derive(),
     )
 
     fs_builder.post()
@@ -171,7 +180,7 @@ def build(ctx):
 
         linkflags   =   [ '-Wl,-T,' + linker_script.bldpath(), '-nostdlib' ],
 
-        env         =   ctx.all_envs['cross'].derive(),
+        env         =   ctx.all_envs[CROSS].derive(),
     )
     image.post()
 

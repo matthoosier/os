@@ -21,14 +21,14 @@ Spinlock_t         slabs_cache_lock = SPINLOCK_INIT;
 
 static Once_t init_control = ONCE_INIT;
 
+void init_slabs_cache (void * param)
+{
+    ObjectCacheInit(&slabs_cache, sizeof(struct Slab));
+}
+
 static void static_init ()
 {
-    void init_once (void * param)
-    {
-        ObjectCacheInit(&slabs_cache, sizeof(struct Slab));
-    }
-
-    Once(&init_control, init_once, NULL);
+    Once(&init_control, init_slabs_cache, NULL);
 }
 
 static void constructor (struct ObjectCache * cache)
@@ -56,7 +56,7 @@ static struct Slab * large_objects_try_allocate_slab (struct ObjectCache * cache
     }
 
     SpinlockLock(&slabs_cache_lock);
-    new_slab = ObjectCacheAlloc(&slabs_cache);
+    new_slab = (struct Slab *)ObjectCacheAlloc(&slabs_cache);
     SpinlockUnlock(&slabs_cache_lock);
 
     if (!new_slab) {
@@ -109,7 +109,7 @@ static void large_objects_free_slab (struct ObjectCache * cache, struct Slab * s
             
             struct Slab * removed;
 
-            removed = TreeMapRemove(cache->bufctl_to_slab_map, bufctl_cursor);
+            removed = (struct Slab *)TreeMapRemove(cache->bufctl_to_slab_map, bufctl_cursor);
             assert(removed != NULL);
         }
 
@@ -128,14 +128,14 @@ static struct Slab * large_objects_slab_from_bufctl (
         void * bufctl_addr
         )
 {
-    return TreeMapLookup(cache->bufctl_to_slab_map, bufctl_addr);
+    return (struct Slab *)TreeMapLookup(cache->bufctl_to_slab_map, bufctl_addr);
 }
 
 const struct ObjectCacheOps large_objects_ops = {
-    .StaticInit = static_init,
-    .Constructor = constructor,
-    .Destructor = destructor,
-    .TryAllocateSlab = large_objects_try_allocate_slab,
-    .TryFreeSlab = large_objects_free_slab,
-    .MapBufctlToSlab = large_objects_slab_from_bufctl,
+    /* StaticInit       */  static_init,
+    /* Constructor      */  constructor,
+    /* Destructor       */  destructor,
+    /* TryAllocateSlab  */  large_objects_try_allocate_slab,
+    /* TryFreeSlab      */  large_objects_free_slab,
+    /* MapBufctlToSlab  */  large_objects_slab_from_bufctl,
 };

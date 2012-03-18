@@ -120,7 +120,7 @@ struct TreeMap * TreeMapAlloc (TreeMapCompareFunc comparator)
     Once(&init_control, tree_map_static_init, NULL);
 
     SpinlockLock(&tree_map_cache_lock);
-    result = ObjectCacheAlloc(&tree_map_cache);
+    result = (struct TreeMap *)ObjectCacheAlloc(&tree_map_cache);
     SpinlockUnlock(&tree_map_cache_lock);
 
     result->root = NULL;
@@ -214,27 +214,27 @@ unsigned int TreeMapSize (
     return tree->size;
 }
 
+struct closure
+{
+    TreeMapForeachFunc user_func;
+    void * user_data;
+};
+
+static void user_data_visitor (internal_node * node, void * user_data)
+{
+    struct closure * closure = (struct closure *)user_data;
+
+    if (node) {
+        closure->user_func(node->key, node->value, closure->user_data);
+    }
+}
+
 void TreeMapForeach (
         struct TreeMap * tree,
         TreeMapForeachFunc func,
         void * user_data
         )
 {
-    struct closure
-    {
-        TreeMapForeachFunc user_func;
-        void * user_data;
-    };
-
-    void user_data_visitor (internal_node * node, void * user_data)
-    {
-        struct closure * closure = (struct closure *)user_data;
-
-        if (node) {
-            closure->user_func(node->key, node->value, closure->user_data);
-        }
-    }
-
     struct closure c = { func, user_data };
 
     assert(tree != NULL);
@@ -275,7 +275,7 @@ static internal_node * internal_insert (
     }
     else {
         SpinlockLock(&internal_node_cache_lock);
-        internal_node * new_node = ObjectCacheAlloc(&internal_node_cache);
+        internal_node * new_node = (internal_node *)ObjectCacheAlloc(&internal_node_cache);
         SpinlockUnlock(&internal_node_cache_lock);
 
         new_node->left = NULL;

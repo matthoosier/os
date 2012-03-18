@@ -86,53 +86,53 @@ static void increment_irq_mask (unsigned int irq_number)
 
 static struct Pl190 * GetPl190 ();
 
+static void init_handlers (void * ignored)
+{
+    unsigned int i;
+
+    /**
+     * Install stack pointer for IRQ mode
+     */
+    asm volatile (
+        /* Save current execution mode                  */
+        "mrs v1, cpsr               \n\t"
+
+        /* Switch to IRQ mode and install stack pointer */
+        "cps %[irq_mode_bits]       \n\t"
+        "mov sp, %[irq_sp]          \n\t"
+
+        /* Restore previous execution mode              */
+        "msr cpsr, v1               \n\t"
+        :
+        : [irq_sp] "r" (&irq_stack[0] + sizeof(irq_stack))
+        , [irq_mode_bits] "i" (ARM_IRQ_MODE_BITS)
+        : "memory", "v1"
+    );
+
+    /**
+     * Initialize array of in-kernel IRQ handler functions
+     */
+    memset(kernel_irq_handlers, 0, sizeof(kernel_irq_handlers));
+
+    /**
+     * Initialize array of user-process IRQ handler functions
+     */
+    memset(user_irq_handlers, 0, sizeof(user_irq_handlers));
+    for (i = 0; i < N_ELEMENTS(user_irq_handlers); i++) {
+        INIT_LIST_HEAD(&user_irq_handlers[i]);
+    }
+}
+
 void InterruptsConfigure ()
 {
     static Once_t control = ONCE_INIT;
 
-    void init (void * ignored)
-    {
-        unsigned int i;
-
-        /**
-         * Install stack pointer for IRQ mode
-         */
-        asm volatile (
-            /* Save current execution mode                  */
-            "mrs v1, cpsr               \n\t"
-
-            /* Switch to IRQ mode and install stack pointer */
-            "cps %[irq_mode_bits]       \n\t"
-            "mov sp, %[irq_sp]          \n\t"
-
-            /* Restore previous execution mode              */
-            "msr cpsr, v1               \n\t"
-            :
-            : [irq_sp] "r" (&irq_stack[0] + sizeof(irq_stack))
-            , [irq_mode_bits] "i" (ARM_IRQ_MODE_BITS)
-            : "memory", "v1"
-        );
-
-        /**
-         * Initialize array of in-kernel IRQ handler functions
-         */
-        memset(kernel_irq_handlers, 0, sizeof(kernel_irq_handlers));
-
-        /**
-         * Initialize array of user-process IRQ handler functions
-         */
-        memset(user_irq_handlers, 0, sizeof(user_irq_handlers));
-        for (i = 0; i < N_ELEMENTS(user_irq_handlers); i++) {
-            INIT_LIST_HEAD(&user_irq_handlers[i]);
-        }
-    }
-
-    Once(&control, init, NULL);
+    Once(&control, init_handlers, NULL);
 }
 
-void InterruptAttachKernelHandler (int irq_number, IrqKernelHandlerFunc f)
+void InterruptAttachKernelHandler (unsigned int irq_number, IrqKernelHandlerFunc f)
 {
-    assert((irq_number >= 0) && (irq_number < N_ELEMENTS(kernel_irq_handlers)));
+    assert(irq_number < N_ELEMENTS(kernel_irq_handlers));
 
     SpinlockLock(&irq_handlers_lock);
 
@@ -282,35 +282,37 @@ void InterruptMaskIrq (int n)
     *GetPl190()->IntEnClear = 1u << n;
 }
 
+void init_pl190 (void * pDevice)
+{
+    enum
+    {
+        PL190_BASE_PHYS = 0x10140000,
+        PL190_BASE_VIRT = 0xfff10000,
+    };
+
+    struct Pl190 * device = (struct Pl190 *)pDevice;
+
+    bool mapped = TranslationTableMapPage(
+            MmuGetKernelTranslationTable(),
+            PL190_BASE_VIRT,
+            PL190_BASE_PHYS,
+            PROT_KERNEL
+            );
+    assert(mapped);
+
+    uint8_t * base = (uint8_t *)PL190_BASE_VIRT;
+
+    device->IrqStatus   = (uint32_t *)(base + 0x000);
+    device->IntEnable   = (uint32_t *)(base + 0x010);
+    device->IntEnClear  = (uint32_t *)(base + 0x014);
+}
+
 static struct Pl190 * GetPl190 ()
 {
     static struct Pl190 device;
     static Once_t       control = ONCE_INIT;
 
-    void init (void * param)
-    {
-        enum
-        {
-            PL190_BASE_PHYS = 0x10140000,
-            PL190_BASE_VIRT = 0xfff10000,
-        };
-
-        bool mapped = TranslationTableMapPage(
-                MmuGetKernelTranslationTable(),
-                PL190_BASE_VIRT,
-                PL190_BASE_PHYS,
-                PROT_KERNEL
-                );
-        assert(mapped);
-
-        uint8_t * base = (uint8_t *)PL190_BASE_VIRT;
-
-        device.IrqStatus    = (uint32_t *)(base + 0x000);
-        device.IntEnable    = (uint32_t *)(base + 0x010);
-        device.IntEnClear   = (uint32_t *)(base + 0x014);
-    }
-
-    Once(&control, init, NULL);
+    Once(&control, init_pl190, &device);
     return &device;
 }
 
@@ -330,7 +332,7 @@ struct UserInterruptHandlerRecord * UserInterruptHandlerRecordAlloc ()
     Once(&user_interrupt_handler_cache_once, user_interrupt_handler_cache_init, NULL);
 
     SpinlockLock(&user_interrupt_handler_cache_lock);
-    ret = ObjectCacheAlloc(&user_interrupt_handler_cache);
+    ret = (struct UserInterruptHandlerRecord *)ObjectCacheAlloc(&user_interrupt_handler_cache);
     SpinlockUnlock(&user_interrupt_handler_cache_lock);
 
     if (ret) {

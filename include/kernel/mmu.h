@@ -9,6 +9,8 @@
 #include <kernel/tree-map.h>
 #include <kernel/vm.h>
 
+BEGIN_DECLS
+
 /*
  * Domains are a coarse-grained way to control access to great swaths of
  * memory at one time.
@@ -279,5 +281,7 @@ enum
     PT_SECONDLEVEL_SMALL_PAGE_BASE_ADDR_BITS    = 20,
     PT_SECONDLEVEL_SMALL_PAGE_BASE_ADDR_MASK    = (0xfffff << PT_SECONDLEVEL_SMALL_PAGE_BASE_ADDR_SHIFT),
 };
+
+END_DECLS
 
 #endif /* __MMU_H__ */

@@ -20,7 +20,11 @@ typedef struct
 #define SPINLOCK_LOCKVAL_UNLOCKED   0
 #define SPINLOCK_LOCKVAL_LOCKED     1
 
-#define SPINLOCK_INIT { .lockval = SPINLOCK_LOCKVAL_UNLOCKED }
+#ifdef __cplusplus
+#   define SPINLOCK_INIT { lockval: SPINLOCK_LOCKVAL_UNLOCKED }
+#else
+#   define SPINLOCK_INIT { .lockval = SPINLOCK_LOCKVAL_UNLOCKED }
+#endif
 
 static inline void SpinlockInit (Spinlock_t * lock)
 {

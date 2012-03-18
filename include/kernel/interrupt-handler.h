@@ -43,7 +43,7 @@ struct UserInterruptHandlerRecord
  */
 void InterruptsConfigure();
 
-void InterruptAttachKernelHandler (int irq_number, IrqKernelHandlerFunc f);
+void InterruptAttachKernelHandler (unsigned int irq_number, IrqKernelHandlerFunc f);
 
 void InterruptAttachUserHandler (
         struct UserInterruptHandlerRecord * handler
@@ -62,9 +62,9 @@ void UserInterruptHandlerRecordFree (struct UserInterruptHandlerRecord * record)
 
 void InterruptHandler ();
 
-void InterruptUnmaskIrq ();
+void InterruptUnmaskIrq (int n);
 
-void InterruptMaskIrq ();
+void InterruptMaskIrq (int n);
 
 END_DECLS
 

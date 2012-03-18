@@ -67,7 +67,7 @@ void * kmalloc (size_t size)
 
     bucket = bucket_from_size(size);
 
-    if (bucket >= 0 && bucket < N_ELEMENTS(allocators)) {
+    if (bucket >= 0 && (unsigned int)bucket < N_ELEMENTS(allocators)) {
         SpinlockLock(&allocators_lock);
         ret = ObjectCacheAlloc(&allocators[bucket]);
         SpinlockUnlock(&allocators_lock);
@@ -91,7 +91,7 @@ void kfree (void * ptr, size_t size)
 
     bucket = bucket_from_size(size);
 
-    if (bucket >= 0 && bucket < N_ELEMENTS(allocators)) {
+    if (bucket >= 0 && (unsigned int)bucket < N_ELEMENTS(allocators)) {
         SpinlockLock(&allocators_lock);
         ObjectCacheFree(&allocators[bucket], ptr);
         SpinlockUnlock(&allocators_lock);

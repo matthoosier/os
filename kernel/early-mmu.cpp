@@ -25,8 +25,8 @@ static pt_firstlevel_t early_table[4096]
 
 static void _install_pagetable()
 {
-    uint32_t ttbc = ttbc;
-    uint32_t ttbr0 = ttbr0;
+    uint32_t ttbc;
+    uint32_t ttbr0;
 
     /*
     Only bits 14 through 31 (that is, the high 18 bits) of the translation
@@ -100,6 +100,10 @@ static void _enable_mmu()
 
     /* No need toFlush TLB; any memory already accessed is still valid. */
 }
+
+BEGIN_DECLS
+void early_setup_dual_memory_map (void);
+END_DECLS
 
 void early_setup_dual_memory_map (void)
 {

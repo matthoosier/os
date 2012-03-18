@@ -44,7 +44,7 @@ static void HandleMapPhys (
 
         for (i = 0; i < len; i += PAGE_SIZE) {
 
-            page = kmalloc(sizeof(*page));
+            page = (struct mapped_page *)kmalloc(sizeof(*page));
 
             if (!page) {
                 break;

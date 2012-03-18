@@ -34,8 +34,8 @@ static void ThreadSwitch (
         void * funcParam
         )
 {
-    uint32_t next_pc = next_pc;         /* Used by assembly fragment    */
-    uint32_t cpsr_temp = cpsr_temp;     /* Used by assembly fragment    */
+    uint32_t next_pc = 0;               /* Used by assembly fragment    */
+    uint32_t cpsr_temp = 0;             /* Used by assembly fragment    */
 
     struct TranslationTable * incoming_tt = incoming->process
             ? incoming->process->pagetable

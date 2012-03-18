@@ -16,39 +16,41 @@ struct Sp804
     volatile        uint32_t * BgLoad;
 };
 
+static void init_sp804 (void * pDevice)
+{
+    enum
+    {
+        SP804_BASE_PHYS = 0x101e2000,
+        SP804_BASE_VIRT = 0xfff00000,
+    };
+
+    struct Sp804 * device = (struct Sp804 *)pDevice;
+
+    bool mapped = TranslationTableMapPage(
+            MmuGetKernelTranslationTable(),
+            SP804_BASE_VIRT,
+            SP804_BASE_PHYS,
+            PROT_KERNEL
+            );
+    assert(mapped);
+
+    uint8_t * base = (uint8_t *)SP804_BASE_VIRT;
+
+    device->Load    = (uint32_t *)  (base + 0x00);
+    device->Value   = (uint32_t *)  (base + 0x04);
+    device->Control = (uint32_t *)  (base + 0x08);
+    device->IntClr  = (uint32_t *)  (base + 0x0c);
+    device->RIS     = (uint32_t *)  (base + 0x10);
+    device->MIS     = (uint32_t *)  (base + 0x14);
+    device->BgLoad  = (uint32_t *)  (base + 0x18);
+}
+
 static struct Sp804 * GetSp804 ()
 {
     static struct Sp804 device;
     static Once_t       control = ONCE_INIT;
 
-    void init (void * param)
-    {
-        enum
-        {
-            SP804_BASE_PHYS = 0x101e2000,
-            SP804_BASE_VIRT = 0xfff00000,
-        };
-
-        bool mapped = TranslationTableMapPage(
-                MmuGetKernelTranslationTable(),
-                SP804_BASE_VIRT,
-                SP804_BASE_PHYS,
-                PROT_KERNEL
-                );
-        assert(mapped);
-
-        uint8_t * base = (uint8_t *)SP804_BASE_VIRT;
-
-        device.Load     = (uint32_t *)  (base + 0x00);
-        device.Value    = (uint32_t *)  (base + 0x04);
-        device.Control  = (uint32_t *)  (base + 0x08);
-        device.IntClr   = (uint32_t *)  (base + 0x0c);
-        device.RIS      = (uint32_t *)  (base + 0x10);
-        device.MIS      = (uint32_t *)  (base + 0x14);
-        device.BgLoad   = (uint32_t *)  (base + 0x18);
-    }
-
-    Once(&control, init, NULL);
+    Once(&control, init_sp804, &device);
     return &device;
 }
 

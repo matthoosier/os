@@ -48,7 +48,7 @@ struct Channel * KChannelAlloc (void)
     Once(&inited, init, NULL);
 
     SpinlockLock(&channel_cache_lock);
-    result = ObjectCacheAlloc(&channel_cache);
+    result = (struct Channel*)ObjectCacheAlloc(&channel_cache);
     SpinlockUnlock(&channel_cache_lock);
 
     if (result) {
@@ -81,7 +81,7 @@ static struct Connection * ConnectionAlloc (void)
     Once(&inited, init, NULL);
 
     SpinlockLock(&connection_cache_lock);
-    c = ObjectCacheAlloc(&connection_cache);
+    c = (struct Connection *)ObjectCacheAlloc(&connection_cache);
     SpinlockUnlock(&connection_cache_lock);
 
     if (c) {
@@ -124,7 +124,7 @@ struct Message * KMessageAlloc (void)
     Once(&inited, init, NULL);
 
     SpinlockLock(&message_cache_lock);
-    message = ObjectCacheAlloc(&message_cache);
+    message = (struct Message *)ObjectCacheAlloc(&message_cache);
     SpinlockUnlock(&message_cache_lock);
 
     if (message) {

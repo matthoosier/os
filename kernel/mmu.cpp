@@ -88,7 +88,7 @@ static inline void SetTTBC (uint32_t val)
 
 static inline unsigned int ap_from_prot (Prot_t prot)
 {
-    unsigned int val = val;
+    unsigned int val;
 
     switch (prot) {
         case PROT_NONE:
@@ -219,7 +219,7 @@ void MmuSetEnabled ()
 
 void MmuFlushTlb (void)
 {
-    int ignored_register = ignored_register;
+    int ignored_register = 0;
 
     asm volatile(
         "mcr p15, 0, %[ignored_register], c8, c7, 0"
@@ -254,7 +254,7 @@ static struct SecondlevelTable * secondlevel_table_alloc ()
     struct SecondlevelTable * table;
 
     SpinlockLock(&secondlevel_table_cache_lock);
-    table = ObjectCacheAlloc(&secondlevel_table_cache);
+    table = (struct SecondlevelTable *)ObjectCacheAlloc(&secondlevel_table_cache);
     SpinlockUnlock(&secondlevel_table_cache_lock);
 
     if (table)
@@ -264,7 +264,7 @@ static struct SecondlevelTable * secondlevel_table_alloc ()
         INIT_LIST_HEAD(&table->link);
 
         SpinlockLock(&secondlevel_ptes_cache_lock);
-        table->ptes = ObjectCacheAlloc(&secondlevel_ptes_cache);
+        table->ptes = (struct SecondlevelPtes *)ObjectCacheAlloc(&secondlevel_ptes_cache);
         SpinlockUnlock(&secondlevel_ptes_cache_lock);
 
         if (!table->ptes)
@@ -331,7 +331,7 @@ struct TranslationTable * TranslationTableAlloc (void)
     Once(&mmu_init_control, mmu_static_init, NULL);
 
     SpinlockLock(&translation_table_cache_lock);
-    table = ObjectCacheAlloc(&translation_table_cache);
+    table = (struct TranslationTable *)ObjectCacheAlloc(&translation_table_cache);
     SpinlockUnlock(&translation_table_cache_lock);
 
     if (!table) {
@@ -376,6 +376,21 @@ cleanup_table:
     return NULL;
 }
 
+/*
+Use a foreach on the tree to collect any existing nodes into a
+list, then blow away the list's elements afterward.
+*/
+static void func (TreeMapKey_t key, TreeMapValue_t value, void * user_data)
+{
+    struct list_head *          head;
+    struct SecondlevelTable *  secondlevel_table;
+
+    head                = (struct list_head *)user_data;
+    secondlevel_table   = (struct SecondlevelTable *)value;
+
+    list_add(&secondlevel_table->link, head);
+}
+
 void TranslationTableFree (struct TranslationTable * table)
 {
     /* Aggregates any individual secondlevel_table's that need freed */
@@ -385,21 +400,6 @@ void TranslationTableFree (struct TranslationTable * table)
 
     /* Clean out any individual second-level translation tables */
     INIT_LIST_HEAD(&head);
-
-    /*
-    Use a foreach on the tree to collect any existing nodes into a
-    list, then blow away the list's elements afterward.
-    */
-    void func (TreeMapKey_t key, TreeMapValue_t value, void * user_data)
-    {
-        struct list_head *          head;
-        struct SecondlevelTable *  secondlevel_table;
-
-        head                = (struct list_head *)user_data;
-        secondlevel_table   = (struct SecondlevelTable *)value;
-
-        list_add(&secondlevel_table->link, head);
-    }
 
     /* Go ahead and gather up all the nodes */
     TreeMapForeach(table->sparse_secondlevel_map, func, &head);
@@ -624,7 +624,7 @@ bool TranslationTableMapPage (
 
         case PT_FIRSTLEVEL_MAPTYPE_COARSE:
         {
-            secondlevel_table = TreeMapLookup(
+            secondlevel_table = (struct SecondlevelTable *)TreeMapLookup(
                     table->sparse_secondlevel_map,
                     (TreeMapKey_t)virt_mb_rounded
                     );
@@ -719,7 +719,7 @@ bool TranslationTableUnmapPage (
 
         case PT_FIRSTLEVEL_MAPTYPE_COARSE:
 
-            secondlevel_table = TreeMapLookup(
+            secondlevel_table = (struct SecondlevelTable *)TreeMapLookup(
                     table->sparse_secondlevel_map,
                     (TreeMapKey_t)virt_mb_rounded
                     );
@@ -751,7 +751,7 @@ bool TranslationTableUnmapPage (
         table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] &= ~PT_FIRSTLEVEL_MAPTYPE_MASK;
         table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] |= PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
 
-        secondlevel_table = TreeMapRemove(
+        secondlevel_table = (struct SecondlevelTable *)TreeMapRemove(
                 table->sparse_secondlevel_map,
                 (TreeMapKey_t)virt_mb_rounded
                 );
