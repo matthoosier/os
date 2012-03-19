@@ -2,22 +2,22 @@
 #define __LIST_HPP__
 
 #include <assert.h>
+#include <stdint.h>
 
-template <class T>
-    class ListElement
+class ListElement
+{
+public:
+    ListElement()
+        : prev(this)
+        , next(this)
     {
-    public:
-        ListElement()
-            : prev(0)
-            , next(0)
-        {
-        }
+    }
 
-        T * prev;
-        T * next;
-    };
+    ListElement * prev;
+    ListElement * next;
+};
 
-template <class T>
+template <class T, ListElement T::* Ptr>
     class List
     {
     public:
@@ -41,43 +41,38 @@ template <class T>
         friend class List;
 
         private:
-            Iterator (List<T> * list, T * elem)
+            Iterator (List<T, Ptr> * list, ListElement * elem)
                 : mList(list)
                 , mElem(elem)
             {
-                mNextElem = NextFromElement(mElem);
-            }
-
-            T * NextFromElement (T * element)
-            {
-                return element ? mList->Next(element) : 0;
+                mNextElem = mElem->next;
             }
 
             void Advance ()
             {
                 mElem = mNextElem;
-                mNextElem = NextFromElement(mElem);
+                mNextElem = mElem->next;
             }
 
         private:
-            List<T> *   mList;
-            T *         mElem;
-            T *         mNextElem;
+            List<T, Ptr> *  mList;
+            ListElement *   mElem;
+            ListElement *   mNextElem;
 
         public:
             T * operator -> ()
             {
-                return mElem;
+                return mList->elemFromHead(mElem);
             }
 
             T * operator * ()
             {
-                return mElem;
+                return mList->elemFromHead(mElem);
             }
 
             operator bool ()
             {
-                return mElem != 0;
+                return mElem != &mList->mHead;
             }
 
             Iterator operator ++ (int dummy)
@@ -94,10 +89,7 @@ template <class T>
             }
         };
 
-        List (ListElement<T> T::* links)
-            : head(0)
-            , tail(0)
-            , ptrLinks(links)
+        List ()
         {
         }
 
@@ -106,99 +98,64 @@ template <class T>
             assert(Empty());
         }
 
-        Iterator Begin ()
-        {
-            return Iterator(this, head);
+        Iterator Begin () {
+            return Iterator(this, mHead.next);
         }
 
-        bool Empty ()
-        {
-            assert((head && tail) || (!head && !tail));
-
-            return !head;
+        bool Empty () {
+            return &mHead == mHead.next;
         }
 
-        void Prepend (T * element)
-        {
-            ListElement<T> * elementLinks = &(element->*ptrLinks);
-
-            if (Empty()) {
-                elementLinks->prev = elementLinks->next = 0;
-                head = tail = element;
-            }
-            else {
-                ListElement<T> * headLinks = &(head->*ptrLinks);
-                elementLinks->next = head;
-                headLinks->prev = element;
-                head = element;
-            }
+        void Prepend (T * element) {
+            ListElement * elementHead = &(element->*Ptr);
+            elementHead->prev = &mHead;
+            elementHead->next = mHead.next;
+            mHead.next->prev = elementHead;
+            mHead.next = elementHead;
         }
 
         void Append (T * element) {
-            ListElement<T> * elementLinks = &(element->*ptrLinks);
-
-            if (Empty()) {
-                elementLinks->prev = elementLinks->next = 0;
-                head = tail = element;
-            }
-            else {
-                ListElement<T> * tailLinks = &(tail->*ptrLinks);
-                elementLinks->prev = tail;
-                tailLinks->next = element;
-                tail = element;
-            }
+            ListElement * elementHead = &(element->*Ptr);
+            elementHead->prev = mHead.prev;
+            elementHead->next = &mHead;
+            mHead.prev->next = elementHead;
+            mHead.prev = elementHead;
         }
 
         void Remove (T * element) {
-            ListElement<T> * elementLinks = &(element->*ptrLinks);
-
             assert(!Empty());
 
-            if (head == element && tail == element) {
-                head = tail = 0;
-            }
-            else if (head == element) {
-                head = elementLinks->next;
-                ListElement<T> * headLinks = &(head->*ptrLinks);
-                headLinks->prev = 0;
-            }
-            else if (tail == element) {
-                tail = elementLinks->prev;
-                ListElement<T> * tailLinks = &(tail->*ptrLinks);
-                tailLinks->next = 0;
-            }
-            else {
-                ListElement<T> * prevLinks = &(elementLinks->prev->*ptrLinks);
-                ListElement<T> * nextLinks = &(elementLinks->next->*ptrLinks);
-                prevLinks->next = elementLinks->next;
-                nextLinks->prev = elementLinks->prev;
-            }
-
-            elementLinks->prev = elementLinks->next = 0;
+            ListElement * elementHead = &(element->*Ptr);
+            elementHead->prev->next = elementHead->next;
+            elementHead->next->prev = elementHead->prev;
+            elementHead->next = elementHead->prev = elementHead;
         }
 
         T * First () {
-            return head;
-        }
-
-        T * Last () {
-            return tail;
+            return elemFromHead(mHead.next);
         }
 
         T * Next (T * element) {
-            ListElement<T> * elementLinks = &(element->*ptrLinks);
-            return elementLinks->next;
+            ListElement * elementHead = &(element->*Ptr);
+            return elemFromHead(elementHead->next);
         }
 
         T * Prev (T * element) {
-            ListElement<T> * elementLinks = &(element->*ptrLinks);
-            return elementLinks->prev;
+            ListElement * elementHead = &(element->*Ptr);
+            return elemFromHead(elementHead->prev);
         }
 
     private:
-        T * head;
-        T * tail;
-        ListElement<T> T::* ptrLinks;
+        ListElement         mHead;
+
+        T * elemFromHead (ListElement * head) {
+
+            ListElement * zeroHead = &(static_cast<T*>(0)->*Ptr);
+            uintptr_t offset = reinterpret_cast<uintptr_t>(zeroHead);
+
+            T * result = reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(head) - offset);
+            return result;
+        }
     };
 
 #endif /* __LIST_HPP__ */

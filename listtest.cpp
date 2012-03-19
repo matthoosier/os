@@ -12,7 +12,7 @@ public:
     }
 
     std::string         mType;
-    ListElement<Apple>  mLinks;
+    ListElement         mLinks;
 };
 
 int main ()
@@ -20,14 +20,16 @@ int main ()
     Apple a("Granny smith");
     Apple b("Braeburn");
 
-    List<Apple> list(&Apple::mLinks);
+    typedef List<Apple, &Apple::mLinks> ListType;
 
-    list.Prepend(&a);
+    ListType list;
+
     list.Append(&b);
+    list.Append(&a);
 
-    List<Apple>::Iterator i = list.Begin();
+    ListType::Iterator i = list.Begin();
 
-    for (List<Apple>::Iterator i = list.Begin(); i; i++) {
+    for (ListType::Iterator i = list.Begin(); i; i++) {
         std::cout << "Name: " << i->mType << std::endl;
         list.Remove(*i);
     }
