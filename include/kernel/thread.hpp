@@ -4,8 +4,8 @@
 #include <sys/arch.h>
 #include <sys/decls.h>
 
-#include <kernel/list.h>
-#include <kernel/process.h>
+#include <kernel/list.hpp>
+#include <kernel/process.hpp>
 
 #define ALIGNED_THREAD_STRUCT_SIZE                                  \
     /* Padded out to multiple of 8 to preserve %sp requirements */  \
@@ -77,7 +77,7 @@ struct Thread
     struct Process * process;
 
     /* For use in scheduling queues. */
-    struct list_head queue_link;
+    ListElement queue_link;
 
     /* Thread that will wait for and reap this one */
     struct Thread * joiner;

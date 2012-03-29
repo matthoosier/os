@@ -141,6 +141,34 @@ void signed_divide (
             "bx lr              \n\t"
         );
     }
+
+    /*
+     * Some dummy versions of C++ shutdown-time functions that are
+     * necessary for kernel C++ code to link. They'll never be used
+     * at runtime.
+     */
+    void *__dso_handle = &__dso_handle;
+
+    typedef void (*destroyer_func)(void *);
+
+    int __cxa_atexit(
+            destroyer_func destroyer,
+            void *object,
+            void *dso_handle
+            )
+    {
+        /* Success */
+        return 0;
+    }
+
+    int  __aeabi_atexit(
+            void *object,
+            destroyer_func destroyer,
+            void *dso_handle
+            )
+    {
+        return __cxa_atexit(destroyer, object, dso_handle);
+    }
 #endif
 
 #include <string.h>
@@ -219,4 +247,9 @@ char * strncpy (char *s1, const char *s2, size_t n)
     }
 
     return orig_s1;
+}
+
+int ffs (int i)
+{
+    return __builtin_ffs(i);
 }

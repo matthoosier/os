@@ -4,12 +4,12 @@
 #include <sys/spinlock.h>
 
 #include <kernel/assert.h>
-#include <kernel/list.h>
+#include <kernel/list.hpp>
 #include <kernel/once.h>
 #include <kernel/tree-map.h>
-#include <kernel/vm.h>
+#include <kernel/vm.hpp>
 
-#include "object-cache-internal.h"
+#include "object-cache-internal.hpp"
 
 /*
 Used by large-object caches to get slab's not hosted inside the slab
@@ -83,7 +83,7 @@ static struct Slab * large_objects_try_allocate_slab (struct ObjectCache * cache
         assert(TreeMapLookup(cache->bufctl_to_slab_map, new_bufctl) == new_slab);
 
         /* Now insert into freelist */
-        list_add_tail(&new_bufctl->freelist_link, &new_slab->freelist_head);
+        new_slab->freelist_head.Append(new_bufctl);
     }
 
     return new_slab;
@@ -91,11 +91,11 @@ static struct Slab * large_objects_try_allocate_slab (struct ObjectCache * cache
 
 static void large_objects_free_slab (struct ObjectCache * cache, struct Slab * slab)
 {
-    struct Bufctl * bufctl_cursor;
+    typedef List<Bufctl, &Bufctl::freelist_link> list_t;
 
     if (slab->refcount == 0) {
         /* Unlink this slab from the cache's list */
-        list_del_init(&slab->cache_link);
+        List<Slab, &Slab::cache_link>::Remove(slab);
 
         /*
         There's no need to deconstruct each separate bufctl object contained
@@ -105,11 +105,11 @@ static void large_objects_free_slab (struct ObjectCache * cache, struct Slab * s
         But we do need to iterate the list and remove the bufctl-to-slab mapping
         entry for each bufctl.
         */
-        list_for_each_entry (bufctl_cursor, &slab->freelist_head, freelist_link) {
+        for (list_t::Iterator cursor = slab->freelist_head.Begin(); cursor; cursor++) {
             
             struct Slab * removed;
 
-            removed = (struct Slab *)TreeMapRemove(cache->bufctl_to_slab_map, bufctl_cursor);
+            removed = (struct Slab *)TreeMapRemove(cache->bufctl_to_slab_map, *cursor);
             assert(removed != NULL);
         }
 

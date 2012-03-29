@@ -1,9 +1,9 @@
 #include <sys/procmgr.h>
 
-#include <kernel/message.h>
-#include <kernel/process.h>
-#include <kernel/procmgr.h>
-#include <kernel/thread.h>
+#include <kernel/message.hpp>
+#include <kernel/process.hpp>
+#include <kernel/procmgr.hpp>
+#include <kernel/thread.hpp>
 
 static void HandleGetPid (
         struct Message * message,

@@ -6,8 +6,9 @@
 
 #include <sys/decls.h>
 
+#include <kernel/list.hpp>
 #include <kernel/tree-map.h>
-#include <kernel/vm.h>
+#include <kernel/vm.hpp>
 
 BEGIN_DECLS
 
@@ -153,7 +154,7 @@ struct SecondlevelTable
     /*
      * Utility field for inserting into whatever list is needed
      */
-    struct list_head link;
+    ListElement link;
 
     unsigned int num_mapped_pages;
 };

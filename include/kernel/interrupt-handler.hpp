@@ -6,9 +6,9 @@
 #include <sys/decls.h>
 #include <sys/io.h>
 
-#include <kernel/list.h>
-#include <kernel/message.h>
-#include <kernel/process.h>
+#include <kernel/list.hpp>
+#include <kernel/message.hpp>
+#include <kernel/process.hpp>
 
 BEGIN_DECLS
 
@@ -35,7 +35,7 @@ struct UserInterruptHandlerRecord
         bool            masked;
     } state_info;
 
-    struct list_head link;
+    ListElement link;
 };
 
 /**

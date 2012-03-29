@@ -5,7 +5,7 @@
 #include <sys/decls.h>
 #include <sys/procmgr.h>
 
-#include <kernel/message.h>
+#include <kernel/message.hpp>
 
 BEGIN_DECLS
 

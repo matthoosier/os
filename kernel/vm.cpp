@@ -6,13 +6,13 @@
 #include <sys/spinlock.h>
 
 #include <kernel/array.h>
-#include <kernel/list.h>
+#include <kernel/list.hpp>
 #include <kernel/once.h>
-#include <kernel/vm.h>
+#include <kernel/vm.hpp>
 
 typedef struct
 {
-    struct list_head    freelist_head;
+    List<Page, &Page::list_link> freelist_head;
 
     /* Each bitmap is an array of (num_pages / (2 << i)) flags */
     struct
@@ -100,11 +100,6 @@ static void vm_init (void * ignored)
     num_pages = PAGE_COUNT_FROM_SIZE(HEAP_SIZE - (pages_base - VIRTUAL_HEAP_START));
     page_structs = (struct Page *)VIRTUAL_HEAP_START;
 
-    /* Initialize each buddylist level's freelist head */
-    for (i = 0; i < NUM_BUDDYLIST_LEVELS; i++) {
-        INIT_LIST_HEAD(&buddylists[i].freelist_head);
-    }
-
     /*
     Initialize struct pointer for each block. We only iterate across
     every 2^(NUM_BUDDYLIST_LEVELS - 1) pages because initially all pages are
@@ -116,12 +111,9 @@ static void vm_init (void * ignored)
 
         page_structs[i].base_address = base_address;
 
-        INIT_LIST_HEAD(&page_structs[i].list_link);
+        page_structs[i].list_link.DynamicInit();
 
-        list_add_tail(
-            &page_structs[i].list_link,
-            &buddylists[buddy_level].freelist_head
-            );
+        buddylists[buddy_level].freelist_head.Append(&page_structs[i]);
     }
 }
 
@@ -139,7 +131,7 @@ struct Page * vm_pages_alloc_internal (
     }
 
     /* If no block of the requested size is available, split a larger one */
-    if (list_empty(&buddylists[order].freelist_head)) {
+    if (buddylists[order].freelist_head.Empty()) {
         struct Page * block_to_split;
         struct Page * second_half_struct;
         VmAddr_t  second_half_address;
@@ -170,8 +162,8 @@ struct Page * vm_pages_alloc_internal (
         But just do this to make sure, since we already have to initialize
         second_half_struct's list head anyway.
         */
-        INIT_LIST_HEAD(&block_to_split->list_link);
-        INIT_LIST_HEAD(&second_half_struct->list_link);
+        block_to_split->list_link.DynamicInit();
+        second_half_struct->list_link.DynamicInit();
 
         /*
         Insert these two new (PAGE_SIZE << order)-sized chunks of memory
@@ -180,15 +172,16 @@ struct Page * vm_pages_alloc_internal (
         They'll be found immediately below in the code that extracts
         the block at the head of the list.
         */
-        list_add_tail(&block_to_split->list_link, &buddylists[order].freelist_head);
-        list_add_tail(&second_half_struct->list_link, &buddylists[order].freelist_head);
+        buddylists[order].freelist_head.Append(block_to_split);
+        buddylists[order].freelist_head.Append(second_half_struct);
     }
 
-    /* This will always find an entry on the first iteration. */
-    result = list_first_entry(&buddylists[order].freelist_head, struct Page, list_link);
-
-    /* Remove the selected page from the free-list. */
-    list_del_init(&result->list_link);
+    /*
+     * Remove the selected page from the free-list.
+     *
+     * This will always find an entry on the first iteration.
+     */
+    result = buddylists[order].freelist_head.PopFirst();
 
     /* Mark page as busy in whichever level's bitmap is appropriate. */
     if (mark_busy_in_bitmap) {
@@ -249,11 +242,11 @@ static void try_merge_block (struct Page * block, unsigned int order)
                 : partner;
 
         /* Unlink from current blocksize's freelist */
-        list_del_init(&block->list_link);
-        list_del_init(&partner->list_link);
+        List<Page, &Page::list_link>::Remove(block);
+        List<Page, &Page::list_link>::Remove(partner);
 
         /* Insert lower of the two blocks into next blocksize's freelist. */
-        list_add_tail(&merged_block->list_link, &buddylists[order + 1].freelist_head);
+        buddylists[order + 1].freelist_head.Append(merged_block);
 
         /* Now try to merge at the next level. */
         try_merge_block(merged_block, order + 1);
@@ -286,8 +279,8 @@ void VmPageFree (struct Page * page)
         if (BitmapGet(buddylists[order].bitmap.elements, idx)) {
 
             /* Found it. Return to freelist and clear bitmap. Then done. */
-            INIT_LIST_HEAD(&page->list_link);
-            list_add(&page->list_link, &buddylists[order].freelist_head);
+            page->list_link.DynamicInit();
+            buddylists[order].freelist_head.Prepend(page);
             BitmapClear(buddylists[order].bitmap.elements, idx);
             try_merge_block(page, order);
             goto done;

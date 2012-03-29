@@ -4,12 +4,12 @@
 #include <sys/spinlock.h>
 
 #include <kernel/assert.h>
-#include <kernel/list.h>
-#include <kernel/message.h>
-#include <kernel/mmu.h>
-#include <kernel/object-cache.h>
+#include <kernel/list.hpp>
+#include <kernel/message.hpp>
+#include <kernel/mmu.hpp>
+#include <kernel/object-cache.hpp>
 #include <kernel/once.h>
-#include <kernel/thread.h>
+#include <kernel/thread.hpp>
 
 static Once_t inited = ONCE_INIT;
 
@@ -53,9 +53,9 @@ struct Channel * KChannelAlloc (void)
 
     if (result) {
         memset(result, 0, sizeof(*result));
-        INIT_LIST_HEAD(&result->send_blocked_head);
-        INIT_LIST_HEAD(&result->receive_blocked_head);
-        INIT_LIST_HEAD(&result->link);
+        result->send_blocked_head.DynamicInit();
+        result->receive_blocked_head.DynamicInit();
+        result->link.DynamicInit();
     }
 
     return result;
@@ -65,9 +65,9 @@ void KChannelFree (struct Channel * channel)
 {
     Once(&inited, init, NULL);
 
-    assert(list_empty(&channel->send_blocked_head));
-    assert(list_empty(&channel->receive_blocked_head));
-    assert(list_empty(&channel->link));
+    assert(channel->send_blocked_head.Empty());
+    assert(channel->receive_blocked_head.Empty());
+    assert(channel->link.Unlinked());
 
     SpinlockLock(&channel_cache_lock);
     ObjectCacheFree(&channel_cache, channel);
@@ -86,7 +86,7 @@ static struct Connection * ConnectionAlloc (void)
 
     if (c) {
         memset(c, 0, sizeof(*c));
-        INIT_LIST_HEAD(&c->link);
+        c->link.DynamicInit();
     }
 
     return c;
@@ -129,7 +129,7 @@ struct Message * KMessageAlloc (void)
 
     if (message) {
         memset(message, 0, sizeof(*message));
-        INIT_LIST_HEAD(&message->queue_link);
+        message->queue_link.DynamicInit();
     }
 
     return message;
@@ -153,7 +153,7 @@ ssize_t KMessageSendAsync (
 
     Once(&inited, init, NULL);
 
-    if (list_empty(&connection->channel->receive_blocked_head)) {
+    if (connection->channel->receive_blocked_head.Empty()) {
         /* No receiver thread is waiting on the channel at the moment */
         message = KMessageAlloc();
 
@@ -168,19 +168,11 @@ ssize_t KMessageSendAsync (
         message->receiver = NULL;
 
         /* Enqueue message for delivery whenever receiver asks for it */
-        list_add_tail(
-                &message->queue_link,
-                &connection->channel->send_blocked_head
-                );
+        connection->channel->send_blocked_head.Append(message);
     }
     else {
         /* Receiver thread is ready to go */
-        message = list_first_entry(
-                &connection->channel->receive_blocked_head,
-                struct Message,
-                queue_link
-                );
-        list_del_init(&message->queue_link);
+        message = connection->channel->receive_blocked_head.PopFirst();
 
         assert(message->receiver != NULL);
 
@@ -208,7 +200,7 @@ ssize_t KMessageSend (
 
     Once(&inited, init, NULL);
 
-    if (list_empty(&connection->channel->receive_blocked_head)) {
+    if (connection->channel->receive_blocked_head.Empty()) {
         /* No receiver thread is waiting on the channel at the moment */
         message = KMessageAlloc();
 
@@ -222,22 +214,14 @@ ssize_t KMessageSend (
         message->receiver = NULL;
 
         /* Enqueue as blocked on the channel */
-        list_add_tail(
-                &message->queue_link,
-                &connection->channel->send_blocked_head
-                );
+        connection->channel->send_blocked_head.Append(message);
 
         message->sender->state = THREAD_STATE_SEND;
         ThreadYieldNoRequeue();
     }
     else {
         /* Receiver thread is ready to go */
-        message = list_first_entry(
-                &connection->channel->receive_blocked_head,
-                struct Message,
-                queue_link
-                );
-        list_del_init(&message->queue_link);
+        message = connection->channel->receive_blocked_head.PopFirst();
 
         assert(message->receiver != NULL);
 
@@ -290,7 +274,7 @@ ssize_t KMessageReceive (
 
     Once(&inited, init, NULL);
 
-    if (list_empty(&channel->send_blocked_head)) {
+    if (channel->send_blocked_head.Empty()) {
         /* No message is waiting in the channel at the moment */
         message = KMessageAlloc();
 
@@ -302,22 +286,14 @@ ssize_t KMessageReceive (
         message->connection = NULL;
 
         /* Enqueue as blocked on the channel */
-        list_add_tail(
-                &message->queue_link,
-                &channel->receive_blocked_head
-                );
+        channel->receive_blocked_head.Append(message);
 
         message->receiver->state = THREAD_STATE_RECEIVE;
         ThreadYieldNoRequeue();
     }
     else {
         /* Some message is waiting in the channel already */
-        message = list_first_entry(
-                &channel->send_blocked_head,
-                struct Message,
-                queue_link
-                );
-        list_del_init(&message->queue_link);
+        message = channel->send_blocked_head.PopFirst();
 
         message->receiver = THREAD_CURRENT();
         message->receiver_msgbuf = msgbuf;

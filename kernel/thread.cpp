@@ -4,14 +4,17 @@
 #include <sys/spinlock.h>
 
 #include <kernel/assert.h>
-#include <kernel/thread.h>
-#include <kernel/vm.h>
+#include <kernel/thread.hpp>
+#include <kernel/vm.hpp>
 
-static LIST_HEAD(normal_ready_queue);
-static LIST_HEAD(io_ready_queue);
+typedef List<Thread, &Thread::queue_link> Queue_t;
+
+Queue_t normal_ready_queue;
+Queue_t io_ready_queue;
+
 static Spinlock_t ready_queue_lock = SPINLOCK_INIT;
 
-static inline struct list_head * queue_for_thread (struct Thread * t)
+static inline Queue_t * queue_for_thread (struct Thread * t)
 {
     if (t->assigned_priority == THREAD_PRIORITY_IO || t->effective_priority == THREAD_PRIORITY_IO) {
         return &io_ready_queue;
@@ -142,7 +145,7 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
     descriptor->kernel_stack.base = (void *)stack_page->base_address;
     descriptor->kernel_stack.page = stack_page;
     descriptor->process = THREAD_CURRENT()->process;
-    INIT_LIST_HEAD(&descriptor->queue_link);
+    descriptor->queue_link.DynamicInit();
     descriptor->state = THREAD_STATE_READY;
     descriptor->joiner = NULL;
     descriptor->assigned_priority = THREAD_PRIORITY_NORMAL;
@@ -193,7 +196,7 @@ void ThreadSetEffectivePriority (struct Thread * thread, ThreadPriority priority
 void ThreadAddReady (struct Thread * thread)
 {
     SpinlockLock(&ready_queue_lock);
-    list_add_tail(&thread->queue_link, queue_for_thread(thread));
+    queue_for_thread(thread)->Append(thread);
     thread->state = THREAD_STATE_READY;
     SpinlockUnlock(&ready_queue_lock);
 }
@@ -201,7 +204,7 @@ void ThreadAddReady (struct Thread * thread)
 void ThreadAddReadyFirst (struct Thread * thread)
 {
     SpinlockLock(&ready_queue_lock);
-    list_add(&thread->queue_link, queue_for_thread(thread));
+    queue_for_thread(thread)->Prepend(thread);
     thread->state = THREAD_STATE_READY;
     SpinlockUnlock(&ready_queue_lock);
 }
@@ -212,13 +215,11 @@ struct Thread * ThreadDequeueReady (void)
 
     SpinlockLock(&ready_queue_lock);
 
-    if (!list_empty(&io_ready_queue)) {
-        next = list_first_entry(&io_ready_queue, struct Thread, queue_link);
-        list_del_init(&next->queue_link);
+    if (!io_ready_queue.Empty()) {
+        next = io_ready_queue.PopFirst();
     }
-    else if (!list_empty(&normal_ready_queue)) {
-        next = list_first_entry(&normal_ready_queue, struct Thread, queue_link);
-        list_del_init(&next->queue_link);
+    else if (!normal_ready_queue.Empty()) {
+        next = normal_ready_queue.PopFirst();
     } else {
         next = NULL;
     }
@@ -252,7 +253,7 @@ void ThreadYieldWithRequeue (void)
 
 void ThreadYieldNoRequeueToSpecific (struct Thread * next)
 {
-    assert(list_empty(&next->queue_link));
+    assert(next->queue_link.Unlinked());
 
     ThreadSwitch(THREAD_CURRENT(), next, NULL, NULL);
 }

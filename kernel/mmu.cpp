@@ -11,11 +11,11 @@
 #include <kernel/array.h>
 #include <kernel/assert.h>
 #include <kernel/minmax.h>
-#include <kernel/mmu.h>
-#include <kernel/object-cache.h>
+#include <kernel/mmu.hpp>
+#include <kernel/object-cache.hpp>
 #include <kernel/once.h>
 #include <kernel/tree-map.h>
-#include <kernel/vm.h>
+#include <kernel/vm.hpp>
 
 #define ARM_MMU_ENABLED_BIT             0
 #define ARM_MMU_EXCEPTION_VECTOR_BIT    13
@@ -261,7 +261,7 @@ static struct SecondlevelTable * secondlevel_table_alloc ()
     {
         unsigned int i;
 
-        INIT_LIST_HEAD(&table->link);
+        table->link.DynamicInit();
 
         SpinlockLock(&secondlevel_ptes_cache_lock);
         table->ptes = (struct SecondlevelPtes *)ObjectCacheAlloc(&secondlevel_ptes_cache);
@@ -292,8 +292,8 @@ static struct SecondlevelTable * secondlevel_table_alloc ()
 
 static void secondlevel_table_free (struct SecondlevelTable * table)
 {
-    if (!list_empty(&table->link)) {
-        list_del(&table->link);
+    if (!table->link.Unlinked()) {
+        List<SecondlevelTable, &SecondlevelTable::link>::Remove(table);
     }
 
     SpinlockLock(&secondlevel_ptes_cache_lock);
@@ -382,38 +382,33 @@ list, then blow away the list's elements afterward.
 */
 static void func (TreeMapKey_t key, TreeMapValue_t value, void * user_data)
 {
-    struct list_head *          head;
-    struct SecondlevelTable *  secondlevel_table;
+    typedef List<SecondlevelTable, &SecondlevelTable::link> list_t;
 
-    head                = (struct list_head *)user_data;
+    list_t *                    head;
+    struct SecondlevelTable *   secondlevel_table;
+
+    head                = (List<SecondlevelTable, &SecondlevelTable::link> *)user_data;
     secondlevel_table   = (struct SecondlevelTable *)value;
 
-    list_add(&secondlevel_table->link, head);
+    head->Append(secondlevel_table);
 }
 
 void TranslationTableFree (struct TranslationTable * table)
 {
     /* Aggregates any individual secondlevel_table's that need freed */
-    struct list_head head;
+    List<SecondlevelTable, &SecondlevelTable::link> head;
 
     Once(&mmu_init_control, mmu_static_init, NULL);
 
     /* Clean out any individual second-level translation tables */
-    INIT_LIST_HEAD(&head);
 
     /* Go ahead and gather up all the nodes */
     TreeMapForeach(table->sparse_secondlevel_map, func, &head);
 
     /* Deallocate everything we found in there */
-    while (!list_empty(&head))
+    while (!head.Empty())
     {
-        struct SecondlevelTable * secondlevel_table = list_first_entry(
-                &head,
-                struct SecondlevelTable,
-                link
-                );
-
-        secondlevel_table_free(secondlevel_table);
+        secondlevel_table_free(head.PopFirst());
     }
 
     table->firstlevel_ptes = NULL;

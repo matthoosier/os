@@ -6,13 +6,13 @@
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
-#include <kernel/interrupt-handler.h>
-#include <kernel/mmu.h>
-#include <kernel/object-cache.h>
+#include <kernel/interrupt-handler.hpp>
+#include <kernel/mmu.hpp>
+#include <kernel/object-cache.hpp>
 #include <kernel/once.h>
-#include <kernel/process.h>
-#include <kernel/thread.h>
-#include <kernel/vm.h>
+#include <kernel/process.hpp>
+#include <kernel/thread.hpp>
+#include <kernel/vm.hpp>
 
 #include "init.h"
 
@@ -159,7 +159,7 @@ void run_first_thread ()
     first_thread->kernel_stack.page     = NULL;
     first_thread->process               = NULL;
     first_thread->state                 = THREAD_STATE_RUNNING;
-    INIT_LIST_HEAD(&first_thread->queue_link);
+    first_thread->queue_link.DynamicInit();
 
     /* Device-independent */
     InterruptsConfigure();

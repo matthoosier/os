@@ -1,7 +1,7 @@
 #include <kernel/assert.h>
-#include <kernel/object-cache.h>
+#include <kernel/object-cache.hpp>
 
-#include "object-cache-internal.h"
+#include "object-cache-internal.hpp"
 
 void ObjectCacheInit (struct ObjectCache * cache, size_t element_size)
 {
@@ -14,7 +14,7 @@ void ObjectCacheInit (struct ObjectCache * cache, size_t element_size)
     }
 
     cache->element_size = element_size;
-    INIT_LIST_HEAD(&cache->slab_head);
+    cache->slab_head.DynamicInit();
 
     if (cache->element_size >= MAX_SMALL_OBJECT_SIZE) {
         cache->ops = &large_objects_ops;
@@ -29,15 +29,17 @@ void ObjectCacheInit (struct ObjectCache * cache, size_t element_size)
 
 void * ObjectCacheAlloc (struct ObjectCache * cache)
 {
-    struct Slab * slab_cursor;
+    typedef List<Slab, &Slab::cache_link> list_t;
+
     struct Slab * new_slab;
     struct Bufctl * bufctl;
 
-    list_for_each_entry (slab_cursor, &cache->slab_head, cache_link) {
-        if (!list_empty(&slab_cursor->freelist_head)) {
-            bufctl = list_first_entry(&slab_cursor->freelist_head, struct Bufctl, freelist_link);
+    for (list_t::Iterator slab_cursor = cache->slab_head.Begin(); slab_cursor; slab_cursor++)
+    {
+        if (!slab_cursor->freelist_head.Empty()) {
+            bufctl = slab_cursor->freelist_head.PopFirst();
             slab_cursor->refcount++;
-            list_del_init(&bufctl->freelist_link);
+
             return bufctl;
         }
     }
@@ -47,12 +49,11 @@ void * ObjectCacheAlloc (struct ObjectCache * cache)
         return NULL;
     }
 
-    list_add(&new_slab->cache_link, &cache->slab_head);
+    cache->slab_head.Prepend(new_slab);
 
-    if (!list_empty(&new_slab->freelist_head)) {
-        bufctl = list_first_entry(&new_slab->freelist_head, struct Bufctl, freelist_link);
+    if (!new_slab->freelist_head.Empty()) {
+        bufctl = new_slab->freelist_head.PopFirst();
         new_slab->refcount++;
-        list_del_init(&bufctl->freelist_link);
         return bufctl;
     }
     else {
@@ -79,7 +80,7 @@ void ObjectCacheFree (struct ObjectCache * cache, void * element)
     Stick on head of freelist to promote reuse of objects from slab
     that already had some allocations made.
     */
-    list_add(&reclaimed_bufctl->freelist_link, &slab->freelist_head);
+    slab->freelist_head.Prepend(reclaimed_bufctl);
     slab->refcount--;
     cache->ops->TryFreeSlab(cache, slab);
 }
@@ -88,8 +89,8 @@ void InitSlab (struct Slab * slab)
 {
     slab->page = NULL;
     slab->refcount = 0;
-    INIT_LIST_HEAD(&slab->freelist_head);
-    INIT_LIST_HEAD(&slab->cache_link);
+    slab->freelist_head.DynamicInit();
+    slab->cache_link.DynamicInit();
 }
 
 void InitBufctl (struct Bufctl * bufctl)
@@ -97,6 +98,6 @@ void InitBufctl (struct Bufctl * bufctl)
     /* When not allocated to user, the object itself is freelist element */
     bufctl->buf = (void *)bufctl;
 
-    INIT_LIST_HEAD(&bufctl->freelist_link);
+    bufctl->freelist_link.DynamicInit();
 }
 

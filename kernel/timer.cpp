@@ -1,9 +1,9 @@
 #include <kernel/assert.h>
-#include <kernel/interrupt-handler.h>
-#include <kernel/mmu.h>
+#include <kernel/interrupt-handler.hpp>
+#include <kernel/mmu.hpp>
 #include <kernel/once.h>
 #include <kernel/timer.h>
-#include <kernel/thread.h>
+#include <kernel/thread.hpp>
 
 struct Sp804
 {

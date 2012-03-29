@@ -5,12 +5,11 @@
 #include <sys/error.h>
 #include <sys/spinlock.h>
 
-#include <kernel/list.h>
-#include <kernel/message.h>
-#include <kernel/message.h>
-#include <kernel/mmu.h>
+#include <kernel/list.hpp>
+#include <kernel/message.hpp>
+#include <kernel/mmu.hpp>
 #include <kernel/tree-map.h>
-#include <kernel/vm.h>
+#include <kernel/vm.hpp>
 
 BEGIN_DECLS
 
@@ -18,35 +17,35 @@ typedef int Pid_t;
 
 struct Segment
 {
-    VmAddr_t            base;
+    VmAddr_t                        base;
 
     /**
      * There will be (@length + PAGE_SIZE - 1) % PAGE_SIZE pages held in @pages_head.
      */
-    size_t              length;
+    size_t                          length;
 
-    struct list_head    pages_head;
-    struct list_head    link;
+    List<Page, &Page::list_link>    pages_head;
+    ListElement                     link;
 };
 
 struct Process
 {
-    Spinlock_t                  lock;
+    Spinlock_t                      lock;
 
-    struct TranslationTable   * pagetable;
-    VmAddr_t                    entry;
-    char                        comm[16];
-    struct list_head            segments_head;
-    struct Thread             * thread;
-    Pid_t                       pid;
+    struct TranslationTable       * pagetable;
+    VmAddr_t                        entry;
+    char                            comm[16];
+    List<Segment, &Segment::link>   segments_head;
+    struct Thread                 * thread;
+    Pid_t                           pid;
 
-    struct TreeMap            * id_to_channel_map;
-    struct list_head            channels_head;
-    Channel_t                   next_chid;
+    struct TreeMap                * id_to_channel_map;
+    List<Channel, &Channel::link>   channels_head;
+    Channel_t                       next_chid;
 
-    struct TreeMap            * id_to_connection_map;
-    struct list_head            connections_head;
-    Connection_t                next_coid;
+    struct TreeMap                        * id_to_connection_map;
+    List<Connection, &Connection::link>     connections_head;
+    Connection_t                            next_coid;
 
     struct TreeMap            * id_to_message_map;
     int                         next_msgid;

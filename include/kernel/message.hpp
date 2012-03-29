@@ -7,7 +7,7 @@
 
 #include <sys/decls.h>
 
-#include <kernel/list.h>
+#include <kernel/list.hpp>
 
 BEGIN_DECLS
 
@@ -17,36 +17,6 @@ struct Process;
 typedef int Channel_t;
 typedef int Connection_t;
 typedef int Message_t;
-
-/**
- * Server object on which MsgReceive() is performed
- */
-struct Channel
-{
-    /* List of Message.queue_link nodes: one for each sender blocked on this channel */
-    struct list_head send_blocked_head;
-
-    /* List of Message.queue_link nodes; one for each receiver blocked on this channel */
-    struct list_head receive_blocked_head;
-
-    /*
-     * Utility field for inserting into whatever list is needed
-     */
-    struct list_head link;
-};
-
-/**
- * Client object on which MessageSend() is performed
- */
-struct Connection
-{
-    struct Channel * channel;
-
-    /*
-     * Utility field for inserting into whatever list is needed
-     */
-    struct list_head link;
-};
 
 /**
  * Represents the sender, receiver, and parameters of a message..
@@ -90,7 +60,37 @@ struct Message
 
     ssize_t result;
 
-    struct list_head queue_link;
+    ListElement queue_link;
+};
+
+/**
+ * Server object on which MsgReceive() is performed
+ */
+struct Channel
+{
+    /* List of Message.queue_link nodes: one for each sender blocked on this channel */
+    List<Message, &Message::queue_link> send_blocked_head;
+
+    /* List of Message.queue_link nodes; one for each receiver blocked on this channel */
+    List<Message, &Message::queue_link> receive_blocked_head;
+
+    /*
+     * Utility field for inserting into whatever list is needed
+     */
+    ListElement link;
+};
+
+/**
+ * Client object on which MessageSend() is performed
+ */
+struct Connection
+{
+    struct Channel * channel;
+
+    /*
+     * Utility field for inserting into whatever list is needed
+     */
+    ListElement link;
 };
 
 extern struct Channel * KChannelAlloc (void);

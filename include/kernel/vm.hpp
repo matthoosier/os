@@ -8,7 +8,7 @@
 
 #include <sys/decls.h>
 
-#include <kernel/list.h>
+#include <kernel/list.hpp>
 
 BEGIN_DECLS
 
@@ -127,7 +127,7 @@ struct Page
      *          allowed for external use by holders of allocated pages
      *          to track the ownership.
      */
-    struct list_head list_link;
+    ListElement list_link;
 };
 
 /**

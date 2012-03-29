@@ -2,7 +2,7 @@
 
 #include <kernel/assert.h>
 #include <kernel/minmax.h>
-#include <kernel/object-cache.h>
+#include <kernel/object-cache.hpp>
 #include <kernel/once.h>
 #include <kernel/tree-map.h>
 

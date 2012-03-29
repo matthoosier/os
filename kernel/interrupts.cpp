@@ -9,12 +9,12 @@
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
-#include <kernel/interrupt-handler.h>
-#include <kernel/message.h>
-#include <kernel/mmu.h>
-#include <kernel/object-cache.h>
+#include <kernel/interrupt-handler.hpp>
+#include <kernel/message.hpp>
+#include <kernel/mmu.hpp>
+#include <kernel/object-cache.hpp>
 #include <kernel/once.h>
-#include <kernel/process.h>
+#include <kernel/process.hpp>
 
 enum
 {
@@ -58,7 +58,8 @@ static IrqKernelHandlerFunc kernel_irq_handlers[NUM_IRQS];
 /**
  * User program's IRQ handlers
  */
-static struct list_head user_irq_handlers[NUM_IRQS];
+typedef List<UserInterruptHandlerRecord, &UserInterruptHandlerRecord::link> user_irq_handler_list_t;
+static user_irq_handler_list_t user_irq_handlers[NUM_IRQS];
 
 /**
  * Tracks how many times a particular IRQ has been masked.
@@ -88,8 +89,6 @@ static struct Pl190 * GetPl190 ();
 
 static void init_handlers (void * ignored)
 {
-    unsigned int i;
-
     /**
      * Install stack pointer for IRQ mode
      */
@@ -113,14 +112,6 @@ static void init_handlers (void * ignored)
      * Initialize array of in-kernel IRQ handler functions
      */
     memset(kernel_irq_handlers, 0, sizeof(kernel_irq_handlers));
-
-    /**
-     * Initialize array of user-process IRQ handler functions
-     */
-    memset(user_irq_handlers, 0, sizeof(user_irq_handlers));
-    for (i = 0; i < N_ELEMENTS(user_irq_handlers); i++) {
-        INIT_LIST_HEAD(&user_irq_handlers[i]);
-    }
 }
 
 void InterruptsConfigure ()
@@ -147,7 +138,7 @@ void InterruptAttachUserHandler (
         struct UserInterruptHandlerRecord * handler
         )
 {
-    assert(list_empty(&handler->link));
+    assert(handler->link.Unlinked());
     assert(handler->handler_info.irq_number < NUM_IRQS && handler->handler_info.irq_number >= 0);
 
     handler->state_info.masked = false;
@@ -155,7 +146,7 @@ void InterruptAttachUserHandler (
     /* Acquire interrupt protection */
     SpinlockLock(&irq_handlers_lock);
 
-    list_add_tail(&handler->link, &user_irq_handlers[handler->handler_info.irq_number]);
+    user_irq_handlers[handler->handler_info.irq_number].Append(handler);
 
     /*
     Blip the mask count up and then down again to trigger the interrupt
@@ -177,7 +168,7 @@ void InterruptDetachUserHandler (
 
     SpinlockLock(&irq_handlers_lock);
 
-    list_del_init(&record->link);
+    user_irq_handlers[n].Remove(record);
 
     /* Flush out any outstanding per-drive interrupt masks */
     if (record->state_info.masked) {
@@ -185,7 +176,7 @@ void InterruptDetachUserHandler (
     }
 
     /* Mask the IRQ if there are no other handlers */
-    if (list_empty(&user_irq_handlers[n]) && kernel_irq_handlers[n] == NULL) {
+    if (user_irq_handlers[n].Empty() && kernel_irq_handlers[n] == NULL) {
 
         /*
         All other handlers are detached, so there had better not be
@@ -215,8 +206,6 @@ int InterruptCompleteUserHandler (
 
 void InterruptHandler ()
 {
-    struct list_head * cursor;
-
     /* Figure out which IRQ was raised. */
     uint32_t irqs = *GetPl190()->IrqStatus;
 
@@ -236,16 +225,14 @@ void InterruptHandler ()
     }
 
     /* Execute any user-installed IRQ handlers */
-    list_for_each (cursor, &user_irq_handlers[which]) {
+    for (user_irq_handler_list_t::Iterator cursor = user_irq_handlers[which].Begin();
+         cursor;
+         cursor++) {
 
         struct Process            * process;
         struct Connection         * connection;
 
-        struct UserInterruptHandlerRecord * record = list_entry(
-                cursor,
-                struct UserInterruptHandlerRecord,
-                link
-                );
+        struct UserInterruptHandlerRecord * record = *cursor;
 
         assert(!record->state_info.masked);
 
@@ -337,7 +324,7 @@ struct UserInterruptHandlerRecord * UserInterruptHandlerRecordAlloc ()
 
     if (ret) {
         memset(ret, 0, sizeof(*ret));
-        INIT_LIST_HEAD(&ret->link);
+        ret->link.DynamicInit();
     }
 
     return ret;

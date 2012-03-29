@@ -1,7 +1,12 @@
 #ifndef __LIST_HPP__
 #define __LIST_HPP__
 
-#include <assert.h>
+#ifdef __KERNEL__
+#   include <kernel/assert.h>
+#else
+#   include <assert.h>
+#endif
+
 #include <stdint.h>
 
 class ListElement
@@ -11,6 +16,16 @@ public:
         : prev(this)
         , next(this)
     {
+    }
+
+    void DynamicInit ()
+    {
+        prev = next = this;
+    }
+
+    bool Unlinked ()
+    {
+        return prev == this && next == this;
     }
 
     ListElement * prev;
@@ -89,6 +104,8 @@ template <class T, ListElement T::* Ptr>
             }
         };
 
+        typedef Iterator Iter;
+
         List ()
         {
         }
@@ -96,6 +113,10 @@ template <class T, ListElement T::* Ptr>
         ~List ()
         {
             assert(Empty());
+        }
+
+        void DynamicInit () {
+            mHead.DynamicInit();
         }
 
         Iterator Begin () {
@@ -122,9 +143,7 @@ template <class T, ListElement T::* Ptr>
             mHead.prev = elementHead;
         }
 
-        void Remove (T * element) {
-            assert(!Empty());
-
+        static void Remove (T * element) {
             ListElement * elementHead = &(element->*Ptr);
             elementHead->prev->next = elementHead->next;
             elementHead->next->prev = elementHead->prev;
@@ -132,7 +151,23 @@ template <class T, ListElement T::* Ptr>
         }
 
         T * First () {
-            return elemFromHead(mHead.next);
+            return Empty() ? 0 : elemFromHead(mHead.next);
+        }
+
+        T * Last () {
+            return Empty() ? 0 : elemFromHead(mHead.prev);
+        }
+
+        T * PopFirst () {
+            T * ret = elemFromHead(mHead.next);
+            Remove(ret);
+            return ret;
+        }
+
+        T * PopLast () {
+            T * ret = elemFromHead(mHead.prev);
+            Remove(ret);
+            return ret;
         }
 
         T * Next (T * element) {

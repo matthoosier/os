@@ -1,5 +1,5 @@
 #include <kernel/assert.h>
-#include <kernel/procmgr.h>
+#include <kernel/procmgr.hpp>
 
 static ProcMgrOperationFunc handler_funcs[PROC_MGR_MESSAGE_COUNT] = { NULL };
 

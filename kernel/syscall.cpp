@@ -4,9 +4,9 @@
 #include <sys/syscall.h>
 #include <sys/procmgr.h>
 
-#include <kernel/message.h>
-#include <kernel/process.h>
-#include <kernel/thread.h>
+#include <kernel/message.hpp>
+#include <kernel/process.hpp>
+#include <kernel/thread.hpp>
 
 static Channel_t DoChannelCreate ()
 {
@@ -173,6 +173,10 @@ static int DoEcho (int arg)
 {
     return arg;
 }
+
+BEGIN_DECLS
+void do_syscall (uint32_t * p_regs);
+END_DECLS
 
 void do_syscall (uint32_t * p_regs)
 {

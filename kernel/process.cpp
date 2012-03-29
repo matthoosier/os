@@ -7,12 +7,12 @@
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
-#include <kernel/object-cache.h>
+#include <kernel/object-cache.hpp>
 #include <kernel/once.h>
-#include <kernel/process.h>
-#include <kernel/procmgr.h>
+#include <kernel/process.hpp>
+#include <kernel/procmgr.hpp>
 #include <kernel/ramfs.h>
-#include <kernel/thread.h>
+#include <kernel/thread.hpp>
 #include <kernel/timer.h>
 #include <kernel/tree-map.h>
 
@@ -56,8 +56,8 @@ static struct Segment * SegmentAlloc ()
 
     if (s) {
         memset(s, 0, sizeof(*s));
-        INIT_LIST_HEAD(&s->pages_head);
-        INIT_LIST_HEAD(&s->link);
+        s->pages_head.DynamicInit();
+        s->link.DynamicInit();
     }
 
     return s;
@@ -68,15 +68,15 @@ static void SegmentFree (
         struct TranslationTable * table
         )
 {
+    typedef List<Page, &Page::list_link> list_t;
+
     VmAddr_t map_addr;
-    struct list_head * page_cursor;
-    struct list_head * page_cursor_temp;
 
     map_addr = segment->base;
 
-    list_for_each_safe (page_cursor, page_cursor_temp, &segment->pages_head) {
+    for (list_t::Iterator i = segment->pages_head.Begin(); i; ++i) {
 
-        struct Page * page = list_entry(page_cursor, struct Page, list_link);
+        struct Page * page = *i;
 
         bool unmapped = TranslationTableUnmapPage(
                 table,
@@ -86,7 +86,7 @@ static void SegmentFree (
         assert(unmapped);
         map_addr += PAGE_SIZE;
 
-        list_del_init(&page->list_link);
+        segment->pages_head.Remove(page);
         VmPageFree(page);
     }
 
@@ -110,9 +110,9 @@ static struct Process * ProcessAlloc ()
         p->id_to_message_map    = TreeMapAlloc(TreeMapSignedIntCompareFunc);
 
         if (p->id_to_channel_map && p->id_to_connection_map && p->id_to_message_map) {
-            INIT_LIST_HEAD(&p->segments_head);
-            INIT_LIST_HEAD(&p->channels_head);
-            INIT_LIST_HEAD(&p->connections_head);
+            p->segments_head.DynamicInit();
+            p->channels_head.DynamicInit();
+            p->connections_head.DynamicInit();
             p->next_chid = FIRST_CHANNEL_ID;
             p->next_coid = FIRST_CONNECTION_ID;
             p->next_msgid = 1;
@@ -133,24 +133,14 @@ static struct Process * ProcessAlloc ()
 static void ProcessFree (struct Process * process)
 {
     /* Free all channels owned by process */
-    while (!list_empty(&process->channels_head)) {
-        struct Channel * channel = list_first_entry(
-                &process->channels_head,
-                struct Channel,
-                link
-                );
-        list_del_init(&channel->link);
+    while (!process->channels_head.Empty()) {
+        struct Channel * channel = process->channels_head.PopFirst();
         KChannelFree(channel);
     }
 
     /* Free all connections owned by process */
-    while (!list_empty(&process->connections_head)) {
-        struct Connection * connection = list_first_entry(
-                &process->connections_head,
-                struct Connection,
-                link
-                );
-        list_del_init(&connection->link);
+    while (!process->connections_head.Empty()) {
+        struct Connection * connection = process->connections_head.PopFirst();
         KDisconnect(connection);
     }
 
@@ -163,15 +153,8 @@ static void ProcessFree (struct Process * process)
     TreeMapFree(process->id_to_message_map);
     
     /* Deallocate virtual memory of the process */
-    while (!list_empty(&process->segments_head)) {
-
-        struct Segment * s = list_first_entry(
-                &process->segments_head,
-                struct Segment,
-                link
-                );
-
-        list_del_init(&s->link);
+    while (!process->segments_head.Empty()) {
+        struct Segment * s = process->segments_head.PopFirst();
         SegmentFree(s, process->pagetable);
     }
 
@@ -282,7 +265,7 @@ struct Process * exec_into_current (
                     goto free_process;
                 }
 
-                list_add_tail(&page->list_link, &segment->pages_head);
+                segment->pages_head.Append(page);
             }
 
             /* With VM configured, simple memcpy() to load the contents. */
@@ -303,7 +286,7 @@ struct Process * exec_into_current (
                     );
             }
 
-            list_add_tail(&segment->link, &p->segments_head);
+            p->segments_head.Append(segment);
         }
     }
 
@@ -616,7 +599,7 @@ Channel_t ProcessRegisterChannel (
         return -ERROR_NO_MEM;
     }
 
-    list_add_tail(&c->link, &p->channels_head);
+    p->channels_head.Append(c);
     return id;
 }
 
@@ -631,7 +614,7 @@ int ProcessUnregisterChannel (
         return -ERROR_INVALID;
     }
 
-    list_del_init(&c->link);
+    p->channels_head.Remove(c);
 
     return ERROR_OK;
 }
@@ -662,7 +645,7 @@ Connection_t ProcessRegisterConnection (
         return -ERROR_NO_MEM;
     }
 
-    list_add_tail(&c->link, &p->connections_head);
+    p->connections_head.Append(c);
     return id;
 }
 
@@ -677,7 +660,7 @@ int ProcessUnregisterConnection (
         return -ERROR_INVALID;
     }
 
-    list_del_init(&c->link);
+    p->connections_head.Remove(c);
     return ERROR_OK;
 }
 

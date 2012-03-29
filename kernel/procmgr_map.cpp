@@ -5,13 +5,19 @@
 #include <sys/procmgr.h>
 
 #include <kernel/kmalloc.h>
-#include <kernel/list.h>
-#include <kernel/message.h>
-#include <kernel/mmu.h>
-#include <kernel/process.h>
-#include <kernel/procmgr.h>
-#include <kernel/thread.h>
-#include <kernel/vm.h>
+#include <kernel/list.hpp>
+#include <kernel/message.hpp>
+#include <kernel/mmu.hpp>
+#include <kernel/process.hpp>
+#include <kernel/procmgr.hpp>
+#include <kernel/thread.hpp>
+#include <kernel/vm.hpp>
+
+struct mapped_page
+{
+    VmAddr_t    page_base;
+    ListElement link;
+};
 
 static void HandleMapPhys (
         struct Message * message,
@@ -33,13 +39,8 @@ static void HandleMapPhys (
     }
     else {
 
-        struct mapped_page
-        {
-            VmAddr_t            page_base;
-            struct list_head    link;
-        };
+        List<mapped_page, &mapped_page::link> mapped_pages;
 
-        struct list_head mapped_pages = LIST_HEAD_INIT(mapped_pages);
         struct mapped_page * page;
 
         for (i = 0; i < len; i += PAGE_SIZE) {
@@ -67,19 +68,18 @@ static void HandleMapPhys (
 
             if (mapped) {
                 page->page_base = virt;
-                INIT_LIST_HEAD(&page->link);
-                list_add_tail(&page->link, &mapped_pages);
+                page->link.DynamicInit();
+                mapped_pages.Append(page);
             }
             else if (!mapped) {
 
                 /* Back out all the existing mappings */
-                while (!list_empty(&mapped_pages)) {
-                    page = list_first_entry(&mapped_pages, struct mapped_page, link);
+                while (!mapped_pages.Empty()) {
+                    page = mapped_pages.PopFirst();
                     TranslationTableUnmapPage(
                             message->sender->process->pagetable,
                             page->page_base
                             );
-                    list_del_init(&page->link);
 
                     /* Free the block hosting the list node */
                     kfree(page, sizeof(*page));
@@ -89,15 +89,14 @@ static void HandleMapPhys (
             }
         }
 
-        if (list_empty(&mapped_pages)) {
+        if (mapped_pages.Empty()) {
             KMessageReply(message, ERROR_INVALID, &reply, sizeof(reply));
         } else {
             KMessageReply(message, ERROR_OK, &reply, sizeof(reply));
 
             /* List of partial pages no longer needed */
-            while (!list_empty(&mapped_pages)) {
-                page = list_first_entry(&mapped_pages, struct mapped_page, link);
-                list_del_init(&page->link);
+            while (!mapped_pages.Empty()) {
+                page = mapped_pages.PopFirst();
 
                 /* Free the block hosting the list node */
                 kfree(page, sizeof(*page));

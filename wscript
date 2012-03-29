@@ -23,7 +23,7 @@ kernel_sources = [
     'kernel/ramfs.cpp',
     'kernel/small-object-cache.cpp',
     'kernel/stdlib.c',
-    'kernel/syscall.c',
+    'kernel/syscall.cpp',
     'kernel/thread.cpp',
     'kernel/timer.cpp',
     'kernel/tree-map.cpp',

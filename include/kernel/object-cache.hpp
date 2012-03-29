@@ -5,19 +5,43 @@
 
 #include <sys/decls.h>
 
-#include <kernel/list.h>
+#include <kernel/list.hpp>
 
 BEGIN_DECLS
 
 struct TreeMap;
 struct ObjectCacheOps;
 
+struct Bufctl
+{
+    /* Links in the free-list chain */
+    ListElement freelist_link;
+
+    /* The object */
+    void * buf;
+};
+
+struct Slab
+{
+    /* Descriptor for the raw virtual memory used by this slab. */
+    struct Page * page;
+
+    /* How many objects from this slab are still held by users. */
+    unsigned int refcount;
+
+    /* All objects ready to be supplied to users */
+    List<Bufctl, &Bufctl::freelist_link> freelist_head;
+
+    /* Linkage in the controlling object cache */
+    ListElement cache_link;
+};
+
 struct ObjectCache
 {
     size_t element_size;
 
     /* List of slab's */
-    struct list_head slab_head;
+    List<Slab, &Slab::cache_link> slab_head;
 
     /* Used for large-object case */
     struct TreeMap * bufctl_to_slab_map;

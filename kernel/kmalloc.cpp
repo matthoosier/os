@@ -3,7 +3,7 @@
 
 #include <kernel/array.h>
 #include <kernel/kmalloc.h>
-#include <kernel/object-cache.h>
+#include <kernel/object-cache.hpp>
 #include <kernel/once.h>
 
 enum
