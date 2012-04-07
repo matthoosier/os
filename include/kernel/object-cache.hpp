@@ -6,6 +6,7 @@
 #include <sys/decls.h>
 
 #include <kernel/list.hpp>
+#include <kernel/vm.hpp>
 
 BEGIN_DECLS
 

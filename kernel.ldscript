@@ -53,16 +53,30 @@ SECTIONS
             *(.bss)
         }
 
+    .ARM.extab :
+        {
+        *(.ARM.extab* .gnu.linkonce.armextab.*)
+        }
+
+    PROVIDE_HIDDEN(__exidx_start = .);
+    .ARM.exidx :
+        {
+        *(.ARM.exidx* .gnu.linkonce.armexidx.*)
+        }
+    PROVIDE_HIDDEN(__exidx_end = .);
+
+    PROVIDE (end = .);
+
     /* Hop forward in virtual memory to the ARM high vector table address */
-    .vector 0xffff0000 : AT(ALIGN(LOADADDR(.bss) + SIZEOF(.bss), CONSTANT(COMMONPAGESIZE)))
+    .vector 0xffff0000 : AT(ALIGN(LOADADDR(.ARM.exidx) + SIZEOF(.ARM.exidx), CONSTANT(COMMONPAGESIZE)))
         {
             __VectorStartPhysical = LOADADDR(.vector);
             *(.text.vector)
         }
 
     /* Reset VMA counter as though .vector had been in normal kernel range */
-    . = ADDR(.bss)
-            + (LOADADDR(.vector) - LOADADDR(.bss))  /* Padded sizeof(.bss) */
+    . = ADDR(.ARM.exidx)
+            + (LOADADDR(.vector) - LOADADDR(.ARM.exidx))  /* Padded sizeof(.ARM.exidx) */
             + SIZEOF(.vector);
 
     __HeapStart = ALIGN(CONSTANT(MAXPAGESIZE));

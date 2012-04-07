@@ -4,8 +4,8 @@
 #include <sys/bits.h>
 
 #include <kernel/array.h>
-#include <kernel/mmu.hpp>
-#include <kernel/vm.hpp>
+#include <kernel/mmu-defs.h>
+#include <kernel/vm-defs.h>
 
 #define ARM_MMU_ENABLED_BIT 0
 

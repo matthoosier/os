@@ -6,7 +6,7 @@ NATIVE  = 'native'
 
 kernel_sources = [
     'kernel/assert.cpp',
-    'kernel/early-mmu.cpp',
+    'kernel/early-mmu.c',
     'kernel/init.cpp',
     'kernel/interrupts.cpp',
     'kernel/kmalloc.cpp',
@@ -88,7 +88,7 @@ def configure(conf):
     asflags = [ '-march=armv6', '-g' ]
 
     conf.env.append_unique('CFLAGS', cflags)
-    conf.env.append_unique('CXXFLAGS', cflags + ['-fno-exceptions'])
+    conf.env.append_unique('CXXFLAGS', cflags)
     conf.env.append_unique('ASFLAGS', asflags)
 
     conf.load('gcc')
@@ -178,7 +178,7 @@ def build(ctx):
 
         defines     =   [ '__KERNEL__' ],
 
-        linkflags   =   [ '-Wl,-T,' + linker_script.bldpath(), '-nostdlib' ],
+        linkflags   =   [ '-Wl,-T,' + linker_script.bldpath(), '-nostartfiles' ],
 
         env         =   ctx.all_envs[CROSS].derive(),
     )
