@@ -23,20 +23,43 @@ SECTIONS
         kernel/early-*.o(.bss .bss.*)
         }
 
-    . = ALIGN(CONSTANT(MAXPAGESIZE));
-    begin_high = .;
-
-    .text (begin_high + __KernelStart) : AT(begin_high)
-        ALIGN(CONSTANT(MAXPAGESIZE))
+    /* Dummy section */
+    .dummy :
         {
-            *(.text)
+        }
+
+    /*
+    We're going to mess with the normal VMA assignment sequence by manually
+    placing the '.vector' section's run address. This variable saves where the
+    VMA counter lived before the assignment. We'll need to return to it in a
+    moment.
+    */
+    __vma_before_vector = .;
+
+    /* Hop forward in VMA to the ARM high vector table address */
+    .vector 0xffff0000 :
+        AT(ALIGN(LOADADDR(.dummy), CONSTANT(COMMONPAGESIZE)))
+        {
+            __VectorStartPhysical = LOADADDR(.vector);
+            *(.text.vector)
+        }
+
+    /* '__begin_high' will be the first LMA of code addressable in high memory */
+    . = ALIGN(__vma_before_vector + SIZEOF(.vector), CONSTANT(COMMONPAGESIZE));
+    __begin_high = .;
+
+    /* Hop backward to regular high-memory VMA's */
+    .text (__begin_high + __KernelStart) :
+        AT(__begin_high)
+        {
+            *(.text .text.*)
         }
 
     .data :
         ALIGN(CONSTANT(MAXPAGESIZE))
         {
-            *(.data)
-            *(.rodata)
+            *(.data .data.*)
+            *(.rodata .rodata.*)
         }
 
     .init_array :
@@ -50,7 +73,7 @@ SECTIONS
     .bss :
         ALIGN(CONSTANT(MAXPAGESIZE))
         {
-            *(.bss)
+            *(.bss .bss.*)
         }
 
     .ARM.extab :
@@ -66,18 +89,6 @@ SECTIONS
     PROVIDE_HIDDEN(__exidx_end = .);
 
     PROVIDE (end = .);
-
-    /* Hop forward in virtual memory to the ARM high vector table address */
-    .vector 0xffff0000 : AT(ALIGN(LOADADDR(.ARM.exidx) + SIZEOF(.ARM.exidx), CONSTANT(COMMONPAGESIZE)))
-        {
-            __VectorStartPhysical = LOADADDR(.vector);
-            *(.text.vector)
-        }
-
-    /* Reset VMA counter as though .vector had been in normal kernel range */
-    . = ADDR(.ARM.exidx)
-            + (LOADADDR(.vector) - LOADADDR(.ARM.exidx))  /* Padded sizeof(.ARM.exidx) */
-            + SIZEOF(.vector);
 
     __HeapStart = ALIGN(CONSTANT(MAXPAGESIZE));
     __RamEnd = __KernelStart + __PhysicalRamSize;
