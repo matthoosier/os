@@ -339,7 +339,7 @@ struct TranslationTable * TranslationTableAlloc (void)
     }
 
     /* Translation table is 16-KB aligned and 4 pages long. */
-    table->firstlevel_ptes_pages = VmPagesAlloc(TRANSLATION_TABLE_PAGES_ORDER);
+    table->firstlevel_ptes_pages = Page::Alloc(TRANSLATION_TABLE_PAGES_ORDER);
 
     if (!table->firstlevel_ptes_pages) {
         goto cleanup_table;
@@ -366,7 +366,7 @@ struct TranslationTable * TranslationTableAlloc (void)
 
     /* Failure cases */
 cleanup_pages:
-    VmPageFree(table->firstlevel_ptes_pages);
+    Page::Free(table->firstlevel_ptes_pages);
 
 cleanup_table:
     SpinlockLock(&translation_table_cache_lock);
@@ -413,7 +413,7 @@ void TranslationTableFree (struct TranslationTable * table)
 
     table->firstlevel_ptes = NULL;
     TreeMapFree(table->sparse_secondlevel_map);
-    VmPageFree(table->firstlevel_ptes_pages);
+    Page::Free(table->firstlevel_ptes_pages);
 
     SpinlockLock(&translation_table_cache_lock);
     ObjectCacheFree(&translation_table_cache, table);

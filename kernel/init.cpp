@@ -49,14 +49,14 @@ void Init (void)
     }
 
 
-    struct Page * one = VmPageAlloc();
-    struct Page * two = VmPageAlloc();
-    struct Page * three = VmPageAlloc();
-    struct Page * four = VmPageAlloc();
+    Page * one = Page::Alloc();
+    Page * two = Page::Alloc();
+    Page * three = Page::Alloc();
+    Page * four = Page::Alloc();
 
-    VmPageFree(three);
+    Page::Free(three);
     three = NULL;
-    VmPageFree(four);
+    Page::Free(four);
     four = NULL;
 
     one = one;

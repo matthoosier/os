@@ -29,7 +29,7 @@ typedef struct
 static buddylist_level buddylists[NUM_BUDDYLIST_LEVELS];
 
 static unsigned int     num_pages;
-static struct Page *    page_structs;
+static Page *           page_structs;
 static VmAddr_t         pages_base;
 static Spinlock_t       lock = SPINLOCK_INIT;
 
@@ -40,7 +40,7 @@ static inline unsigned int page_index_from_base_address (VmAddr_t base)
     return (base - pages_base) >> PAGE_SHIFT;
 }
 
-static inline unsigned int page_index_from_struct (struct Page * page)
+static inline unsigned int page_index_from_struct (Page * page)
 {
     return page_index_from_base_address(page->base_address);
 }
@@ -98,7 +98,7 @@ static void vm_init (void * ignored)
     pages_base &= PAGE_MASK << (NUM_BUDDYLIST_LEVELS - 1);
 
     num_pages = PAGE_COUNT_FROM_SIZE(HEAP_SIZE - (pages_base - VIRTUAL_HEAP_START));
-    page_structs = (struct Page *)VIRTUAL_HEAP_START;
+    page_structs = (Page *)VIRTUAL_HEAP_START;
 
     /*
     Initialize struct pointer for each block. We only iterate across
@@ -117,12 +117,12 @@ static void vm_init (void * ignored)
     }
 }
 
-struct Page * vm_pages_alloc_internal (
+Page * vm_pages_alloc_internal (
         unsigned int order,
         bool mark_busy_in_bitmap
         )
 {
-    struct Page * result;
+    Page * result;
 
     Once(&init_control, vm_init, NULL);
 
@@ -132,8 +132,8 @@ struct Page * vm_pages_alloc_internal (
 
     /* If no block of the requested size is available, split a larger one */
     if (buddylists[order].freelist_head.Empty()) {
-        struct Page * block_to_split;
-        struct Page * second_half_struct;
+        Page * block_to_split;
+        Page * second_half_struct;
         VmAddr_t  second_half_address;
 
         /* Recursive call */
@@ -145,7 +145,7 @@ struct Page * vm_pages_alloc_internal (
 
         /*
         If we got this far, then the 'block_to_split' structure is already
-        the right 'struct Page' instance to represent the lower-half of
+        the right 'Page' instance to represent the lower-half of
         the block once it's split in two.
 
         We still need to compute the right struct instance (and initialize
@@ -194,20 +194,9 @@ struct Page * vm_pages_alloc_internal (
     return result;
 }
 
-struct Page * VmPageAlloc ()
+Page * Page::Alloc (unsigned int order)
 {
-    struct Page * ret;
-
-    SpinlockLock(&lock);
-    ret = vm_pages_alloc_internal(0, true);
-    SpinlockUnlock(&lock);
-
-    return ret;
-}
-
-struct Page * VmPagesAlloc (unsigned int order)
-{
-    struct Page * ret;
+    Page * ret;
 
     SpinlockLock(&lock);
     ret = vm_pages_alloc_internal(order, true);
@@ -216,11 +205,11 @@ struct Page * VmPagesAlloc (unsigned int order)
     return ret;
 }
 
-static void try_merge_block (struct Page * block, unsigned int order)
+static void try_merge_block (Page * block, unsigned int order)
 {
     VmAddr_t        partner_address;
     unsigned int    partner_index;
-    struct Page *   partner;
+    Page *          partner;
 
     /* No coaslescing is possible if block is from largest bucket */
     if (order >= NUM_BUDDYLIST_LEVELS - 1) {
@@ -237,7 +226,7 @@ static void try_merge_block (struct Page * block, unsigned int order)
 
     /* If the partner isn't allocated out to a user, then merge */
     if (!BitmapGet(buddylists[order].bitmap.elements, partner_index >> order)) {
-        struct Page * merged_block = block->base_address < partner->base_address
+        Page * merged_block = block->base_address < partner->base_address
                 ? block
                 : partner;
 
@@ -253,7 +242,7 @@ static void try_merge_block (struct Page * block, unsigned int order)
     }
 }
 
-void VmPageFree (struct Page * page)
+void Page::Free (Page * page)
 {
     unsigned int order;
     unsigned int largest_order;
@@ -287,7 +276,7 @@ void VmPageFree (struct Page * page)
         }
     }
 
-    while (1) {}
+    assert(false);
 
 done:
     SpinlockUnlock(&lock);

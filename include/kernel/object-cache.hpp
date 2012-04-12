@@ -25,7 +25,7 @@ struct Bufctl
 struct Slab
 {
     /* Descriptor for the raw virtual memory used by this slab. */
-    struct Page * page;
+    Page * page;
 
     /* How many objects from this slab are still held by users. */
     unsigned int refcount;

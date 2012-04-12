@@ -16,7 +16,7 @@ BEGIN_DECLS
 struct TranslationTable
 {
     /* Provides the storage pointed at by 'translation_base' below */
-    struct Page * firstlevel_ptes_pages;
+    Page * firstlevel_ptes_pages;
 
     /*
      * Points to a pt_firstlevel_t[4096].

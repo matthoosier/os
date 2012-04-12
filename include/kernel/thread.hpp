@@ -69,7 +69,7 @@ struct Thread
         void *  base;
 
         /* If non-NULL, stack was dynamically allocated */
-        struct Page * page;
+        Page * page;
     } kernel_stack;
 
     ThreadState state;

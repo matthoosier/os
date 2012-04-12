@@ -76,7 +76,7 @@ static void SegmentFree (
 
     for (list_t::Iterator i = segment->pages_head.Begin(); i; ++i) {
 
-        struct Page * page = *i;
+        Page * page = *i;
 
         bool unmapped = TranslationTableUnmapPage(
                 table,
@@ -87,7 +87,7 @@ static void SegmentFree (
         map_addr += PAGE_SIZE;
 
         segment->pages_head.Remove(page);
-        VmPageFree(page);
+        Page::Free(page);
     }
 
     ObjectCacheFree(&segment_cache, segment);
@@ -248,7 +248,7 @@ struct Process * exec_into_current (
 
             /* Map in all the memory that will hold the segment */
             for (j = 0; j < num_pages; j++) {
-                struct Page * page = VmPageAlloc();
+                Page * page = Page::Alloc();
                 bool mapped;
 
                 mapped = TranslationTableMapPage(

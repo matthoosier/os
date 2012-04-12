@@ -39,18 +39,18 @@ static void small_objects_free_slab (struct ObjectCache * cache, struct Slab * s
         allocated page, so by returning the page, we've implicitly
         deallocated the slab struct too.
         */
-        VmPageFree(slab->page);
+        Page::Free(slab->page);
     }
 }
 
 static struct Slab * small_objects_try_allocate_slab (struct ObjectCache * cache)
 {
-    struct Page *   new_page;
+    Page *          new_page;
     struct Slab *   new_slab;
     unsigned int    objs_in_slab;
     unsigned int    i;
 
-    new_page = VmPageAlloc();
+    new_page = Page::Alloc();
 
     if (!new_page) {
         return NULL;

@@ -120,10 +120,10 @@ static void thread_entry (ThreadFunc func, void * param)
 struct Thread * ThreadCreate (ThreadFunc body, void * param)
 {
     unsigned int    i;
-    struct Page *   stack_page;
+    Page *          stack_page;
     struct Thread * descriptor;
 
-    stack_page = VmPageAlloc();
+    stack_page = Page::Alloc();
 
     if (!stack_page) {
         /* No memory available to allocate stack */
@@ -184,7 +184,7 @@ void ThreadJoin (struct Thread * thread)
     }
 
     if (thread->kernel_stack.page != NULL) {
-        VmPageFree(thread->kernel_stack.page);
+        Page::Free(thread->kernel_stack.page);
     }
 }
 

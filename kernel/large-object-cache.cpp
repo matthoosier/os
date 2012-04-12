@@ -44,12 +44,12 @@ static void destructor (struct ObjectCache * cache)
 
 static struct Slab * large_objects_try_allocate_slab (struct ObjectCache * cache)
 {
-    struct Page *   new_page;
+    Page *          new_page;
     struct Slab *   new_slab;
     unsigned int    objs_in_slab;
     unsigned int    i;
 
-    new_page = VmPageAlloc();
+    new_page = Page::Alloc();
 
     if (!new_page) {
         return NULL;
@@ -60,7 +60,7 @@ static struct Slab * large_objects_try_allocate_slab (struct ObjectCache * cache
     SpinlockUnlock(&slabs_cache_lock);
 
     if (!new_slab) {
-        VmPageFree(new_page);
+        Page::Free(new_page);
         return NULL;
     }
 
@@ -114,7 +114,7 @@ static void large_objects_free_slab (struct ObjectCache * cache, struct Slab * s
         }
 
         /* Release the page that stored the user buffers */
-        VmPageFree(slab->page);
+        Page::Free(slab->page);
 
         /* Finally free the slab, which is allocated from an object cache. */
         SpinlockLock(&slabs_cache_lock);
