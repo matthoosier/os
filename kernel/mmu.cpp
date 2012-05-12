@@ -14,7 +14,7 @@
 #include <kernel/mmu.hpp>
 #include <kernel/object-cache.hpp>
 #include <kernel/once.h>
-#include <kernel/tree-map.h>
+#include <kernel/tree-map.hpp>
 #include <kernel/vm.hpp>
 
 #define ARM_MMU_ENABLED_BIT             0
@@ -347,7 +347,7 @@ struct TranslationTable * TranslationTableAlloc (void)
 
     table->firstlevel_ptes = (pt_firstlevel_t *)table->firstlevel_ptes_pages->base_address;
 
-    table->sparse_secondlevel_map = TreeMapAlloc(TreeMapAddressCompareFunc);
+    table->sparse_secondlevel_map = new TranslationTable::SparseSecondlevelMap_t(TranslationTable::SparseSecondlevelMap_t::AddressCompareFunc);
 
     if (!table->sparse_secondlevel_map) {
         goto cleanup_pages;
@@ -380,7 +380,7 @@ cleanup_table:
 Use a foreach on the tree to collect any existing nodes into a
 list, then blow away the list's elements afterward.
 */
-static void func (TreeMapKey_t key, TreeMapValue_t value, void * user_data)
+static void func (RawTreeMap::Key_t key, RawTreeMap::Value_t value, void * user_data)
 {
     typedef List<SecondlevelTable, &SecondlevelTable::link> list_t;
 
@@ -403,7 +403,7 @@ void TranslationTableFree (struct TranslationTable * table)
     /* Clean out any individual second-level translation tables */
 
     /* Go ahead and gather up all the nodes */
-    TreeMapForeach(table->sparse_secondlevel_map, func, &head);
+    table->sparse_secondlevel_map->Foreach(func, &head);
 
     /* Deallocate everything we found in there */
     while (!head.Empty())
@@ -412,7 +412,7 @@ void TranslationTableFree (struct TranslationTable * table)
     }
 
     table->firstlevel_ptes = NULL;
-    TreeMapFree(table->sparse_secondlevel_map);
+    delete table->sparse_secondlevel_map;
     Page::Free(table->firstlevel_ptes_pages);
 
     SpinlockLock(&translation_table_cache_lock);
@@ -619,10 +619,7 @@ bool TranslationTableMapPage (
 
         case PT_FIRSTLEVEL_MAPTYPE_COARSE:
         {
-            secondlevel_table = (struct SecondlevelTable *)TreeMapLookup(
-                    table->sparse_secondlevel_map,
-                    (TreeMapKey_t)virt_mb_rounded
-                    );
+            secondlevel_table = table->sparse_secondlevel_map->Lookup(virt_mb_rounded);
 
             if (!secondlevel_table) {
                 /* No pages exist in the section. Why's it mapped then?? */
@@ -653,10 +650,7 @@ bool TranslationTableMapPage (
             return false;
         }
 
-        TreeMapInsert(
-                table->sparse_secondlevel_map,
-                (TreeMapKey_t)virt_mb_rounded,
-                secondlevel_table);
+        table->sparse_secondlevel_map->Insert(virt_mb_rounded, secondlevel_table);
 
         table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] =
                 PT_FIRSTLEVEL_MAPTYPE_COARSE |
@@ -714,10 +708,7 @@ bool TranslationTableUnmapPage (
 
         case PT_FIRSTLEVEL_MAPTYPE_COARSE:
 
-            secondlevel_table = (struct SecondlevelTable *)TreeMapLookup(
-                    table->sparse_secondlevel_map,
-                    (TreeMapKey_t)virt_mb_rounded
-                    );
+            secondlevel_table = table->sparse_secondlevel_map->Lookup(virt_mb_rounded);
 
             if (!secondlevel_table) {
                 /* No pages exist in the section. Why's it mapped then?? */
@@ -746,10 +737,7 @@ bool TranslationTableUnmapPage (
         table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] &= ~PT_FIRSTLEVEL_MAPTYPE_MASK;
         table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] |= PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
 
-        secondlevel_table = (struct SecondlevelTable *)TreeMapRemove(
-                table->sparse_secondlevel_map,
-                (TreeMapKey_t)virt_mb_rounded
-                );
+        secondlevel_table = table->sparse_secondlevel_map->Remove(virt_mb_rounded);
 
         assert(secondlevel_table != NULL);
     }

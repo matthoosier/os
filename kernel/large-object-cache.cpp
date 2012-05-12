@@ -6,7 +6,7 @@
 #include <kernel/assert.h>
 #include <kernel/list.hpp>
 #include <kernel/once.h>
-#include <kernel/tree-map.h>
+#include <kernel/tree-map.hpp>
 #include <kernel/vm.hpp>
 
 #include "object-cache-internal.hpp"
@@ -33,13 +33,12 @@ static void static_init ()
 
 static void constructor (struct ObjectCache * cache)
 {
-    cache->bufctl_to_slab_map = TreeMapAlloc(TreeMapAddressCompareFunc);
+    cache->bufctl_to_slab_map = new ObjectCache::BufctlToSlabMap_t(ObjectCache::BufctlToSlabMap_t::AddressCompareFunc);
 }
 
 static void destructor (struct ObjectCache * cache)
 {
-    TreeMapFree(cache->bufctl_to_slab_map);
-    cache->bufctl_to_slab_map = NULL;
+    cache->bufctl_to_slab_map.Clear();
 }
 
 static struct Slab * large_objects_try_allocate_slab (struct ObjectCache * cache)
@@ -79,8 +78,8 @@ static struct Slab * large_objects_try_allocate_slab (struct ObjectCache * cache
         InitBufctl(new_bufctl);
 
         /* Record controlling slab's location in auxiliary map */
-        TreeMapInsert(cache->bufctl_to_slab_map, new_bufctl, new_slab);
-        assert(TreeMapLookup(cache->bufctl_to_slab_map, new_bufctl) == new_slab);
+        cache->bufctl_to_slab_map->Insert(new_bufctl, new_slab);
+        assert(cache->bufctl_to_slab_map->Lookup(new_bufctl) == new_slab);
 
         /* Now insert into freelist */
         new_slab->freelist_head.Append(new_bufctl);
@@ -109,7 +108,7 @@ static void large_objects_free_slab (struct ObjectCache * cache, struct Slab * s
             
             struct Slab * removed;
 
-            removed = (struct Slab *)TreeMapRemove(cache->bufctl_to_slab_map, *cursor);
+            removed = cache->bufctl_to_slab_map->Remove(*cursor);
             assert(removed != NULL);
         }
 
@@ -128,7 +127,7 @@ static struct Slab * large_objects_slab_from_bufctl (
         void * bufctl_addr
         )
 {
-    return (struct Slab *)TreeMapLookup(cache->bufctl_to_slab_map, bufctl_addr);
+    return cache->bufctl_to_slab_map->Lookup(bufctl_addr);
 }
 
 const struct ObjectCacheOps large_objects_ops = {

@@ -14,7 +14,7 @@
 #include <kernel/ramfs.h>
 #include <kernel/thread.hpp>
 #include <kernel/timer.h>
-#include <kernel/tree-map.h>
+#include <kernel/tree-map.hpp>
 
 /** Handed off between spawner and spawnee threads */
 struct process_creation_context
@@ -105,9 +105,9 @@ static struct Process * ProcessAlloc ()
 
         SpinlockInit(&p->lock);
 
-        p->id_to_channel_map    = TreeMapAlloc(TreeMapSignedIntCompareFunc);
-        p->id_to_connection_map = TreeMapAlloc(TreeMapSignedIntCompareFunc);
-        p->id_to_message_map    = TreeMapAlloc(TreeMapSignedIntCompareFunc);
+        p->id_to_channel_map    = new Process::IdToChannelMap_t(Process::IdToChannelMap_t::SignedIntCompareFunc);
+        p->id_to_connection_map = new Process::IdToConnectionMap_t(Process::IdToConnectionMap_t::SignedIntCompareFunc);
+        p->id_to_message_map    = new Process::IdToMessageMap_t(Process::IdToMessageMap_t::SignedIntCompareFunc);
 
         if (p->id_to_channel_map && p->id_to_connection_map && p->id_to_message_map) {
             p->segments_head.DynamicInit();
@@ -118,9 +118,9 @@ static struct Process * ProcessAlloc ()
             p->next_msgid = 1;
         }
         else {
-            if (p->id_to_channel_map)       TreeMapFree(p->id_to_channel_map);
-            if (p->id_to_connection_map)    TreeMapFree(p->id_to_connection_map);
-            if (p->id_to_message_map)       TreeMapFree(p->id_to_message_map);
+            if (p->id_to_channel_map)       delete p->id_to_channel_map;
+            if (p->id_to_connection_map)    delete p->id_to_connection_map;
+            if (p->id_to_message_map)       delete p->id_to_message_map;
 
             ObjectCacheFree(&process_cache, p);
             p = NULL;
@@ -148,9 +148,9 @@ static void ProcessFree (struct Process * process)
 
     /* XXX: Free all messages that the process has received but not yet responded to */
 
-    TreeMapFree(process->id_to_channel_map);
-    TreeMapFree(process->id_to_connection_map);
-    TreeMapFree(process->id_to_message_map);
+    delete process->id_to_channel_map;
+    delete process->id_to_connection_map;
+    delete process->id_to_message_map;
     
     /* Deallocate virtual memory of the process */
     while (!process->segments_head.Empty()) {
@@ -421,18 +421,20 @@ static Pid_t get_next_pid ()
 
 static Spinlock_t pid_map_lock = SPINLOCK_INIT;
 
+typedef TreeMap<Pid_t, struct Process *> PidMap_t;
+
 static void alloc_pid_map (void * ppPidMap)
 {
-    struct TreeMap ** ptrPtrPidMap = (struct TreeMap **)ppPidMap;
+    PidMap_t ** ptrPtrPidMap = (PidMap_t **)ppPidMap;
 
-    *ptrPtrPidMap = (struct TreeMap *)TreeMapAlloc(TreeMapSignedIntCompareFunc);
+    *ptrPtrPidMap = new PidMap_t(PidMap_t::SignedIntCompareFunc);
     assert(*ptrPtrPidMap != NULL);
 }
 
-static struct TreeMap * get_pid_map ()
+static PidMap_t * get_pid_map ()
 {
-    static struct TreeMap * pid_map;
-    static Once_t           pid_map_once = ONCE_INIT;
+    static PidMap_t   * pid_map;
+    static Once_t       pid_map_once = ONCE_INIT;
 
     Once(&pid_map_once, alloc_pid_map, &pid_map);
     return pid_map;
@@ -443,7 +445,7 @@ static struct Process * PidMapLookup (Pid_t key)
     struct Process * ret;
 
     SpinlockLock(&pid_map_lock);
-    ret = (struct Process *)TreeMapLookup(get_pid_map(), (TreeMapKey_t)key);
+    ret = get_pid_map()->Lookup(key);
     SpinlockUnlock(&pid_map_lock);
 
     return ret;
@@ -454,7 +456,7 @@ static struct Process * PidMapInsert (Pid_t key, struct Process * process)
     struct Process * ret;
 
     SpinlockLock(&pid_map_lock);
-    ret = (struct Process *)TreeMapInsert(get_pid_map(), (TreeMapKey_t)key, process);
+    ret = get_pid_map()->Insert(key, process);
     SpinlockUnlock(&pid_map_lock);
 
     return ret;
@@ -465,7 +467,7 @@ static struct Process * PidMapRemove (Pid_t key)
     struct Process * ret;
 
     SpinlockLock(&pid_map_lock);
-    ret = (struct Process *)TreeMapRemove(get_pid_map(), (TreeMapKey_t)key);
+    ret = get_pid_map()->Remove(key);
     SpinlockUnlock(&pid_map_lock);
 
     return ret;
@@ -513,8 +515,8 @@ static void process_manager_thread (void * pProcessCreationContext)
     THREAD_CURRENT()->process = p;
 
     /* Map the channel to a well-known integer identifier */
-    TreeMapInsert(p->id_to_channel_map, (TreeMapKey_t)p->next_chid, channel);
-    assert(TreeMapLookup(p->id_to_channel_map, (TreeMapKey_t)p->next_chid) == channel);
+    p->id_to_channel_map->Insert(p->next_chid, channel);
+    assert(p->id_to_channel_map->Lookup(p->next_chid) == channel);
     p->next_chid++;
 
     /* Start periodic timer to use for pre-emption */
@@ -588,14 +590,14 @@ Channel_t ProcessRegisterChannel (
 {
     Channel_t id = p->next_chid++;
 
-    if (TreeMapLookup(p->id_to_channel_map, (TreeMapKey_t)id) != NULL) {
+    if (p->id_to_channel_map->Lookup(id) != NULL) {
         assert(false);
         return -ERROR_INVALID;
     }
 
-    TreeMapInsert(p->id_to_channel_map, (TreeMapKey_t)id, c);
+    p->id_to_channel_map->Insert(id, c);
 
-    if (TreeMapLookup(p->id_to_channel_map, (TreeMapKey_t)id) != c) {
+    if (p->id_to_channel_map->Lookup(id) != c) {
         return -ERROR_NO_MEM;
     }
 
@@ -608,7 +610,7 @@ int ProcessUnregisterChannel (
         Channel_t id
         )
 {
-    struct Channel * c = (struct Channel *)TreeMapRemove(p->id_to_channel_map, (TreeMapKey_t)id);
+    struct Channel * c = p->id_to_channel_map->Remove(id);
 
     if (!c) {
         return -ERROR_INVALID;
@@ -624,7 +626,7 @@ struct Channel * ProcessLookupChannel (
         Channel_t id
         )
 {
-    return (struct Channel *)TreeMapLookup(p->id_to_channel_map, (TreeMapKey_t)id);
+    return p->id_to_channel_map->Lookup(id);
 }
 
 Connection_t ProcessRegisterConnection (
@@ -634,14 +636,14 @@ Connection_t ProcessRegisterConnection (
 {
     Connection_t id = p->next_coid++;
 
-    if (TreeMapLookup(p->id_to_connection_map, (TreeMapKey_t)id) != NULL) {
+    if (p->id_to_connection_map->Lookup(id) != NULL) {
         assert(false);
         return -ERROR_INVALID;
     }
 
-    TreeMapInsert(p->id_to_connection_map, (TreeMapKey_t)id, c);
+    p->id_to_connection_map->Insert(id, c);
 
-    if (TreeMapLookup(p->id_to_connection_map, (TreeMapKey_t)id) != c) {
+    if (p->id_to_connection_map->Lookup(id) != c) {
         return -ERROR_NO_MEM;
     }
 
@@ -654,7 +656,7 @@ int ProcessUnregisterConnection (
         Connection_t id
         )
 {
-    struct Connection * c = (struct Connection *)TreeMapRemove(p->id_to_connection_map, (TreeMapKey_t)id);
+    struct Connection * c = p->id_to_connection_map->Remove(id);
 
     if (!c) {
         return -ERROR_INVALID;
@@ -669,7 +671,7 @@ struct Connection * ProcessLookupConnection (
         Connection_t id
         )
 {
-    return (struct Connection *)TreeMapLookup(p->id_to_connection_map, (TreeMapKey_t)id);
+    return p->id_to_connection_map->Lookup(id);
 }
 
 Message_t ProcessRegisterMessage (
@@ -679,14 +681,14 @@ Message_t ProcessRegisterMessage (
 {
     int msgid = p->next_msgid++;
 
-    if (TreeMapLookup(p->id_to_message_map, (TreeMapKey_t)msgid) != NULL) {
+    if (p->id_to_message_map->Lookup(msgid) != NULL) {
         assert(false);
         return -ERROR_INVALID;
     }
 
-    TreeMapInsert(p->id_to_message_map, (TreeMapKey_t)msgid, m);
+    p->id_to_message_map->Insert(msgid, m);
 
-    if (TreeMapLookup(p->id_to_message_map, (TreeMapKey_t)msgid) != m) {
+    if (p->id_to_message_map->Lookup(msgid) != m) {
         return -ERROR_NO_MEM;
     }
 
@@ -698,7 +700,7 @@ int ProcessUnregisterMessage (
         Message_t id
         )
 {
-    struct Message * m = (struct Message *)TreeMapRemove(p->id_to_message_map, (TreeMapKey_t)id);
+    struct Message * m = p->id_to_message_map->Remove(id);
 
     if (!m) {
         return -ERROR_INVALID;
@@ -712,7 +714,7 @@ struct Message * ProcessLookupMessage (
         Message_t id
         )
 {
-    return (struct Message *)TreeMapLookup(p->id_to_message_map, (TreeMapKey_t)id);
+    return p->id_to_message_map->Lookup(id);
 }
 
 struct TranslationTable * ProcessGetTranslationTable (struct Process * process)

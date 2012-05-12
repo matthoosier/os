@@ -8,10 +8,12 @@
 
 #include <kernel/list.hpp>
 #include <kernel/mmu-defs.h>
-#include <kernel/tree-map.h>
+#include <kernel/tree-map.hpp>
 #include <kernel/vm.hpp>
 
 BEGIN_DECLS
+
+struct SecondlevelTable;
 
 struct TranslationTable
 {
@@ -42,7 +44,8 @@ struct TranslationTable
      *    Fifteenth section (0x00e00000 - 0x00efffff)
      *        0x00e00000 -> (SecondlevelTable *)<struct address>
      */
-    struct TreeMap * sparse_secondlevel_map;
+    typedef TreeMap<VmAddr_t, struct SecondlevelTable *> SparseSecondlevelMap_t;
+    SparseSecondlevelMap_t * sparse_secondlevel_map;
 
     /*
      * Virtual address of the first byte of the first page in the virtual

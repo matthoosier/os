@@ -8,7 +8,7 @@
 #include <kernel/list.hpp>
 #include <kernel/message.hpp>
 #include <kernel/mmu.hpp>
-#include <kernel/tree-map.h>
+#include <kernel/tree-map.hpp>
 #include <kernel/vm.hpp>
 
 class Thread;
@@ -41,16 +41,22 @@ struct Process
     Thread                        * thread;
     Pid_t                           pid;
 
-    struct TreeMap                * id_to_channel_map;
+    typedef TreeMap<Channel_t, Channel *> IdToChannelMap_t;
+
+    IdToChannelMap_t              * id_to_channel_map;
     List<Channel, &Channel::link>   channels_head;
     Channel_t                       next_chid;
 
-    struct TreeMap                        * id_to_connection_map;
+    typedef TreeMap<Connection_t, Connection *> IdToConnectionMap_t;
+
+    IdToConnectionMap_t                   * id_to_connection_map;
     List<Connection, &Connection::link>     connections_head;
     Connection_t                            next_coid;
 
-    struct TreeMap            * id_to_message_map;
-    int                         next_msgid;
+    typedef TreeMap<int, struct Message *> IdToMessageMap_t;
+
+    IdToMessageMap_t  * id_to_message_map;
+    int                 next_msgid;
 };
 
 /**
