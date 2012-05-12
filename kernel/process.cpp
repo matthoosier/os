@@ -19,7 +19,7 @@
 /** Handed off between spawner and spawnee threads */
 struct process_creation_context
 {
-    struct Thread     * caller;
+    Thread *            caller;
     struct Process    * created;
     const char        * executableName;
     bool                caller_should_release;
@@ -402,11 +402,11 @@ struct Process * ProcessCreate (const char executableName[])
     context.caller_should_release = false;
 
     /* Resulting process object will be stored into context->created */
-    ThreadCreate(process_creation_thread, &context);
+    Thread::Create(process_creation_thread, &context);
 
     /* Forked thread will wake us back up when the process creation is done */
     while (!context.caller_should_release) {
-        ThreadYieldWithRequeue();
+        Thread::YieldWithRequeue();
     }
 
     return context.created;
@@ -563,11 +563,11 @@ struct Process * ProcessStartManager ()
     context.caller_should_release = false;
 
     /* Resulting process object will be stored into context->created */
-    ThreadCreate(process_manager_thread, &context);
+    Thread::Create(process_manager_thread, &context);
 
     /* Forked thread will wake us back up when the process creation is done */
     while (!context.caller_should_release) {
-        ThreadYieldWithRequeue();
+        Thread::YieldWithRequeue();
     }
 
     managerProcess = context.created;
@@ -745,10 +745,10 @@ static void HandleExit (
     message->sender->process = NULL;
 
     /* Force sender's kernel thread to appear done */
-    message->sender->state = THREAD_STATE_FINISHED;
+    message->sender->state = Thread::STATE_FINISHED;
 
     /* Reap sender's kernel thread */
-    ThreadJoin(message->sender);
+    message->sender->Join();
 
     /* No MessageReply(), so manually free the Message */
     KMessageFree(message);

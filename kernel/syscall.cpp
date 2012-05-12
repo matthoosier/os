@@ -239,8 +239,8 @@ void do_syscall (uint32_t * p_regs)
     Check whether any interrupts handlers decided that the scheduling
     algorithm needs to run and pick a new next task.
     */
-    if (ThreadResetNeedResched()) {
-        ThreadYieldWithRequeue();
+    if (Thread::ResetNeedResched()) {
+        Thread::YieldWithRequeue();
     }
 }
 

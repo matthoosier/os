@@ -11,6 +11,8 @@
 #include <kernel/tree-map.h>
 #include <kernel/vm.hpp>
 
+class Thread;
+
 BEGIN_DECLS
 
 typedef int Pid_t;
@@ -36,7 +38,7 @@ struct Process
     VmAddr_t                        entry;
     char                            comm[16];
     List<Segment, &Segment::link>   segments_head;
-    struct Thread                 * thread;
+    Thread                        * thread;
     Pid_t                           pid;
 
     struct TreeMap                * id_to_channel_map;

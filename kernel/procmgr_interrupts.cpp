@@ -31,7 +31,7 @@ static void HandleInterruptAttach (
                 rec
                 );
 
-        message->sender->assigned_priority = THREAD_PRIORITY_IO;
+        message->sender->assigned_priority = Thread::PRIORITY_IO;
 
         reply.payload.interrupt_attach.handler = (uintptr_t)rec;
 

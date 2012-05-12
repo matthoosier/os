@@ -9,14 +9,14 @@
 
 typedef List<Thread, &Thread::queue_link> Queue_t;
 
-Queue_t normal_ready_queue;
-Queue_t io_ready_queue;
+static Queue_t normal_ready_queue;
+static Queue_t io_ready_queue;
 
 static Spinlock_t ready_queue_lock = SPINLOCK_INIT;
 
-static inline Queue_t * queue_for_thread (struct Thread * t)
+static inline Queue_t * queue_for_thread (Thread * t)
 {
-    if (t->assigned_priority == THREAD_PRIORITY_IO || t->effective_priority == THREAD_PRIORITY_IO) {
+    if (t->assigned_priority == Thread::PRIORITY_IO || t->effective_priority == Thread::PRIORITY_IO) {
         return &io_ready_queue;
     }
     else {
@@ -24,15 +24,15 @@ static inline Queue_t * queue_for_thread (struct Thread * t)
     }
 }
 
-static void thread_entry (ThreadFunc func, void * param);
+static void thread_entry (Thread::Func func, void * param);
 
-void ThreadYieldNoRequeueToSpecific (struct Thread * next);
+void ThreadYieldNoRequeueToSpecific (Thread * next);
 
 typedef void (*ThreadSwitchPreFunc) (void *param);
 
 static void ThreadSwitch (
-        struct Thread * outgoing,
-        struct Thread * incoming,
+        Thread * outgoing,
+        Thread * incoming,
         ThreadSwitchPreFunc func,
         void * funcParam
         )
@@ -60,7 +60,7 @@ static void ThreadSwitch (
     MmuSetUserTranslationTable(incoming_tt);
 
     /* Mark incoming thread as running */
-    incoming->state = THREAD_STATE_RUNNING;
+    incoming->state = Thread::STATE_RUNNING;
 
     asm volatile(
         "                                                   \n\t"
@@ -104,24 +104,24 @@ static void ThreadSwitch (
     );
 }
 
-static void thread_entry (ThreadFunc func, void * param)
+static void thread_entry (Thread::Func func, void * param)
 {
     func(param);
 
-    THREAD_CURRENT()->state = THREAD_STATE_FINISHED;
+    THREAD_CURRENT()->state = Thread::STATE_FINISHED;
 
     if (THREAD_CURRENT()->joiner != NULL) {
-        ThreadAddReady(THREAD_CURRENT()->joiner);
+        Thread::AddReady(THREAD_CURRENT()->joiner);
     }
 
-    ThreadYieldNoRequeue();
+    Thread::YieldNoRequeue();
 }
 
-struct Thread * ThreadCreate (ThreadFunc body, void * param)
+Thread * Thread::Create (Thread::Func body, void * param)
 {
     unsigned int    i;
     Page *          stack_page;
-    struct Thread * descriptor;
+    Thread *        descriptor;
 
     stack_page = Page::Alloc();
 
@@ -146,10 +146,10 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
     descriptor->kernel_stack.page = stack_page;
     descriptor->process = THREAD_CURRENT()->process;
     descriptor->queue_link.DynamicInit();
-    descriptor->state = THREAD_STATE_READY;
+    descriptor->state = Thread::STATE_READY;
     descriptor->joiner = NULL;
-    descriptor->assigned_priority = THREAD_PRIORITY_NORMAL;
-    descriptor->effective_priority = THREAD_PRIORITY_NORMAL;
+    descriptor->assigned_priority = Thread::PRIORITY_NORMAL;
+    descriptor->effective_priority = Thread::PRIORITY_NORMAL;
 
     /* Initially only the program and stack counter matter. */
     descriptor->registers[REGISTER_INDEX_SP] = (uint32_t)descriptor->kernel_stack.ceiling;
@@ -167,51 +167,51 @@ struct Thread * ThreadCreate (ThreadFunc body, void * param)
     );
 
     /* Yield immediately to new thread so that it gets initialized */
-    ThreadSwitch(THREAD_CURRENT(), descriptor, (ThreadSwitchPreFunc)ThreadAddReady, THREAD_CURRENT());
+    ThreadSwitch(THREAD_CURRENT(), descriptor, (ThreadSwitchPreFunc)Thread::AddReady, THREAD_CURRENT());
 
     return descriptor;
 }
 
-void ThreadJoin (struct Thread * thread)
+void Thread::Join ()
 {
-    assert(THREAD_CURRENT() != thread);
-    assert(thread->joiner == NULL);
+    assert(THREAD_CURRENT() != this);
+    assert(this->joiner == NULL);
 
-    thread->joiner = THREAD_CURRENT();
+    this->joiner = THREAD_CURRENT();
 
-    while (thread->state != THREAD_STATE_FINISHED) {
-        ThreadYieldNoRequeue();
+    while (this->state != Thread::STATE_FINISHED) {
+        Thread::YieldNoRequeue();
     }
 
-    if (thread->kernel_stack.page != NULL) {
-        Page::Free(thread->kernel_stack.page);
+    if (this->kernel_stack.page != NULL) {
+        Page::Free(this->kernel_stack.page);
     }
 }
 
-void ThreadSetEffectivePriority (struct Thread * thread, ThreadPriority priority)
+void Thread::SetEffectivePriority (Thread::Priority priority)
 {
-    thread->effective_priority = priority;
+    this->effective_priority = priority;
 }
 
-void ThreadAddReady (struct Thread * thread)
+void Thread::AddReady (Thread * thread)
 {
     SpinlockLock(&ready_queue_lock);
     queue_for_thread(thread)->Append(thread);
-    thread->state = THREAD_STATE_READY;
+    thread->state = Thread::STATE_READY;
     SpinlockUnlock(&ready_queue_lock);
 }
 
-void ThreadAddReadyFirst (struct Thread * thread)
+void Thread::AddReadyFirst (Thread * thread)
 {
     SpinlockLock(&ready_queue_lock);
     queue_for_thread(thread)->Prepend(thread);
-    thread->state = THREAD_STATE_READY;
+    thread->state = Thread::STATE_READY;
     SpinlockUnlock(&ready_queue_lock);
 }
 
-struct Thread * ThreadDequeueReady (void)
+Thread * Thread::DequeueReady ()
 {
-    struct Thread * next;
+    Thread * next;
 
     SpinlockLock(&ready_queue_lock);
 
@@ -229,10 +229,10 @@ struct Thread * ThreadDequeueReady (void)
     return next;
 }
 
-void ThreadYieldNoRequeue (void)
+void Thread::YieldNoRequeue ()
 {
     /* Pop off thread at front of run-queue */
-    struct Thread * next = ThreadDequeueReady();
+    Thread * next = Thread::DequeueReady();
 
     /* Since we're not requeuing, there had better be somebody runnable */
     assert(next != NULL);
@@ -240,18 +240,18 @@ void ThreadYieldNoRequeue (void)
     ThreadSwitch(THREAD_CURRENT(), next, NULL, NULL);
 }
 
-void ThreadYieldWithRequeue (void)
+void Thread::YieldWithRequeue ()
 {
     /* Pop off thread at front of run-queue */
-    struct Thread * next = ThreadDequeueReady();
+    Thread * next = Thread::DequeueReady();
 
     /* Since we're requeuing, it's OK if there were no other runnable threads */
     if (next != NULL) {
-        ThreadSwitch(THREAD_CURRENT(), next, (ThreadSwitchPreFunc)ThreadAddReady, THREAD_CURRENT());
+        ThreadSwitch(THREAD_CURRENT(), next, (ThreadSwitchPreFunc)Thread::AddReady, THREAD_CURRENT());
     }
 }
 
-void ThreadYieldNoRequeueToSpecific (struct Thread * next)
+void ThreadYieldNoRequeueToSpecific (Thread * next)
 {
     assert(next->queue_link.Unlinked());
 
@@ -266,14 +266,14 @@ void ThreadYieldNoRequeueToSpecific (struct Thread * next)
 static bool         need_resched        = false;
 static Spinlock_t   need_resched_lock   = SPINLOCK_INIT;
 
-void ThreadSetNeedResched ()
+void Thread::SetNeedResched ()
 {
     SpinlockLock(&need_resched_lock);
     need_resched = true;
     SpinlockUnlock(&need_resched_lock);
 }
 
-bool ThreadResetNeedResched ()
+bool Thread::ResetNeedResched ()
 {
     bool ret;
 
@@ -283,6 +283,21 @@ bool ThreadResetNeedResched ()
     SpinlockUnlock(&need_resched_lock);
 
     return ret;
+}
+
+void ThreadAddReady (struct Thread * thread)
+{
+    Thread::AddReady(thread);
+}
+
+struct Thread * ThreadDequeueReady (void)
+{
+    return Thread::DequeueReady();
+}
+
+bool ThreadResetNeedResched ()
+{
+    return Thread::ResetNeedResched();
 }
 
 struct Thread * ThreadStructFromStackPointer (uint32_t sp)
@@ -297,10 +312,10 @@ struct Process * ThreadGetProcess (struct Thread * thread)
 
 void ThreadSetStateReady (struct Thread * thread)
 {
-    thread->state = THREAD_STATE_READY;
+    thread->state = Thread::STATE_READY;
 }
 
 void ThreadSetStateRunning (struct Thread * thread)
 {
-    thread->state = THREAD_STATE_RUNNING;
+    thread->state = Thread::STATE_RUNNING;
 }

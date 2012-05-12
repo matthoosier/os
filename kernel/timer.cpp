@@ -60,7 +60,7 @@ static void OnTimerInterrupt ()
     *GetSp804()->IntClr = 0;
 
     /* Boot the current task */
-    ThreadSetNeedResched();
+    Thread::SetNeedResched();
 }
 
 void TimerStartPeriodic (unsigned int period_ms)

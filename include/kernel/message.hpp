@@ -11,7 +11,7 @@
 
 BEGIN_DECLS
 
-struct Thread;
+class Thread;
 struct Process;
 
 typedef int Channel_t;
@@ -32,9 +32,9 @@ struct Message
      * If NULL, an asychronous message that accepts to reply. Message payload
      * is in send_data.async.
      */
-    struct Thread     * sender;
+    Thread * sender;
 
-    struct Thread     * receiver;
+    Thread * receiver;
 
     union
     {

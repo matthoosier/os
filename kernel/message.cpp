@@ -26,10 +26,10 @@ static struct Connection * ConnectionAlloc (void);
 static void ConnectionFree (struct Connection * connection);
 
 static ssize_t TransferPayload (
-        struct Thread * source_thread,
+        Thread *        source_thread,
         const void *    source_buf,
         size_t          source_len,
-        struct Thread * dest_thread,
+        Thread *        dest_thread,
         void *          dest_buf,
         size_t          dest_len
         );
@@ -181,8 +181,8 @@ ssize_t KMessageSendAsync (
         message->send_data.async.payload = payload;
 
         /* Allow receiver to wake up */
-        message->receiver->state = THREAD_STATE_READY;
-        ThreadAddReadyFirst(message->receiver);
+        message->receiver->state = Thread::STATE_READY;
+        Thread::AddReadyFirst(message->receiver);
     }
 
     return ERROR_OK;
@@ -216,8 +216,8 @@ ssize_t KMessageSend (
         /* Enqueue as blocked on the channel */
         connection->channel->send_blocked_head.Append(message);
 
-        message->sender->state = THREAD_STATE_SEND;
-        ThreadYieldNoRequeue();
+        message->sender->state = Thread::STATE_SEND;
+        Thread::YieldNoRequeue();
     }
     else {
         /* Receiver thread is ready to go */
@@ -238,16 +238,16 @@ ssize_t KMessageSend (
         ready queue when the message reply gets posted.
         */
 
-        message->receiver->state = THREAD_STATE_READY;
+        message->receiver->state = Thread::STATE_READY;
 
         /* Temporarily gift our priority to the message-handling thread */
-        ThreadSetEffectivePriority(message->receiver, THREAD_CURRENT()->effective_priority);
+        message->receiver->SetEffectivePriority(THREAD_CURRENT()->effective_priority);
 
         /* Now allow handler to run */
-        ThreadAddReady(message->receiver);
+        Thread::AddReady(message->receiver);
 
-        message->sender->state = THREAD_STATE_REPLY;
-        ThreadYieldNoRequeue();
+        message->sender->state = Thread::STATE_REPLY;
+        Thread::YieldNoRequeue();
     }
 
     /*
@@ -288,8 +288,8 @@ ssize_t KMessageReceive (
         /* Enqueue as blocked on the channel */
         channel->receive_blocked_head.Append(message);
 
-        message->receiver->state = THREAD_STATE_RECEIVE;
-        ThreadYieldNoRequeue();
+        message->receiver->state = Thread::STATE_RECEIVE;
+        Thread::YieldNoRequeue();
     }
     else {
         /* Some message is waiting in the channel already */
@@ -322,7 +322,7 @@ ssize_t KMessageReceive (
         will do) whose pagetable can be used for the upcoming TransferPayload()
         call.
         */
-        struct Thread * sender_pagetable_thread = THREAD_CURRENT();
+        Thread * sender_pagetable_thread = THREAD_CURRENT();
 
         num_copied = TransferPayload(
                 sender_pagetable_thread,
@@ -338,7 +338,7 @@ ssize_t KMessageReceive (
     }
 
     /* Mark sender as reply-blocked */
-    message->sender->state = THREAD_STATE_REPLY;
+    message->sender->state = Thread::STATE_REPLY;
 
     return num_copied;
 } /* KMessageReceive() */
@@ -382,21 +382,21 @@ ssize_t KMessageReply (
     result = status == ERROR_OK ? context->result : ERROR_OK;
 
     /* Sender will get to run again whenever a scheduling decision happens */
-    context->sender->state = THREAD_STATE_READY;
-    ThreadAddReady(context->sender);
+    context->sender->state = Thread::STATE_READY;
+    Thread::AddReady(context->sender);
 
     /* Abandon any temporary priority boost we had now that the sender is unblocked */
-    ThreadSetEffectivePriority(THREAD_CURRENT(), THREAD_CURRENT()->assigned_priority);
+    THREAD_CURRENT()->SetEffectivePriority(THREAD_CURRENT()->assigned_priority);
 
     /* Sender frees the message after fetching the return value from it */
     return result;
 } /* KMessageReply() */
 
 static ssize_t TransferPayload (
-        struct Thread * source_thread,
+        Thread *        source_thread,
         const void *    source_buf,
         size_t          source_len,
-        struct Thread * dest_thread,
+        Thread *        dest_thread,
         void *          dest_buf,
         size_t          dest_len
         )

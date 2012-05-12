@@ -146,7 +146,7 @@ void install_kernel_memory_map ()
 }
 
 /* Retroactively filled in */
-static struct Thread *first_thread = (struct Thread *)&init_stack[N_ELEMENTS(init_stack) - ALIGNED_THREAD_STRUCT_SIZE];
+static Thread *first_thread = (Thread *)&init_stack[N_ELEMENTS(init_stack) - ALIGNED_THREAD_STRUCT_SIZE];
 
 void run_first_thread ()
 {
@@ -158,7 +158,7 @@ void run_first_thread ()
     first_thread->kernel_stack.base     = &init_stack[0];
     first_thread->kernel_stack.page     = NULL;
     first_thread->process               = NULL;
-    first_thread->state                 = THREAD_STATE_RUNNING;
+    first_thread->state                 = Thread::STATE_RUNNING;
     first_thread->queue_link.DynamicInit();
 
     /* Device-independent */
@@ -172,6 +172,6 @@ void run_first_thread ()
     ProcessCreate("pl011");
 
     while (true) {
-        ThreadYieldWithRequeue();
+        Thread::YieldWithRequeue();
     }
 }
