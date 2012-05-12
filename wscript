@@ -1,3 +1,7 @@
+from waflib import Task
+from waflib.Build import BuildContext
+from waflib.TaskGen import feature
+
 top = '.'
 out = 'build'
 
@@ -57,6 +61,8 @@ def options(opt):
 
 def configure(conf):
 
+    conf.find_program('doxygen')
+
     #
     # Make environment suitable for compiling custom programs that are
     # used to preprocess artifacts for inclusion into the target system.
@@ -103,7 +109,7 @@ def configure(conf):
     conf.load('compiler_cxx')
     conf.load('asm')
 
-def build(ctx):
+def build(bld):
 
     #
     # Unprivileged user programs
@@ -111,21 +117,21 @@ def build(ctx):
 
     progs = []
 
-    libc = ctx.stlib(
+    libc = bld.stlib(
         source      =   libc_sources,
         target      =   'my_c',
         includes    =   [ 'include' ],
-        env         =   ctx.all_envs[CROSS].derive(),
+        env         =   bld.all_envs[CROSS].derive(),
     )
 
     for (p, src_list, link_base_addr) in user_progs:
-        p_tgen = ctx.program(
+        p_tgen = bld.program(
             source      =   src_list,
             target      =   p,
             includes    =   [ 'include' ],
             linkflags   =   [ '-nostartfiles', '-Wl,-Ttext-segment,0x%x' % link_base_addr ],
             use         =   'my_c',
-            env         =   ctx.all_envs[CROSS].derive(),
+            env         =   bld.all_envs[CROSS].derive(),
         )
         p_tgen.post()
         progs += [ p_tgen ]
@@ -134,10 +140,10 @@ def build(ctx):
     # Tool to compile IFS
     #
 
-    fs_builder = ctx.program(
+    fs_builder = bld.program(
         source      =   'fs-builder.cc',
         target      =   'fs-builder',
-        env         =   ctx.all_envs[NATIVE].derive(),
+        env         =   bld.all_envs[NATIVE].derive(),
     )
 
     fs_builder.post()
@@ -147,9 +153,9 @@ def build(ctx):
     # Generate source code of IFS
     #
 
-    ctx.env.FS_BUILDER = fs_builder_bin.abspath()
+    bld.env.FS_BUILDER = fs_builder_bin.abspath()
 
-    ramfs_image_c = ctx(
+    ramfs_image_c = bld(
             rule    =   '${FS_BUILDER} -o ${TGT} -n RamFsImage ' + ' '.join([ ('"%s"' % p.link_task.outputs[0].bldpath()) for p in progs ]),
             target  =   'ramfs_image.c',
             source  =   [ fs_builder_bin ] + [ p.link_task.outputs[0].bldpath() for p in progs ],
@@ -158,20 +164,20 @@ def build(ctx):
 
     # Assume that this custom taskgen only has one task
     if len(ramfs_image_c.tasks) != 1:
-        ctx.fatal("Can't deal with RamFsBuilder rule that makes more than 1 task")
+        bld.fatal("Can't deal with RamFsBuilder rule that makes more than 1 task")
 
     # ... and that it has only one output
     if len(ramfs_image_c.tasks[0].outputs) != 1:
-        ctx.fatal("Can't deal with RamFsBuilder rule that makes more than 1 output")
+        bld.fatal("Can't deal with RamFsBuilder rule that makes more than 1 output")
 
 
     #
     # Main kernel image
     #
 
-    linker_script = ctx.path.find_resource('kernel.ldscript')
+    linker_script = bld.path.find_resource('kernel.ldscript')
 
-    image = ctx.program(
+    image = bld.program(
         source      =   kernel_sources + [ ramfs_image_c.tasks[0].outputs[0] ],
         target      =   'image',
         includes    =   [ 'include', '.' ],
@@ -180,9 +186,30 @@ def build(ctx):
 
         linkflags   =   [ '-Wl,-T,' + linker_script.bldpath(), '-nostartfiles' ],
 
-        env         =   ctx.all_envs[CROSS].derive(),
+        env         =   bld.all_envs[CROSS].derive(),
     )
     image.post()
 
     # Be sure to rebuild if linker script changes
-    ctx.add_manual_dependency(image.link_task.outputs[0], linker_script)
+    bld.add_manual_dependency(image.link_task.outputs[0], linker_script)
+
+def doc(bld):
+    bld(features = 'doxygen')
+
+@feature('doxygen')
+def apply_doxygen(taskgen):
+    taskgen.create_task('doxygen', taskgen.bld.path.find_resource('Doxyfile'), None)
+
+class doxygen(Task.Task):
+    run_str2 = '${DOXYGEN} ${SRC}'
+    def run(self):
+        self.exec_command(
+            [self.env.DOXYGEN, self.inputs[0].srcpath()],
+            cwd=self.generator.bld.path.abspath()           # src dir
+        )
+
+Task.always_run(doxygen)
+
+class DocsContext(BuildContext):
+    fun = 'doc'
+    cmd = 'doc'

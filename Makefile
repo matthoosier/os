@@ -14,7 +14,4 @@ run:
 	./waf
 	qemu-system-arm $(QEMU_SERIAL) -s -S -kernel build/image -cpu arm1136 -M versatilepb
 
-doc:
-	doxygen Doxyfile
-
 .PHONY: debug run doc
