@@ -13,6 +13,7 @@ kernel_sources = [
     'kernel/early-mmu.c',
     'kernel/init.cpp',
     'kernel/interrupts.cpp',
+    'kernel/interrupts-pl190.cpp',
     'kernel/kmalloc.cpp',
     'kernel/large-object-cache.cpp',
     'kernel/message.cpp',

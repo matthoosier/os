@@ -10,37 +10,24 @@
 #include <kernel/array.h>
 #include <kernel/assert.h>
 #include <kernel/interrupt-handler.hpp>
+#include <kernel/interrupts.hpp>
 #include <kernel/message.hpp>
 #include <kernel/mmu.hpp>
 #include <kernel/object-cache.hpp>
 #include <kernel/once.h>
 #include <kernel/process.hpp>
 
+static InterruptController * gController = 0;
+
+void Interrupts::RegisterController (InterruptController * controller)
+{
+    assert(gController == 0);
+    gController = controller;
+}
+
 enum
 {
     NUM_IRQS = 32,
-};
-
-/**
- * Data structure representing the important registers of the
- * vector interrupt controller.
- */
-struct Pl190
-{
-    /**
-     *
-     */
-    volatile uint32_t * IrqStatus;
-
-    /**
-     *
-     */
-    volatile uint32_t * IntEnable;
-
-    /**
-     *
-     */
-    volatile uint32_t * IntEnClear;
 };
 
 /**
@@ -85,33 +72,41 @@ static void increment_irq_mask (unsigned int irq_number)
     }
 }
 
-static struct Pl190 * GetPl190 ();
-
 static void init_handlers (void * ignored)
 {
-    /**
-     * Install stack pointer for IRQ mode
-     */
-    asm volatile (
-        /* Save current execution mode                  */
-        "mrs v1, cpsr               \n\t"
+    #ifdef __arm__
+        /**
+         * Install stack pointer for IRQ mode
+         */
+        asm volatile (
+            /* Save current execution mode                  */
+            "mrs v1, cpsr               \n\t"
 
-        /* Switch to IRQ mode and install stack pointer */
-        "cps %[irq_mode_bits]       \n\t"
-        "mov sp, %[irq_sp]          \n\t"
+            /* Switch to IRQ mode and install stack pointer */
+            "cps %[irq_mode_bits]       \n\t"
+            "mov sp, %[irq_sp]          \n\t"
 
-        /* Restore previous execution mode              */
-        "msr cpsr, v1               \n\t"
-        :
-        : [irq_sp] "r" (&irq_stack[0] + sizeof(irq_stack))
-        , [irq_mode_bits] "i" (ARM_IRQ_MODE_BITS)
-        : "memory", "v1"
-    );
+            /* Restore previous execution mode              */
+            "msr cpsr, v1               \n\t"
+            :
+            : [irq_sp] "r" (&irq_stack[0] + sizeof(irq_stack))
+            , [irq_mode_bits] "i" (ARM_IRQ_MODE_BITS)
+            : "memory", "v1"
+        );
+    #else
+        #error
+    #endif
 
     /**
      * Initialize array of in-kernel IRQ handler functions
      */
     memset(kernel_irq_handlers, 0, sizeof(kernel_irq_handlers));
+
+    /**
+     * Initialize all registered interrupt controller objects
+     */
+    assert(gController != 0);
+    gController->Init();
 }
 
 void InterruptsConfigure ()
@@ -207,9 +202,7 @@ int InterruptCompleteUserHandler (
 void InterruptHandler ()
 {
     /* Figure out which IRQ was raised. */
-    uint32_t irqs = *GetPl190()->IrqStatus;
-
-    int which = ffs(irqs) - 1;
+    int which = gController->GetRaisedIrqNum();
     assert(which >= 0);
 
     /* Bail out if IRQ out of bounds */
@@ -261,46 +254,12 @@ void InterruptHandler ()
 
 void InterruptUnmaskIrq (int n)
 {
-    *GetPl190()->IntEnable = 1u << n;
+    gController->UnmaskIrq(n);
 }
 
 void InterruptMaskIrq (int n)
 {
-    *GetPl190()->IntEnClear = 1u << n;
-}
-
-void init_pl190 (void * pDevice)
-{
-    enum
-    {
-        PL190_BASE_PHYS = 0x10140000,
-        PL190_BASE_VIRT = 0xfff10000,
-    };
-
-    struct Pl190 * device = (struct Pl190 *)pDevice;
-
-    bool mapped = TranslationTableMapPage(
-            MmuGetKernelTranslationTable(),
-            PL190_BASE_VIRT,
-            PL190_BASE_PHYS,
-            PROT_KERNEL
-            );
-    assert(mapped);
-
-    uint8_t * base = (uint8_t *)PL190_BASE_VIRT;
-
-    device->IrqStatus   = (uint32_t *)(base + 0x000);
-    device->IntEnable   = (uint32_t *)(base + 0x010);
-    device->IntEnClear  = (uint32_t *)(base + 0x014);
-}
-
-static struct Pl190 * GetPl190 ()
-{
-    static struct Pl190 device;
-    static Once_t       control = ONCE_INIT;
-
-    Once(&control, init_pl190, &device);
-    return &device;
+    gController->MaskIrq(n);
 }
 
 static struct ObjectCache   user_interrupt_handler_cache;
