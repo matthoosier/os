@@ -26,8 +26,7 @@ static void init_sp804 (void * pDevice)
 
     struct Sp804 * device = (struct Sp804 *)pDevice;
 
-    bool mapped = TranslationTableMapPage(
-            MmuGetKernelTranslationTable(),
+    bool mapped = TranslationTable::GetKernel()->MapPage(
             SP804_BASE_VIRT,
             SP804_BASE_PHYS,
             PROT_KERNEL

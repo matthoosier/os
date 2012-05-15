@@ -401,24 +401,24 @@ static ssize_t TransferPayload (
         size_t          dest_len
         )
 {
-    struct TranslationTable *src_tt;
-    struct TranslationTable *dst_tt;
+    TranslationTable *src_tt;
+    TranslationTable *dst_tt;
 
     if ((VmAddr_t)source_buf >= KERNEL_MODE_OFFSET) {
-        src_tt = MmuGetKernelTranslationTable();
+        src_tt = TranslationTable::GetKernel();
     } else {
         assert(source_thread->process != NULL);
         src_tt = source_thread->process->pagetable;
     }
 
     if ((VmAddr_t)dest_buf >= KERNEL_MODE_OFFSET) {
-        dst_tt = MmuGetKernelTranslationTable();
+        dst_tt = TranslationTable::GetKernel();
     } else {
         assert(dest_thread->process != NULL);
         dst_tt = dest_thread->process->pagetable;
     }
 
-    return CopyWithAddressSpaces(
+    return TranslationTable::CopyWithAddressSpaces(
             src_tt,
             source_buf,
             source_len,

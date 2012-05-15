@@ -96,7 +96,7 @@ void Init (void)
 
 void install_kernel_memory_map ()
 {
-    struct TranslationTable * kernel_tt = TranslationTableAlloc();
+    TranslationTable * kernel_tt = new TranslationTable();
     kernel_tt = kernel_tt;
 
     /* Map only the kernel high memory (all physical RAM) */
@@ -106,8 +106,7 @@ void install_kernel_memory_map ()
 
     for (; mb_idx < mb_idx_bound; mb_idx++)
     {
-        bool success = TranslationTableMapSection(
-                kernel_tt,
+        bool success = kernel_tt->MapSection(
                 mb_idx << MEGABYTE_SHIFT,
                 (mb_idx << MEGABYTE_SHIFT) - KERNEL_MODE_OFFSET,
                 PROT_KERNEL
@@ -118,8 +117,7 @@ void install_kernel_memory_map ()
     /* Really just a marker from the linker script */
     extern char __VectorStartPhysical;
 
-    bool success = TranslationTableMapPage(
-                kernel_tt,
+    bool success = kernel_tt->MapPage(
                 0xffff0000,
                 (PhysAddr_t)&__VectorStartPhysical,
                 PROT_KERNEL
@@ -127,8 +125,8 @@ void install_kernel_memory_map ()
     assert(success);
 
     /* Install this fully-fledged pagetable */
-    MmuSetUserTranslationTable(kernel_tt);
-    MmuSetKernelTranslationTable(kernel_tt);
+    TranslationTable::SetUser(kernel_tt);
+    TranslationTable::SetKernel(kernel_tt);
 
     /*
     Yes, it's actually already on from our crude original setup.
@@ -142,7 +140,7 @@ void install_kernel_memory_map ()
     has fully configured the CPU's support for using a separate translation
     table for user- and kernel-mode address ranges.
     */
-    MmuSetUserTranslationTable(NULL);
+    TranslationTable::SetUser(NULL);
 }
 
 /* Retroactively filled in */

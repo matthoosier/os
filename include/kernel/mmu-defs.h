@@ -50,57 +50,6 @@ extern void MmuFlushTlb (void);
 typedef uint32_t pt_firstlevel_t;
 typedef uint32_t pt_secondlevel_t;
 
-struct TranslationTable;
-
-extern struct TranslationTable * TranslationTableAlloc (void);
-extern void TranslationTableFree (struct TranslationTable * table);
-
-extern struct TranslationTable * MmuGetKernelTranslationTable ();
-extern void MmuSetKernelTranslationTable (struct TranslationTable * table);
-
-extern struct TranslationTable * MmuGetUserTranslationTable ();
-extern void MmuSetUserTranslationTable (struct TranslationTable * table);
-
-extern bool TranslationTableMapPage (
-        struct TranslationTable * table,
-        VmAddr_t virt,
-        PhysAddr_t phys,
-        Prot_t prot
-        );
-
-extern bool TranslationTableMapNextPage (
-        struct TranslationTable * table,
-        VmAddr_t * pVirt,
-        PhysAddr_t phys,
-        Prot_t prot
-        );
-
-extern bool TranslationTableUnmapPage (
-        struct TranslationTable * table,
-        VmAddr_t virt
-        );
-
-extern bool TranslationTableMapSection (
-        struct TranslationTable * table,
-        VmAddr_t virt,
-        PhysAddr_t phys,
-        Prot_t prot
-        );
-
-extern bool TranslationTableUnmapSection (
-        struct TranslationTable * table,
-        VmAddr_t virt
-        );
-
-extern ssize_t CopyWithAddressSpaces (
-        struct TranslationTable *   source_tt,
-        const void *                source_buf,
-        size_t                      source_len,
-        struct TranslationTable *   dest_tt,
-        void *                      dest_buf,
-        size_t                      dest_len
-        );
-
 /*
  * Common pieces for all firstlevel translation-table entries
  */

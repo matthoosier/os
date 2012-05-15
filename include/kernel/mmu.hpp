@@ -4,30 +4,95 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <new>
+
 #include <sys/decls.h>
 
 #include <kernel/list.hpp>
 #include <kernel/mmu-defs.h>
+#include <kernel/smart-ptr.hpp>
 #include <kernel/tree-map.hpp>
 #include <kernel/vm.hpp>
 
-BEGIN_DECLS
+class SecondlevelTable;
 
-struct SecondlevelTable;
-
-struct TranslationTable
+/**
+ * \brief   Data structure used to encapsulate the hardware translation-
+ *          table descriptors used by the MMU to perform virtual-to-physical
+ *          memory translations.
+ *
+ * The actual descriptor installed into the Translation Table Base Register
+ * (on ARM) is pointed to in virtual memory by the #firstlevel_ptes field of
+ * this class.
+ */
+class TranslationTable
 {
-    /* Provides the storage pointed at by 'translation_base' below */
-    Page * firstlevel_ptes_pages;
+public:
+    typedef TreeMap<VmAddr_t, struct SecondlevelTable *> SparseSecondlevelMap_t;
 
-    /*
-     * Points to a pt_firstlevel_t[4096].
+public:
+
+    void *  operator new (size_t) throw (std::bad_alloc);
+    void    operator delete (void *) throw ();
+
+    TranslationTable () throw (std::bad_alloc);
+    ~TranslationTable ();
+
+    bool MapPage (
+            VmAddr_t virt,
+            PhysAddr_t phys,
+            Prot_t prot
+            );
+
+    bool MapNextPage (
+            VmAddr_t * pVirt,
+            PhysAddr_t phys,
+            Prot_t prot
+            );
+
+    bool UnmapPage (
+            VmAddr_t virt
+            );
+
+    bool MapSection (
+            VmAddr_t virt,
+            PhysAddr_t phys,
+            Prot_t prot
+            );
+
+    bool UnmapSection (
+            VmAddr_t virt
+            );
+
+    static void SetKernel (TranslationTable * table);
+    static TranslationTable * GetKernel ();
+
+    static void SetUser (TranslationTable * table);
+    static TranslationTable * GetUser ();
+
+    static ssize_t CopyWithAddressSpaces (
+            TranslationTable *  source_tt,
+            const void *        source_buf,
+            size_t              source_len,
+            TranslationTable *  dest_tt,
+            void *              dest_buf,
+            size_t              dest_len
+            );
+
+public:
+    /**
+     * \brief   Provides the storage pointed at by #firstlevel_ptes below
+     */
+    PagePtr firstlevel_ptes_pages;
+
+    /**
+     * \brief   Points to a pt_firstlevel_t[4096].
      *
      * First element must be 16KB-aligned.
      */
     pt_firstlevel_t * firstlevel_ptes;
 
-    /*
+    /**
      * Sparse map of beginning virtual address of each section
      * to the SecondlevelTable instance that fills in the individual
      * pages for that section.
@@ -44,18 +109,25 @@ struct TranslationTable
      *    Fifteenth section (0x00e00000 - 0x00efffff)
      *        0x00e00000 -> (SecondlevelTable *)<struct address>
      */
-    typedef TreeMap<VmAddr_t, struct SecondlevelTable *> SparseSecondlevelMap_t;
-    SparseSecondlevelMap_t * sparse_secondlevel_map;
+    ScopedPtr<SparseSecondlevelMap_t> sparse_secondlevel_map;
 
-    /*
+    /**
      * Virtual address of the first byte of the first page in the virtual
      * address space, that is not mapped.
      */
     VmAddr_t first_unmapped_page;
 };
 
-struct SecondlevelTable
+class SecondlevelTable
 {
+public:
+    void *  operator new (size_t) throw (std::bad_alloc);
+    void    operator delete (void *) throw ();
+
+    SecondlevelTable () throw (std::bad_alloc);
+    ~SecondlevelTable () throw ();
+
+public:
     /*
      * The array of individual pagetable entries used by the MMU.
      *
@@ -82,6 +154,20 @@ struct SecondlevelPtes
     */
     pt_secondlevel_t ptes[256];
 };
+
+BEGIN_DECLS
+
+/**
+ * \brief   Backward-compatible C shim for calling TranslationTable#SetUser()
+ *          from assembly code.
+ */
+void TranslationTableSetUser (TranslationTable *);
+
+/**
+ * \brief   Backward-compatible C shim for calling TranslationTable#GetUser()
+ *          from assembly code.
+ */
+TranslationTable * TranslationTableGetUser ();
 
 END_DECLS
 

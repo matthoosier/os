@@ -20,9 +20,6 @@
 #define ARM_MMU_ENABLED_BIT             0
 #define ARM_MMU_EXCEPTION_VECTOR_BIT    13
 
-static struct SecondlevelTable * secondlevel_table_alloc ();
-static void secondlevel_table_free (struct SecondlevelTable *);
-
 static inline uint32_t GetTTBR0 ()
 {
     uint32_t val;
@@ -244,71 +241,96 @@ static Once_t mmu_init_control = ONCE_INIT;
 
 static void mmu_static_init (void * ignored)
 {
-    ObjectCacheInit(&translation_table_cache, sizeof(struct TranslationTable));
-    ObjectCacheInit(&secondlevel_table_cache, sizeof(struct SecondlevelTable));
+    ObjectCacheInit(&translation_table_cache, sizeof(TranslationTable));
+    ObjectCacheInit(&secondlevel_table_cache, sizeof(SecondlevelTable));
     ObjectCacheInit(&secondlevel_ptes_cache, sizeof(struct SecondlevelPtes));
 }
 
-static struct SecondlevelTable * secondlevel_table_alloc ()
+void * SecondlevelTable::operator new (size_t size) throw (std::bad_alloc)
 {
-    struct SecondlevelTable * table;
+    void * ret;
+
+    Once(&mmu_init_control, mmu_static_init, NULL);
 
     SpinlockLock(&secondlevel_table_cache_lock);
-    table = (struct SecondlevelTable *)ObjectCacheAlloc(&secondlevel_table_cache);
+    ret = ObjectCacheAlloc(&secondlevel_table_cache);
     SpinlockUnlock(&secondlevel_table_cache_lock);
 
-    if (table)
-    {
-        unsigned int i;
-
-        table->link.DynamicInit();
-
-        SpinlockLock(&secondlevel_ptes_cache_lock);
-        table->ptes = (struct SecondlevelPtes *)ObjectCacheAlloc(&secondlevel_ptes_cache);
-        SpinlockUnlock(&secondlevel_ptes_cache_lock);
-
-        if (!table->ptes)
-        {
-            SpinlockLock(&secondlevel_table_cache_lock);
-            ObjectCacheFree(&secondlevel_table_cache, table);
-            SpinlockUnlock(&secondlevel_table_cache_lock);
-
-            table = NULL;
-        }
-        else
-        {
-            assert(N_ELEMENTS(table->ptes->ptes) == 256);
-
-            for (i = 0; i < N_ELEMENTS(table->ptes->ptes); i++) {
-                table->ptes->ptes[i] = PT_SECONDLEVEL_MAPTYPE_UNMAPPED;
-            }
-
-            table->num_mapped_pages = 0;
-        }
+    if (ret != NULL) {
+        return ret;
+    } else {
+        throw std::bad_alloc();
     }
-
-    return table;
 }
 
-static void secondlevel_table_free (struct SecondlevelTable * table)
+void SecondlevelTable::operator delete (void * mem) throw ()
 {
-    if (!table->link.Unlinked()) {
-        List<SecondlevelTable, &SecondlevelTable::link>::Remove(table);
+    SpinlockLock(&secondlevel_table_cache_lock);
+    ObjectCacheFree(&secondlevel_table_cache, mem);
+    SpinlockUnlock(&secondlevel_table_cache_lock);
+}
+
+SecondlevelTable::SecondlevelTable () throw (std::bad_alloc)
+{
+    unsigned int i;
+
+    SpinlockLock(&secondlevel_ptes_cache_lock);
+    this->ptes = (struct SecondlevelPtes *)ObjectCacheAlloc(&secondlevel_ptes_cache);
+    SpinlockUnlock(&secondlevel_ptes_cache_lock);
+
+    if (!this->ptes)
+    {
+        throw std::bad_alloc();
+    }
+
+    assert(N_ELEMENTS(this->ptes->ptes) == 256);
+
+    for (i = 0; i < N_ELEMENTS(this->ptes->ptes); i++) {
+        this->ptes->ptes[i] = PT_SECONDLEVEL_MAPTYPE_UNMAPPED;
+    }
+
+    this->num_mapped_pages = 0;
+}
+
+SecondlevelTable::~SecondlevelTable () throw ()
+{
+    if (!this->link.Unlinked()) {
+        List<SecondlevelTable, &SecondlevelTable::link>::Remove(this);
     }
 
     SpinlockLock(&secondlevel_ptes_cache_lock);
-    ObjectCacheFree(&secondlevel_ptes_cache, table->ptes);
+    ObjectCacheFree(&secondlevel_ptes_cache, this->ptes);
     SpinlockUnlock(&secondlevel_ptes_cache_lock);
-
-    SpinlockLock(&secondlevel_table_cache_lock);
-    ObjectCacheFree(&secondlevel_table_cache, table);
-    SpinlockUnlock(&secondlevel_table_cache_lock);
 }
 
-struct TranslationTable * TranslationTableAlloc (void)
+void * TranslationTable::operator new (size_t size) throw (std::bad_alloc)
+{
+    void * ret;
+
+    Once(&mmu_init_control, mmu_static_init, NULL);
+
+    SpinlockLock(&translation_table_cache_lock);
+    ret = ObjectCacheAlloc(&translation_table_cache);
+    SpinlockUnlock(&translation_table_cache_lock);
+
+    if (ret != NULL) {
+        return ret;
+    } else {
+        throw std::bad_alloc();
+    }
+}
+
+void TranslationTable::operator delete (void * mem) throw ()
+{
+    SpinlockLock(&translation_table_cache_lock);
+    ObjectCacheFree(&translation_table_cache, mem);
+    SpinlockUnlock(&translation_table_cache_lock);
+}
+
+TranslationTable::TranslationTable () throw (std::bad_alloc)
 {
     enum {
-        /**
+        /*
          * log_2 of the number of pages required to hold
          * the hardware translation-table.
          *
@@ -323,57 +345,27 @@ struct TranslationTable * TranslationTableAlloc (void)
         TRANSLATION_TABLE_SIZE = PAGE_SIZE * (1 << TRANSLATION_TABLE_PAGES_ORDER),
     };
 
+    /* The ARM MMU hardware requires that a translation table is 16KB long */
     COMPILER_ASSERT(TRANSLATION_TABLE_SIZE == 4096 * 4);
 
-    struct TranslationTable * table;
-    unsigned int i;
-
-    Once(&mmu_init_control, mmu_static_init, NULL);
-
-    SpinlockLock(&translation_table_cache_lock);
-    table = (struct TranslationTable *)ObjectCacheAlloc(&translation_table_cache);
-    SpinlockUnlock(&translation_table_cache_lock);
-
-    if (!table) {
-        return NULL;
-    }
-
     /* Translation table is 16-KB aligned and 4 pages long. */
-    table->firstlevel_ptes_pages = Page::Alloc(TRANSLATION_TABLE_PAGES_ORDER);
+    this->firstlevel_ptes_pages = Page::Alloc(TRANSLATION_TABLE_PAGES_ORDER);
 
-    if (!table->firstlevel_ptes_pages) {
-        goto cleanup_table;
+    if (!this->firstlevel_ptes_pages) {
+        throw std::bad_alloc();
     }
 
-    table->firstlevel_ptes = (pt_firstlevel_t *)table->firstlevel_ptes_pages->base_address;
+    this->firstlevel_ptes = (pt_firstlevel_t *)this->firstlevel_ptes_pages->base_address;
 
-    table->sparse_secondlevel_map = new TranslationTable::SparseSecondlevelMap_t(TranslationTable::SparseSecondlevelMap_t::AddressCompareFunc);
-
-    if (!table->sparse_secondlevel_map) {
-        goto cleanup_pages;
-    }
+    this->sparse_secondlevel_map = new SparseSecondlevelMap_t(SparseSecondlevelMap_t::AddressCompareFunc);
 
     /* Initially make all sections unmapped */
-    for (i = 0; i < TRANSLATION_TABLE_SIZE / sizeof(pt_firstlevel_t); i++) {
-        table->firstlevel_ptes[i] = PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
+    for (unsigned int i = 0; i < TRANSLATION_TABLE_SIZE / sizeof(pt_firstlevel_t); i++) {
+        this->firstlevel_ptes[i] = PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
     }
 
     /* Mark address of first unused page */
-    table->first_unmapped_page = 0;
-
-    /* Successful case */
-    return table;
-
-    /* Failure cases */
-cleanup_pages:
-    Page::Free(table->firstlevel_ptes_pages);
-
-cleanup_table:
-    SpinlockLock(&translation_table_cache_lock);
-    ObjectCacheFree(&translation_table_cache, table);
-    SpinlockUnlock(&translation_table_cache_lock);
-
-    return NULL;
+    this->first_unmapped_page = 0;
 }
 
 /*
@@ -393,41 +385,33 @@ static void func (RawTreeMap::Key_t key, RawTreeMap::Value_t value, void * user_
     head->Append(secondlevel_table);
 }
 
-void TranslationTableFree (struct TranslationTable * table)
+TranslationTable::~TranslationTable ()
 {
     /* Aggregates any individual secondlevel_table's that need freed */
     List<SecondlevelTable, &SecondlevelTable::link> head;
 
-    Once(&mmu_init_control, mmu_static_init, NULL);
-
     /* Clean out any individual second-level translation tables */
 
     /* Go ahead and gather up all the nodes */
-    table->sparse_secondlevel_map->Foreach(func, &head);
+    this->sparse_secondlevel_map->Foreach(func, &head);
 
     /* Deallocate everything we found in there */
     while (!head.Empty())
     {
-        secondlevel_table_free(head.PopFirst());
+        delete head.PopFirst();
     }
 
-    table->firstlevel_ptes = NULL;
-    delete table->sparse_secondlevel_map;
-    Page::Free(table->firstlevel_ptes_pages);
-
-    SpinlockLock(&translation_table_cache_lock);
-    ObjectCacheFree(&translation_table_cache, table);
-    SpinlockUnlock(&translation_table_cache_lock);
+    this->firstlevel_ptes = NULL;
 }
 
-static struct TranslationTable * kernel_translation_table = NULL;
+static TranslationTable * kernel_translation_table = 0;
 
-struct TranslationTable * MmuGetKernelTranslationTable ()
+TranslationTable * TranslationTable::GetKernel ()
 {
     return kernel_translation_table;
 }
 
-void MmuSetKernelTranslationTable (struct TranslationTable * table)
+void TranslationTable::SetKernel (TranslationTable * table)
 {
     uint32_t    ttbr1;
     PhysAddr_t  table_phys = V2P((VmAddr_t)&table->firstlevel_ptes[0]);
@@ -453,14 +437,14 @@ void MmuSetKernelTranslationTable (struct TranslationTable * table)
     kernel_translation_table = table;
 }
 
-static struct TranslationTable * user_translation_table = NULL;
+static TranslationTable * user_translation_table = 0;
 
-struct TranslationTable * MmuGetUserTranslationTable ()
+TranslationTable * TranslationTable::GetUser ()
 {
     return user_translation_table;
 }
 
-void MmuSetUserTranslationTable (struct TranslationTable * table)
+void TranslationTable::SetUser (TranslationTable * table)
 {
     uint32_t    ttbr0;
     PhysAddr_t  table_phys;
@@ -495,8 +479,17 @@ void MmuSetUserTranslationTable (struct TranslationTable * table)
     user_translation_table = table;
 }
 
-bool TranslationTableMapSection (
-        struct TranslationTable * table,
+TranslationTable * TranslationTableGetUser ()
+{
+    return TranslationTable::GetUser();
+}
+
+void TranslationTableSetUser (TranslationTable * table)
+{
+    TranslationTable::SetUser (table);
+}
+
+bool TranslationTable::MapSection (
         VmAddr_t virt,
         PhysAddr_t phys,
         Prot_t prot
@@ -512,12 +505,12 @@ bool TranslationTableMapSection (
     phys_idx = phys >> MEGABYTE_SHIFT;
 
     /* Make sure no individual page mappings exist for the VM range */
-    if ((table->firstlevel_ptes[virt_idx] & PT_FIRSTLEVEL_MAPTYPE_MASK) != PT_FIRSTLEVEL_MAPTYPE_UNMAPPED) {
+    if ((this->firstlevel_ptes[virt_idx] & PT_FIRSTLEVEL_MAPTYPE_MASK) != PT_FIRSTLEVEL_MAPTYPE_UNMAPPED) {
         return false;
     }
 
     /* Install the mapping */
-    table->firstlevel_ptes[virt_idx] =
+    this->firstlevel_ptes[virt_idx] =
             PT_FIRSTLEVEL_MAPTYPE_SECTION |
             (PT_DOMAIN_DEFAULT << PT_FIRSTLEVEL_DOMAIN_SHIFT) |
             (ap_from_prot(prot) << PT_FIRSTLEVEL_SECTION_AP_SHIFT) |
@@ -526,8 +519,7 @@ bool TranslationTableMapSection (
     return true;
 }
 
-bool TranslationTableUnmapSection (
-        struct TranslationTable * table,
+bool TranslationTable::UnmapSection (
         VmAddr_t virt
         )
 {
@@ -537,10 +529,10 @@ bool TranslationTableUnmapSection (
 
     virt_idx = virt >> MEGABYTE_SHIFT;
 
-    switch (table->firstlevel_ptes[virt_idx] & PT_FIRSTLEVEL_MAPTYPE_MASK)
+    switch (this->firstlevel_ptes[virt_idx] & PT_FIRSTLEVEL_MAPTYPE_MASK)
     {
         case PT_FIRSTLEVEL_MAPTYPE_SECTION:
-            table->firstlevel_ptes[virt_idx] = PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
+            this->firstlevel_ptes[virt_idx] = PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
             return true;
             break;
 
@@ -557,8 +549,7 @@ bool TranslationTableUnmapSection (
     }
 }
 
-bool TranslationTableMapNextPage (
-        struct TranslationTable * table,
+bool TranslationTable::MapNextPage (
         VmAddr_t * pVirt,
         PhysAddr_t phys,
         Prot_t prot
@@ -567,10 +558,9 @@ bool TranslationTableMapNextPage (
     bool        ret;
     VmAddr_t    vmaddr;
 
-    vmaddr = table->first_unmapped_page;
+    vmaddr = this->first_unmapped_page;
 
-    ret = TranslationTableMapPage(
-            table,
+    ret = this->MapPage(
             vmaddr,
             phys,
             prot
@@ -583,8 +573,7 @@ bool TranslationTableMapNextPage (
     return ret;
 }
 
-bool TranslationTableMapPage (
-        struct TranslationTable * table,
+bool TranslationTable::MapPage (
         VmAddr_t virt,
         PhysAddr_t phys,
         Prot_t prot
@@ -608,7 +597,7 @@ bool TranslationTableMapPage (
     assert(virt_pg_idx < (SECTION_SIZE / PAGE_SIZE));
 
     /* Make sure no previous mapping exists for the page */
-    switch (table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] & PT_FIRSTLEVEL_MAPTYPE_MASK)
+    switch (this->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] & PT_FIRSTLEVEL_MAPTYPE_MASK)
     {
         case PT_FIRSTLEVEL_MAPTYPE_UNMAPPED:
             break;
@@ -619,7 +608,7 @@ bool TranslationTableMapPage (
 
         case PT_FIRSTLEVEL_MAPTYPE_COARSE:
         {
-            secondlevel_table = table->sparse_secondlevel_map->Lookup(virt_mb_rounded);
+            secondlevel_table = this->sparse_secondlevel_map->Lookup(virt_mb_rounded);
 
             if (!secondlevel_table) {
                 /* No pages exist in the section. Why's it mapped then?? */
@@ -646,13 +635,17 @@ bool TranslationTableMapPage (
     /* In case a table didn't exist yet, make it */
     if (!secondlevel_table) {
 
-        if ((secondlevel_table = secondlevel_table_alloc()) == NULL) {
+        try {
+            secondlevel_table = new SecondlevelTable();
+        }
+        catch (std::bad_alloc & exc) {
+            // Couldn't allocate memory for the new secondary table
             return false;
         }
 
-        table->sparse_secondlevel_map->Insert(virt_mb_rounded, secondlevel_table);
+        this->sparse_secondlevel_map->Insert(virt_mb_rounded, secondlevel_table);
 
-        table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] =
+        this->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] =
                 PT_FIRSTLEVEL_MAPTYPE_COARSE |
                 (PT_DOMAIN_DEFAULT << PT_FIRSTLEVEL_DOMAIN_SHIFT) |
                 (V2P((VmAddr_t)&secondlevel_table->ptes->ptes[0]) & PT_FIRSTLEVEL_COARSE_BASE_ADDR_MASK);
@@ -670,15 +663,14 @@ bool TranslationTableMapPage (
     secondlevel_table->num_mapped_pages++;
 
     /* Update cursor to next available page */
-    if (virt >= table->first_unmapped_page) {
-        table->first_unmapped_page = virt + PAGE_SIZE;
+    if (virt >= this->first_unmapped_page) {
+        this->first_unmapped_page = virt + PAGE_SIZE;
     }
 
     return true;
 }
 
-bool TranslationTableUnmapPage (
-        struct TranslationTable * table,
+bool TranslationTable::UnmapPage (
         VmAddr_t virt
         )
 {
@@ -699,7 +691,7 @@ bool TranslationTableUnmapPage (
     assert(virt_pg_idx < (SECTION_SIZE / PAGE_SIZE));
 
     /* Make sure no previous mapping exists for the page */
-    switch (table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] & PT_FIRSTLEVEL_MAPTYPE_MASK)
+    switch (this->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] & PT_FIRSTLEVEL_MAPTYPE_MASK)
     {
         case PT_FIRSTLEVEL_MAPTYPE_UNMAPPED:
         case PT_FIRSTLEVEL_MAPTYPE_SECTION:
@@ -708,7 +700,7 @@ bool TranslationTableUnmapPage (
 
         case PT_FIRSTLEVEL_MAPTYPE_COARSE:
 
-            secondlevel_table = table->sparse_secondlevel_map->Lookup(virt_mb_rounded);
+            secondlevel_table = this->sparse_secondlevel_map->Lookup(virt_mb_rounded);
 
             if (!secondlevel_table) {
                 /* No pages exist in the section. Why's it mapped then?? */
@@ -734,29 +726,29 @@ bool TranslationTableUnmapPage (
 
     /* If no pages are used in the secondlevel table, clean it up */
     if (secondlevel_table->num_mapped_pages < 1) {
-        table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] &= ~PT_FIRSTLEVEL_MAPTYPE_MASK;
-        table->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] |= PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
+        this->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] &= ~PT_FIRSTLEVEL_MAPTYPE_MASK;
+        this->firstlevel_ptes[virt_mb_rounded >> MEGABYTE_SHIFT] |= PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
 
-        secondlevel_table = table->sparse_secondlevel_map->Remove(virt_mb_rounded);
+        secondlevel_table = this->sparse_secondlevel_map->Remove(virt_mb_rounded);
 
         assert(secondlevel_table != NULL);
     }
 
     /* If this was the highest-mapped page, then decrement the next-page pointer */
-    if (table->first_unmapped_page == virt + PAGE_SIZE) {
-        table->first_unmapped_page = virt;
+    if (this->first_unmapped_page == virt + PAGE_SIZE) {
+        this->first_unmapped_page = virt;
     }
 
     return true;
 }
 
-ssize_t CopyWithAddressSpaces (
-        struct TranslationTable *   source_tt,
-        const void *                source_buf,
-        size_t                      source_len,
-        struct TranslationTable *   dest_tt,
-        void *                      dest_buf,
-        size_t                      dest_len
+ssize_t TranslationTable::CopyWithAddressSpaces (
+        TranslationTable *  source_tt,
+        const void *        source_buf,
+        size_t              source_len,
+        TranslationTable *  dest_tt,
+        void *              dest_buf,
+        size_t              dest_len
         )
 {
     size_t len;

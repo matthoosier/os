@@ -51,8 +51,7 @@ static void HandleMapPhys (
                 break;
             }
 
-            mapped = TranslationTableMapNextPage(
-                    message->sender->process->pagetable,
+            mapped = message->sender->process->pagetable->MapNextPage(
                     &virt,
                     phys,
                     PROT_USER_READWRITE
@@ -76,10 +75,7 @@ static void HandleMapPhys (
                 /* Back out all the existing mappings */
                 while (!mapped_pages.Empty()) {
                     page = mapped_pages.PopFirst();
-                    TranslationTableUnmapPage(
-                            message->sender->process->pagetable,
-                            page->page_base
-                            );
+                    message->sender->process->pagetable->UnmapPage(page->page_base);
 
                     /* Free the block hosting the list node */
                     kfree(page, sizeof(*page));

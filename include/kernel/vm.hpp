@@ -57,6 +57,63 @@ public:
     static void Free (Page * page);
 };
 
+/**
+ * \brief   Smart-pointer class for wrapping Page allocations
+ *
+ * This custom smart-pointer automatically calls Page#Free() on the
+ * Page object it wraps.
+ */
+class PagePtr
+{
+public:
+    inline PagePtr (Page * pointee = 0)
+    {
+        Acquire(pointee);
+    }
+
+    inline ~PagePtr ()
+    {
+        Release();
+    }
+
+    inline PagePtr & operator = (Page * pointee)
+    {
+        Release();
+        Acquire(pointee);
+        return *this;
+    }
+
+    inline Page * operator -> ()
+    {
+        return mPointee;
+    }
+
+    inline operator bool ()
+    {
+        return mPointee != 0;
+    }
+
+    inline void Acquire (Page * pointee)
+    {
+        mPointee = pointee;
+    }
+
+    inline void Release ()
+    {
+        if (mPointee) {
+            Page::Free(mPointee);
+            mPointee = 0;
+        }
+    }
+
+private:
+    PagePtr (const PagePtr & other);
+    const PagePtr & operator = (const PagePtr & other);
+
+private:
+    Page * mPointee;
+};
+
 END_DECLS
 
 #endif /* __VM_HPP__ */

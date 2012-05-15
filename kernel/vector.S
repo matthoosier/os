@@ -469,7 +469,7 @@ irq_handler__do_load_next_task$:
     mov r0, r9                      /* r0 := address of incoming        */
                                     /* thread's pagetable               */
 
-    bl MmuSetUserTranslationTable   /* Install new pagetable...         */
+    bl TranslationTableSetUser      /* Install new pagetable...         */
     b irq_handler__normal_exit$     /* Done.                            */
 
 /**

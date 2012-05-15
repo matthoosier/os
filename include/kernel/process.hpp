@@ -34,7 +34,7 @@ struct Process
 {
     Spinlock_t                      lock;
 
-    struct TranslationTable       * pagetable;
+    TranslationTable              * pagetable;
     VmAddr_t                        entry;
     char                            comm[16];
     List<Segment, &Segment::link>   segments_head;
@@ -64,7 +64,7 @@ struct Process
  * Implemented as a symbol to be usable from places where C structures'
  * field can't be accessed by name (e.g., assembly code).
  */
-struct TranslationTable * ProcessGetTranslationTable (struct Process *);
+TranslationTable * ProcessGetTranslationTable (struct Process *);
 
 /**
  * Called one time at startup to initialize the privileged kernel thread

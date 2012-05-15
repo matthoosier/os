@@ -39,8 +39,7 @@ void Pl190::Init ()
         PL190_BASE_VIRT = 0xfff10000,
     };
 
-    bool mapped = TranslationTableMapPage(
-            MmuGetKernelTranslationTable(),
+    bool mapped = TranslationTable::GetKernel()->MapPage(
             PL190_BASE_VIRT,
             PL190_BASE_PHYS,
             PROT_KERNEL

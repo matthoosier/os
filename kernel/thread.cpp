@@ -40,7 +40,7 @@ static void ThreadSwitch (
     uint32_t next_pc = 0;               /* Used by assembly fragment    */
     uint32_t cpsr_temp = 0;             /* Used by assembly fragment    */
 
-    struct TranslationTable * incoming_tt = incoming->process
+    TranslationTable * incoming_tt = incoming->process
             ? incoming->process->pagetable
             : NULL;
 
@@ -57,7 +57,7 @@ static void ThreadSwitch (
     incoming->registers[REGISTER_INDEX_PSR] |= prev_irq_status.cpsr_interrupt_flags;
 
     /* Only flushes TLB if the new data structure isn't the same as the old one */
-    MmuSetUserTranslationTable(incoming_tt);
+    TranslationTable::SetUser(incoming_tt);
 
     /* Mark incoming thread as running */
     incoming->state = Thread::STATE_RUNNING;

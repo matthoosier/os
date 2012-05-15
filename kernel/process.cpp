@@ -65,7 +65,7 @@ static struct Segment * SegmentAlloc ()
 
 static void SegmentFree (
         struct Segment * segment,
-        struct TranslationTable * table
+        TranslationTable * table
         )
 {
     typedef List<Page, &Page::list_link> list_t;
@@ -78,10 +78,7 @@ static void SegmentFree (
 
         Page * page = *i;
 
-        bool unmapped = TranslationTableUnmapPage(
-                table,
-                map_addr
-                );
+        bool unmapped = table->UnmapPage(map_addr);
 
         assert(unmapped);
         map_addr += PAGE_SIZE;
@@ -160,7 +157,7 @@ static void ProcessFree (struct Process * process)
 
     /* Reclaim the memory of the process's pagetable */
     if (process->pagetable) {
-        TranslationTableFree(process->pagetable);
+        delete process->pagetable;
         process->pagetable = NULL;
     }
 
@@ -171,7 +168,7 @@ struct Process * exec_into_current (
         const char executableName[]
         )
 {
-    struct TranslationTable *tt;
+    TranslationTable *tt;
     struct Process * p;
     const struct ImageEntry * image;
     const Elf32_Ehdr * hdr;
@@ -207,14 +204,14 @@ struct Process * exec_into_current (
     strncpy(p->comm, executableName, sizeof(p->comm));
 
     /* Get pagetable for the new process */
-    tt = p->pagetable = TranslationTableAlloc();
+    tt = p->pagetable = new TranslationTable();
 
     if (!tt) {
         assert(false);
         goto free_process;
     }
 
-    MmuSetUserTranslationTable(tt);
+    TranslationTable::SetUser(tt);
 
     p->entry = hdr->e_entry;
 
@@ -251,8 +248,7 @@ struct Process * exec_into_current (
                 Page * page = Page::Alloc();
                 bool mapped;
 
-                mapped = TranslationTableMapPage(
-                        tt,
+                mapped = tt->MapPage(
                         segment->base + PAGE_SIZE * j,
                         V2P(page->base_address),
                         PROT_USER_READWRITE
@@ -717,7 +713,7 @@ struct Message * ProcessLookupMessage (
     return p->id_to_message_map->Lookup(id);
 }
 
-struct TranslationTable * ProcessGetTranslationTable (struct Process * process)
+TranslationTable * ProcessGetTranslationTable (struct Process * process)
 {
     return process->pagetable;
 }
