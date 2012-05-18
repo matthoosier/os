@@ -305,11 +305,6 @@ struct Thread * ThreadStructFromStackPointer (uint32_t sp)
     return THREAD_STRUCT_FROM_SP(sp);
 }
 
-struct Process * ThreadGetProcess (struct Thread * thread)
-{
-    return thread->process;
-}
-
 void ThreadSetStateReady (struct Thread * thread)
 {
     thread->state = Thread::STATE_READY;

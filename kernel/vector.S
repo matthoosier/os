@@ -1,4 +1,6 @@
-    .include "arm-defs.inc"
+#include <asm-offsets.h>
+#include "arm-defs.inc"
+
     .section .text.vector
 
 vector:
@@ -337,7 +339,7 @@ irq_handler__do_load_next_task$:
     /**
      * Find out pagetable used by outgoing thread
      */
-    bl ThreadGetProcess             /* r0 := 'struct Process *'         */
+    ldr r0, [r0, Thread__process]   /* r0 := 'struct Process *'         */
     teq r0, #0                      /* Is r0 NULL?                      */
     blne ProcessGetTranslationTable /* r0 := 'struct TranslationTable *'*/
     mov r8, r0                      /* r8 := 'struct TranslationTable *'*/
@@ -453,7 +455,7 @@ irq_handler__do_load_next_task$:
     /**
      * Find out pagetable used by outgoing thread
      */
-    bl ThreadGetProcess             /* r0 := 'struct Process *'         */
+    ldr r0, [r0, Thread__process]   /* r0 := 'struct Process *'         */
     teq r0, #0                      /* Is r0 NULL?                      */
     blne ProcessGetTranslationTable /* r0 := 'struct TranslationTable *'*/
     mov r9, r0                      /* r9 := 'struct TranslationTable *'*/

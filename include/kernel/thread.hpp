@@ -162,13 +162,6 @@ BEGIN_DECLS
  */
 extern Thread * ThreadStructFromStackPointer (uint32_t sp);
 
-/**
- * A symbol that fetches the value of the 'process' field on a Thread
- * object, but implemented as a symbol for uses where C structures'
- * field names can't be used (e.g., assembly).
- */
-extern struct Process * ThreadGetProcess (struct Thread *);
-
 extern void ThreadAddReady(struct Thread *);
 extern struct Thread * ThreadDequeueReady (void);
 
