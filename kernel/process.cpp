@@ -13,7 +13,7 @@
 #include <kernel/procmgr.hpp>
 #include <kernel/ramfs.h>
 #include <kernel/thread.hpp>
-#include <kernel/timer.h>
+#include <kernel/timer.hpp>
 #include <kernel/tree-map.hpp>
 
 /** Handed off between spawner and spawnee threads */
@@ -516,7 +516,7 @@ static void process_manager_thread (void * pProcessCreationContext)
     p->next_chid++;
 
     /* Start periodic timer to use for pre-emption */
-    TimerStartPeriodic(1000);
+    Timer::StartPeriodic(1000);
   
     /* Release the spawner now that we have the resulting Process object */
     caller_context->caller_should_release = true;

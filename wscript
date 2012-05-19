@@ -31,6 +31,7 @@ kernel_sources = [
     'kernel/syscall.cpp',
     'kernel/thread.cpp',
     'kernel/timer.cpp',
+    'kernel/timer-sp804.cpp',
     'kernel/tree-map.cpp',
     'kernel/vm.cpp',
 

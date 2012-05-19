@@ -79,4 +79,4 @@ int Pl190::GetRaisedIrqNum ()
 }
 
 // Constructor execution will register this driver instance with the core
-Pl190 instance;
+static Pl190 instance;
