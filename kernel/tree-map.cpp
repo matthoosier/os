@@ -1,7 +1,7 @@
 #include <sys/spinlock.h>
 
 #include <kernel/assert.h>
-#include <kernel/minmax.h>
+#include <kernel/minmax.hpp>
 #include <kernel/object-cache.hpp>
 #include <kernel/once.h>
 #include <kernel/tree-map.hpp>

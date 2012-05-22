@@ -10,7 +10,7 @@
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
-#include <kernel/minmax.h>
+#include <kernel/minmax.hpp>
 #include <kernel/mmu.hpp>
 #include <kernel/object-cache.hpp>
 #include <kernel/once.h>
