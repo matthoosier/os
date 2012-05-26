@@ -11,29 +11,41 @@
     /* Padded out to multiple of 8 to preserve %sp requirements */  \
     (ALIGN(sizeof(struct Thread), 3))
 
+/**
+ * \brief   Given a stack pointer value, compute the #ThreadPtr to
+ *          which that stack pointer belongs. This is an
+ *          implementation detail of THREAD_CURRENT().
+ *
+ * \memberof    Thread
+ */
 #define THREAD_STRUCT_FROM_SP(_sp)                                  \
     (                                                               \
     (struct Thread *)                                               \
     (((_sp) & PAGE_MASK) + PAGE_SIZE - ALIGNED_THREAD_STRUCT_SIZE)  \
     )
 
-/*
-We leverage knowledge that the kernel stack is only one page long, to
-be able to compute the address of the current thread's struct based
-solely on the current stack pointer.
-
-Don't blow your thread stack! This will return a bad result.
-*/
+/**
+ * \brief   Fetch #ThreadPtr of the currently executing thread.
+ *
+ * We leverage knowledge that the kernel stack is only one page long, to
+ * be able to compute the address of the current thread's struct based
+ * solely on the current stack pointer.
+ *
+ * Don't blow your thread stack! This will return a bad result.
+ *
+ * \memberof    Thread
+ */
 #define THREAD_CURRENT() \
     (THREAD_STRUCT_FROM_SP(CURRENT_STACK_POINTER()))
 
-/*
-The main control and saved-state for kernel threads. Each thread's
-instance of this structure is housed inside the top of the VM page
-used for the thread's stack. This avoids object allocations and also
-makes deducing the current thread easy: just compute the right offset
-in the page containing the current stack pointer.
-*/
+/**
+ * \brief   The main control and saved-state information for kernel threads.
+ *
+ * Each thread's instance of this structure is housed inside the top of
+ * the VM page used for the thread's stack. This avoids object allocations
+ * and also makes deducing the current thread easy: just compute the right
+ * offset in the page containing the current stack pointer.
+ */
 class Thread
 {
 public:
@@ -60,6 +72,9 @@ public:
         PRIORITY_COUNT,
     };
 
+    /**
+     * \brief   Signature of functions that are supplied as thread bodies
+     */
     typedef void (*Func)(void * param);
 
 public:
@@ -98,26 +113,31 @@ public:
             );
 
     /**
-     * Deallocates resources used by @thread. Must not be called while @thread
-     * is executing on the processor.
+     * \brief   Deallocates resources used by thread a thread.
+     *
+     * Must not be called while thread is actively executing on the processor.
      */
     void Join ();
 
     /**
-     * For use in implementing priority inheritance; install an artifically higher
-     * priority for this thread than its natural one.
+     * \brief   For use in implementing priority inheritance
+     *
+     * Installs an artifically higher priority for this thread than
+     * its natural one.
      */
     void SetEffectivePriority (Thread::Priority priority);
 
     /**
-     * Yield to some other runnable thread. Must not be called with interrupts
-     * disabled.
+     * \brief   Yield to some other runnable thread
+     *
+     * Must not be called with interrupts disabled.
      */
     static void YieldNoRequeue ();
 
     /**
-     * Yield to some other runnable thread, and automatically mark the
-     * current thread as ready-to-run.
+     * \brief   Yield to some other runnable thread
+     *
+     * Automatically marks the current thread as ready-to-run.
      */
     static void YieldWithRequeue ();
 
@@ -135,12 +155,14 @@ public:
 
 private:
     /**
-     * \brief   Hidden to prevent static or stack allocation
+     * \brief   Hidden to prevent static or stack allocation. Use
+     *          Create() instead.
      */
     Thread ();
 
     /**
-     * \brief   Hidden to prevent copying
+     * \brief   Hidden to prevent copying. Use Join() from a different
+     *          thread's execution to deallocate a thread.
      */
     Thread (const Thread & other);
 
@@ -149,6 +171,13 @@ private:
      */
     const Thread& operator= (const Thread & other);
 };
+
+/**
+ * \brief Type alias for conciseness in writing macro documentation
+ *
+ * \memberof Thread
+ */
+typedef Thread * ThreadPtr;
 
 /*----------------------------------------------------------
 Convenience routines for use from assembly code
