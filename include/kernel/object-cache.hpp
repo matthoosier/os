@@ -6,7 +6,6 @@
 #include <sys/decls.h>
 
 #include <kernel/list.hpp>
-#include <kernel/smart-ptr.hpp>
 #include <kernel/tree-map.hpp>
 #include <kernel/vm.hpp>
 
@@ -48,7 +47,7 @@ struct ObjectCache
     typedef TreeMap<void *, struct Slab *> BufctlToSlabMap_t;
 
     /* Used for large-object case */
-    ScopedPtr<BufctlToSlabMap_t> bufctl_to_slab_map;
+    BufctlToSlabMap_t * bufctl_to_slab_map;
 
     const struct ObjectCacheOps * ops;
 };

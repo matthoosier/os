@@ -38,7 +38,8 @@ static void constructor (struct ObjectCache * cache)
 
 static void destructor (struct ObjectCache * cache)
 {
-    cache->bufctl_to_slab_map.Clear();
+    delete cache->bufctl_to_slab_map;
+    cache->bufctl_to_slab_map = 0;
 }
 
 static struct Slab * large_objects_try_allocate_slab (struct ObjectCache * cache)
