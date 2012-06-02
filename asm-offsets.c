@@ -15,5 +15,4 @@
 __attribute__((used))
 static void unused ()
 {
-    OFFSET(Thread, process);
 }

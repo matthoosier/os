@@ -181,12 +181,15 @@ ssize_t KMessageSendAsync (
         message->send_data.async.payload = payload;
 
         /* Allow receiver to wake up */
-        message->receiver->state = Thread::STATE_READY;
-        Thread::AddReadyFirst(message->receiver);
+        Thread::BeginTransactionDuringIrq();
+        Thread::MakeReady(message->receiver);
+        Thread::SetNeedResched();
+        Thread::EndTransaction();
     }
 
     return ERROR_OK;
 }
+
 ssize_t KMessageSend (
         struct Connection * connection,
         const void * msgbuf,
@@ -216,8 +219,10 @@ ssize_t KMessageSend (
         /* Enqueue as blocked on the channel */
         connection->channel->send_blocked_head.Append(message);
 
-        message->sender->state = Thread::STATE_SEND;
-        Thread::YieldNoRequeue();
+        Thread::BeginTransaction();
+        Thread::MakeUnready(THREAD_CURRENT(), Thread::STATE_SEND);
+        Thread::RunNextThread();
+        Thread::EndTransaction();
     }
     else {
         /* Receiver thread is ready to go */
@@ -232,22 +237,15 @@ ssize_t KMessageSend (
         message->send_data.sync.sender_replybuf = replybuf;
         message->send_data.sync.sender_replybuf_len = replybuf_len;
 
-        /*
-        Don't explicity add THREAD_CURRENT (the sender) to any scheduling
-        queue. The receiver will automatically re-insert us into the
-        ready queue when the message reply gets posted.
-        */
-
-        message->receiver->state = Thread::STATE_READY;
-
         /* Temporarily gift our priority to the message-handling thread */
         message->receiver->SetEffectivePriority(THREAD_CURRENT()->effective_priority);
 
         /* Now allow handler to run */
-        Thread::AddReady(message->receiver);
-
-        message->sender->state = Thread::STATE_REPLY;
-        Thread::YieldNoRequeue();
+        Thread::BeginTransaction();
+        Thread::MakeReady(message->receiver);
+        Thread::MakeUnready(THREAD_CURRENT(), Thread::STATE_REPLY);
+        Thread::RunNextThread();
+        Thread::EndTransaction();
     }
 
     /*
@@ -288,8 +286,10 @@ ssize_t KMessageReceive (
         /* Enqueue as blocked on the channel */
         channel->receive_blocked_head.Append(message);
 
-        message->receiver->state = Thread::STATE_RECEIVE;
-        Thread::YieldNoRequeue();
+        Thread::BeginTransaction();
+        Thread::MakeUnready(THREAD_CURRENT(), Thread::STATE_RECEIVE);
+        Thread::RunNextThread();
+        Thread::EndTransaction();
     }
     else {
         /* Some message is waiting in the channel already */
@@ -337,9 +337,6 @@ ssize_t KMessageReceive (
         KMessageFree(message);
     }
 
-    /* Mark sender as reply-blocked */
-    message->sender->state = Thread::STATE_REPLY;
-
     return num_copied;
 } /* KMessageReceive() */
 
@@ -381,12 +378,20 @@ ssize_t KMessageReply (
 
     result = status == ERROR_OK ? context->result : ERROR_OK;
 
+    Thread::BeginTransaction();
+
     /* Sender will get to run again whenever a scheduling decision happens */
-    context->sender->state = Thread::STATE_READY;
-    Thread::AddReady(context->sender);
+    Thread::MakeReady(context->sender);
 
     /* Abandon any temporary priority boost we had now that the sender is unblocked */
     THREAD_CURRENT()->SetEffectivePriority(THREAD_CURRENT()->assigned_priority);
+
+    /* Current thread (replier) remains runnable. */
+    Thread::MakeReady(THREAD_CURRENT());
+
+    Thread::RunNextThread();
+
+    Thread::EndTransaction();
 
     /* Sender frees the message after fetching the return value from it */
     return result;

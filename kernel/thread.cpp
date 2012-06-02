@@ -7,12 +7,20 @@
 #include <kernel/thread.hpp>
 #include <kernel/vm.hpp>
 
+/**
+ * \brief   Coordinates context switches. All scheduler-related API
+ *          calls must be made with this lock already held.
+ *
+ * \memberof Thread
+ */
+BEGIN_DECLS
+Spinlock_t sched_spinlock = SPINLOCK_INIT;
+END_DECLS
+
 typedef List<Thread, &Thread::queue_link> Queue_t;
 
 static Queue_t normal_ready_queue;
 static Queue_t io_ready_queue;
-
-static Spinlock_t ready_queue_lock = SPINLOCK_INIT;
 
 static inline Queue_t * queue_for_thread (Thread * t)
 {
@@ -24,17 +32,24 @@ static inline Queue_t * queue_for_thread (Thread * t)
     }
 }
 
-static void thread_entry (Thread::Func func, void * param);
+void Thread::BeginTransaction ()
+{
+    ThreadBeginTransaction();
+}
 
-void ThreadYieldNoRequeueToSpecific (Thread * next);
+void Thread::BeginTransactionDuringIrq ()
+{
+    ThreadBeginTransactionDuringIrq();
+}
 
-typedef void (*ThreadSwitchPreFunc) (void *param);
+void Thread::EndTransaction ()
+{
+    ThreadEndTransaction();
+}
 
-static void ThreadSwitch (
+static void SwitchTo (
         Thread * outgoing,
-        Thread * incoming,
-        ThreadSwitchPreFunc func,
-        void * funcParam
+        Thread * incoming
         )
 {
     uint32_t next_pc = 0;               /* Used by assembly fragment    */
@@ -44,23 +59,14 @@ static void ThreadSwitch (
             ? incoming->process->pagetable
             : NULL;
 
-    /* Turn off interrupts */
-    IrqSave_t prev_irq_status = InterruptsDisable();
-    assert(prev_irq_status.cpsr_interrupt_flags == 0);
-
-    if (func != NULL) {
-        func(funcParam);
-    }
-
-    /* Stash prior interrupt state in incoming thread's saved CPSR */
-    incoming->registers[REGISTER_INDEX_PSR] &= ~(SETBIT(ARM_CPSR_I_BIT) | SETBIT(ARM_CPSR_F_BIT));
-    incoming->registers[REGISTER_INDEX_PSR] |= prev_irq_status.cpsr_interrupt_flags;
+    /*
+    Enforce the requirement that this function is called under protection
+    of the scheduler lock.
+    */
+    assert(SpinlockLocked(&sched_spinlock));
 
     /* Only flushes TLB if the new data structure isn't the same as the old one */
     TranslationTable::SetUser(incoming_tt);
-
-    /* Mark incoming thread as running */
-    incoming->state = Thread::STATE_RUNNING;
 
     asm volatile(
         "                                                   \n\t"
@@ -70,8 +76,6 @@ static void ThreadSwitch (
         "                                                   \n\t"
         "    /* Store CPSR modulo the IRQ mask */           \n\t"
         "    mrs %[cpsr_temp], cpsr                         \n\t"
-        "    bic %[cpsr_temp], %[cpsr_temp], %[int_bits]    \n\t"
-        "    orr %[cpsr_temp], %[cpsr_temp], %[prev_irq]    \n\t"
         "    str %[cpsr_temp], [%[p_outgoing_cpsr], #0]     \n\t"
         "                                                   \n\t"
         "    /* Patch up stored PC to be at resume point */ \n\t"
@@ -97,29 +101,56 @@ static void ThreadSwitch (
           [p_incoming] "r" (&incoming->registers),
           [p_saved_pc] "r" (&outgoing->registers[REGISTER_INDEX_PC]),
           [p_outgoing_cpsr] "r" (&outgoing->registers[REGISTER_INDEX_PSR]),
-          [p_incoming_cpsr] "r" (&incoming->registers[REGISTER_INDEX_PSR]),
-          [prev_irq] "r" (prev_irq_status.cpsr_interrupt_flags),
-          [int_bits] "i" (SETBIT(ARM_CPSR_I_BIT) | SETBIT(ARM_CPSR_F_BIT))
+          [p_incoming_cpsr] "r" (&incoming->registers[REGISTER_INDEX_PSR])
         : "memory"
     );
 }
 
-static void thread_entry (Thread::Func func, void * param)
+void Thread::RunNextThread ()
 {
+    assert(SpinlockLocked(&sched_spinlock));
+
+    Thread * next = DequeueReady();
+    Thread * curr = THREAD_CURRENT();
+
+    if (next != curr) {
+        SwitchTo(curr, next);
+    } else {
+        volatile int x = 0;
+        x = x;
+    }
+}
+
+void Thread::Entry (Thread::Func func, void * param)
+{
+    /*
+    This function is reached by a SwitchTo() call, so this means that
+    the thread executing it still holds the scheduler-transaction lock.
+
+    So we have to release that in order to indicate that we're fully
+    on the CPU and done messing with scheduler data structures.
+    */
+    EndTransaction();
+
+    /*
+    Main execution is begin, run the user-supplied body for this thread.
+    */
     func(param);
 
-    THREAD_CURRENT()->state = Thread::STATE_FINISHED;
+    BeginTransaction();
 
     if (THREAD_CURRENT()->joiner != NULL) {
-        Thread::AddReady(THREAD_CURRENT()->joiner);
+        MakeReady(THREAD_CURRENT()->joiner);
     }
 
-    Thread::YieldNoRequeue();
+    MakeUnready(THREAD_CURRENT(), STATE_FINISHED);
+    RunNextThread();
+
+    EndTransaction();
 }
 
 Thread * Thread::Create (Thread::Func body, void * param)
 {
-    unsigned int    i;
     Page *          stack_page;
     Thread *        descriptor;
 
@@ -136,10 +167,7 @@ Thread * Thread::Create (Thread::Func body, void * param)
     */
     descriptor = THREAD_STRUCT_FROM_SP(stack_page->base_address);
 
-    for (i = 0; i < sizeof(descriptor->registers) / sizeof(descriptor->registers[0]); ++i)
-    {
-        descriptor->registers[i] = 0;
-    }
+    memset(&descriptor->registers[0], 0, sizeof(descriptor->registers));
 
     descriptor->kernel_stack.ceiling = descriptor;
     descriptor->kernel_stack.base = (void *)stack_page->base_address;
@@ -155,19 +183,19 @@ Thread * Thread::Create (Thread::Func body, void * param)
     descriptor->registers[REGISTER_INDEX_SP] = (uint32_t)descriptor->kernel_stack.ceiling;
 
     /* Set up the entrypoint function with argument values */
-    descriptor->registers[REGISTER_INDEX_PC]    = (uint32_t)thread_entry;
+    descriptor->registers[REGISTER_INDEX_PC]    = (uint32_t)Entry;
     descriptor->registers[REGISTER_INDEX_ARG0]  = (uint32_t)body;
     descriptor->registers[REGISTER_INDEX_ARG1]  = (uint32_t)param;
 
     /* Thread is initially running in kernel mode */
-    asm volatile (
-        "mov %[cpsr], %[svc_mode_bits]          \n\t"
-        : [cpsr] "=r" (descriptor->registers[REGISTER_INDEX_PSR])
-        : [svc_mode_bits] "i" (ARM_SVC_MODE_BITS)
-    );
+    descriptor->registers[REGISTER_INDEX_PSR] = ARM_SVC_MODE_BITS;
 
     /* Yield immediately to new thread so that it gets initialized */
-    ThreadSwitch(THREAD_CURRENT(), descriptor, (ThreadSwitchPreFunc)Thread::AddReady, THREAD_CURRENT());
+    BeginTransaction();
+    MakeReady(descriptor);
+    MakeReady(THREAD_CURRENT());
+    RunNextThread();
+    EndTransaction();
 
     return descriptor;
 }
@@ -180,7 +208,10 @@ void Thread::Join ()
     this->joiner = THREAD_CURRENT();
 
     while (this->state != Thread::STATE_FINISHED) {
-        Thread::YieldNoRequeue();
+        BeginTransaction();
+        MakeUnready(THREAD_CURRENT(), STATE_JOINING);
+        RunNextThread();
+        EndTransaction();
     }
 
     if (this->kernel_stack.page != NULL) {
@@ -193,27 +224,11 @@ void Thread::SetEffectivePriority (Thread::Priority priority)
     this->effective_priority = priority;
 }
 
-void Thread::AddReady (Thread * thread)
-{
-    SpinlockLock(&ready_queue_lock);
-    queue_for_thread(thread)->Append(thread);
-    thread->state = Thread::STATE_READY;
-    SpinlockUnlock(&ready_queue_lock);
-}
-
-void Thread::AddReadyFirst (Thread * thread)
-{
-    SpinlockLock(&ready_queue_lock);
-    queue_for_thread(thread)->Prepend(thread);
-    thread->state = Thread::STATE_READY;
-    SpinlockUnlock(&ready_queue_lock);
-}
-
 Thread * Thread::DequeueReady ()
 {
     Thread * next;
 
-    SpinlockLock(&ready_queue_lock);
+    assert(SpinlockLocked(&sched_spinlock));
 
     if (!io_ready_queue.Empty()) {
         next = io_ready_queue.PopFirst();
@@ -224,38 +239,21 @@ Thread * Thread::DequeueReady ()
         next = NULL;
     }
 
-    SpinlockUnlock(&ready_queue_lock);
-
     return next;
 }
 
-void Thread::YieldNoRequeue ()
+void Thread::MakeReady (Thread * thread)
 {
-    /* Pop off thread at front of run-queue */
-    Thread * next = Thread::DequeueReady();
+    assert(SpinlockLocked(&sched_spinlock));
 
-    /* Since we're not requeuing, there had better be somebody runnable */
-    assert(next != NULL);
-
-    ThreadSwitch(THREAD_CURRENT(), next, NULL, NULL);
+    queue_for_thread(thread)->Append(thread);
+    thread->state = Thread::STATE_READY;
 }
 
-void Thread::YieldWithRequeue ()
+void Thread::MakeUnready (Thread * thread, State state)
 {
-    /* Pop off thread at front of run-queue */
-    Thread * next = Thread::DequeueReady();
-
-    /* Since we're requeuing, it's OK if there were no other runnable threads */
-    if (next != NULL) {
-        ThreadSwitch(THREAD_CURRENT(), next, (ThreadSwitchPreFunc)Thread::AddReady, THREAD_CURRENT());
-    }
-}
-
-void ThreadYieldNoRequeueToSpecific (Thread * next)
-{
-    assert(next->queue_link.Unlinked());
-
-    ThreadSwitch(THREAD_CURRENT(), next, NULL, NULL);
+    assert(SpinlockLocked(&sched_spinlock));
+    thread->state = state;
 }
 
 /**
@@ -285,12 +283,12 @@ bool Thread::ResetNeedResched ()
     return ret;
 }
 
-void ThreadAddReady (struct Thread * thread)
+void ThreadMakeReady (Thread * thread)
 {
-    Thread::AddReady(thread);
+    Thread::MakeReady(thread);
 }
 
-struct Thread * ThreadDequeueReady (void)
+Thread * ThreadDequeueReady (void)
 {
     return Thread::DequeueReady();
 }
@@ -300,17 +298,35 @@ bool ThreadResetNeedResched ()
     return Thread::ResetNeedResched();
 }
 
-struct Thread * ThreadStructFromStackPointer (uint32_t sp)
+Thread * ThreadStructFromStackPointer (uint32_t sp)
 {
     return THREAD_STRUCT_FROM_SP(sp);
 }
 
-void ThreadSetStateReady (struct Thread * thread)
+Process * ThreadGetProcess (Thread * thread)
 {
-    thread->state = Thread::STATE_READY;
+    return thread->process;
 }
 
-void ThreadSetStateRunning (struct Thread * thread)
+void ThreadBeginTransaction ()
 {
-    thread->state = Thread::STATE_RUNNING;
+    assert(!InterruptsDisabled());
+    SpinlockLock(&sched_spinlock);
+}
+
+void ThreadBeginTransactionDuringIrq ()
+{
+    assert(InterruptsDisabled());
+    SpinlockLock(&sched_spinlock);
+}
+
+void ThreadBeginTransactionEndingIrq ()
+{
+    assert(InterruptsDisabled());
+    SpinlockLockNoIrqSave(&sched_spinlock);
+}
+
+void ThreadEndTransaction ()
+{
+    SpinlockUnlock(&sched_spinlock);
 }

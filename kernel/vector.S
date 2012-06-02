@@ -57,6 +57,11 @@ swi_handler:
     bl do_syscall
 
 swi_handler__exit$:
+    /* Disable interrupts to keep context change atomic */
+    mrs r8, cpsr
+    orr r8, r8, #cpsr_i_bit
+    msr cpsr, r8
+
     /* Restore user-mode CPSR from stack (using an intermediate register) */
     ldmfd sp!, {r8}
     msr spsr, r8
@@ -71,6 +76,17 @@ swi_handler__exit$:
 
     /* Atomically transfer current LR into PC, and load SPSR into CPSR */
     movs pc, lr
+
+/**
+ * Point used to restart a user-space thread which was pre-empted by
+ * an interrupt.
+ */
+swi_handler__restart_after_irq$:
+    /* Drop the main scheduling lock        */
+    bl ThreadEndTransaction
+
+    /* Now just jump back to the main return sequence in the syscall handler */
+    b swi_handler__exit$
 
 pabt_handler:
     b pabt_handler
@@ -95,7 +111,10 @@ irq_handler:
 
     bl InterruptHandler
 
-    /* Did the interrupt handler decide that a different task needs to run? */
+    /*
+    Ask whether something happened during the ISR handler that made the
+    scheduler need to run again.
+    */
     bl ThreadResetNeedResched       /* r0 := boolean result                 */
 
     /* If not, we're done */
@@ -124,8 +143,13 @@ irq_handler:
     teq r1, #usr
     beq irq_handler__do_boot_user$
 
+    /*
+    FIXME: kernel preemption isn't working right yet with the new scheduler
+    transaction locks.
+
     teq r1, #svc
     beq irq_handler__do_boot_kernel$
+    */
 
     b irq_handler__normal_exit$
 
@@ -139,6 +163,11 @@ irq_handler:
  * sp:  Bottom of IRQ stack's saved-register area
  */
 irq_handler__do_boot_user$:
+
+    /* Acquire scheduler lock */
+    push {r0-r3}
+    bl ThreadBeginTransactionEndingIrq
+    pop {r0-r3}
 
     /* R15 */
     ldr r3, [sp, #(14 * 4)]     /* Load from IRQ stack                  */
@@ -212,6 +241,11 @@ irq_handler__do_boot_user$:
 
     /* SPSR */
     ldr r3, [sp, #(13 * 4)]     /* Load from staged SPSR on IRQ stack   */
+    orr r3, r3, #cpsr_i_bit     /* Synthesized syscall should start out */
+                                /* with interrupts disabled so that     */
+                                /* it's protected from preemption until */
+                                /* it finishes the handshake by calling */
+                                /* ThreadEndTransaction().              */
     stmfd r2!, {r3}             /* Store to task's kernel stack         */
 
     /**
@@ -231,9 +265,9 @@ irq_handler__do_boot_user$:
      *     required to hold the user-space saved registers we just stored
      *     on the task's kernel stack.
      */
-    str r2, [r0, #(4 * 13)]     /* Kernel threadstack pointer           */
-    ldr r2, =swi_handler__exit$ /* R2 := Strategic resume point         */
-    str r2, [r0, #(4 * 15)]     /* Kernel thread program counter        */
+    str r2, [r0, #(4 * 13)]     /* Outgoing task's kernel SP            */
+    ldr r2, =swi_handler__restart_after_irq$
+    str r2, [r0, #(4 * 15)]     /* Outgoing task's kernel PC            */
 
     b irq_handler__do_load_next_task$
 
@@ -247,8 +281,16 @@ irq_handler__do_boot_user$:
  */
 irq_handler__do_boot_kernel$:
 
+    /* Acquire scheduler lock */
+    push {r0-r3}
+    bl ThreadBeginTransactionEndingIrq
+    pop {r0-r3}
+
     /* SPSR */
     ldr r3, [sp, #(13 * 4)]     /* Load from staged SPSR on IRQ stack   */
+    orr r3, r3, #cpsr_i_bit     /* Interrupted task should retain       */
+                                /* preemption protection when it's      */
+                                /* restored next time.                  */
     str r3, [r0, #(16 * 4)]     /* Store to kernel thread structure     */
 
     /* R15 */
@@ -321,11 +363,30 @@ irq_handler__do_boot_kernel$:
     ldr r3, [sp, #(0 * 4)]      /* Load from IRQ stack                  */
     str r3, [r0, #(0 * 4)]      /* Store to kernel thread structure     */
 
+    /*
+    Insert a tiny little restart shim into the interrupted kernel
+    thread, that will cause it to drop the scheduler transaction
+    lock upon its restart.
+
+    ARM uses the full-descending stack model, so tactically we do this
+    by first decrementing the stack pointer and then writing to the
+    location addressed by it.
+    */
+
+    ldr r4, [r0, #(15 * 4)]     /* r4 := interrupted task's PC          */
+    ldr r3, [r0, #(13 * 4)]     /* r3 := interrupted task's SP          */
+
+    sub r3, r3, #4              /* Decrement interrupted task's stack   */
+    str r4, [r3]                /* Stash PC in stack                    */
+    str r3, [r0, #(13 * 4)]     /* Write tweaked SP back to saved regs  */
+
+    ldr r5, =restart_interrupted_kernel_thread$
+    str r5, [r0, #(15 * 4)]     /* Hijack the saved PC of outgoing task */
 
 /**
  * Requirements:
  *
- * r0: holds address of outgoing tasks' kernel 'struct Thread'
+ * r0: holds address of outgoing task's kernel 'struct Thread'
  */
 irq_handler__do_load_next_task$:
 
@@ -333,13 +394,13 @@ irq_handler__do_load_next_task$:
      * Mark the booted thread as ready to run
      */
     push {r0}
-    bl ThreadAddReady               /* r0 still holds 'struct Thread *' */
+    bl ThreadMakeReady              /* r0 still holds 'struct Thread *' */
     pop {r0}
 
     /**
      * Find out pagetable used by outgoing thread
      */
-    ldr r0, [r0, Thread__process]   /* r0 := 'struct Process *'         */
+    bl ThreadGetProcess             /* r0 := 'struct Process *'         */
     teq r0, #0                      /* Is r0 NULL?                      */
     blne ProcessGetTranslationTable /* r0 := 'struct TranslationTable *'*/
     mov r8, r0                      /* r8 := 'struct TranslationTable *'*/
@@ -359,11 +420,6 @@ irq_handler__do_load_next_task$:
     moveq r0, #0                /* If so, r0 := FALSE               */
     movne r0, #1                /* If not, r0 := TRUE               */
     bl assert                   /* assert(r0)                       */
-    pop {r0}
-
-
-    push {r0}
-    bl ThreadSetStateRunning
     pop {r0}
 
     /**
@@ -455,7 +511,7 @@ irq_handler__do_load_next_task$:
     /**
      * Find out pagetable used by outgoing thread
      */
-    ldr r0, [r0, Thread__process]   /* r0 := 'struct Process *'         */
+    bl ThreadGetProcess             /* r0 := 'struct Process *'         */
     teq r0, #0                      /* Is r0 NULL?                      */
     blne ProcessGetTranslationTable /* r0 := 'struct TranslationTable *'*/
     mov r9, r0                      /* r9 := 'struct TranslationTable *'*/
@@ -497,3 +553,29 @@ irq_handler__normal_exit$:
 fiq_handler:
     b fiq_handler
 
+/**
+ * Shim used to restart a kernel task that got booted by an interrupt
+ * handler.
+ *
+ * The scheduler expects that the switched-to thread always drops
+ * the "scheduler transaction" lock as the first thing it does, so
+ * we have to patch up the execution of the interrupted kernel thread
+ * to do this.
+ *
+ * The IRQ handler stashed the real PC of the interrupted task as the
+ * most recently pushed word on the stack.
+ */
+restart_interrupted_kernel_thread$:
+    push {r0-r3, r4, r12}
+    mrs r4, cpsr
+    bic r4, r4, #cpsr_i_bit
+    bic r4, r4, #cpsr_f_bit
+    bl ThreadEndTransaction
+    msr cpsr, r4
+    pop {r0-r3, r4, r12}
+
+    /*
+    Finish the shim by consuming the extra word encoding the PC and
+    jumping to it.
+    */
+    pop {pc}

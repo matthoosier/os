@@ -2,7 +2,6 @@
 #include <sys/io.h>
 #include <sys/message.h>
 #include <sys/procmgr.h>
-#include <sys/spinlock.h>
 
 int main (int argc, char *argv[]) {
 

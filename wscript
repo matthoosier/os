@@ -26,6 +26,7 @@ kernel_sources = [
     'kernel/procmgr_interrupts.cpp',
     'kernel/procmgr_map.cpp',
     'kernel/ramfs.cpp',
+    'kernel/semaphore.cpp',
     'kernel/small-object-cache.cpp',
     'kernel/stdlib.c',
     'kernel/syscall.cpp',

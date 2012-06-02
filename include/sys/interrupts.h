@@ -22,6 +22,20 @@ typedef struct
 /* Should be passable by-value as a simple word */
 COMPILER_ASSERT(sizeof(IrqSave_t) <= sizeof(int));
 
+__attribute__ ((optimize(2)))
+static inline bool InterruptsDisabled ()
+{
+    uint32_t cpsr;
+    asm volatile (
+        "mrs %[cpsr], cpsr"
+        : [cpsr] "=r" (cpsr)
+        :
+        : "memory"
+    );
+
+    return (cpsr & SETBIT(ARM_CPSR_I_BIT)) || (cpsr & SETBIT(ARM_CPSR_F_BIT));
+}
+
 __attribute__((optimize(2)))
 static inline IrqSave_t InterruptsDisable ()
 {
@@ -42,6 +56,14 @@ static inline IrqSave_t InterruptsDisable ()
     prev_state.cpsr_interrupt_flags &= SETBIT(ARM_CPSR_I_BIT) | SETBIT(ARM_CPSR_F_BIT);
 
     return prev_state;
+}
+
+__attribute__((optimize(2)))
+static inline IrqSave_t InterruptsEnabledState ()
+{
+    IrqSave_t state;
+    state.cpsr_interrupt_flags = 0;
+    return state;
 }
 
 __attribute__((optimize(2)))

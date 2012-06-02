@@ -12,6 +12,7 @@
 #include <kernel/process.hpp>
 #include <kernel/procmgr.hpp>
 #include <kernel/ramfs.h>
+#include <kernel/semaphore.hpp>
 #include <kernel/thread.hpp>
 #include <kernel/timer.hpp>
 #include <kernel/tree-map.hpp>
@@ -19,10 +20,10 @@
 /** Handed off between spawner and spawnee threads */
 struct process_creation_context
 {
-    Thread *            caller;
+    Thread            * caller;
     struct Process    * created;
     const char        * executableName;
-    bool                caller_should_release;
+    Semaphore         * baton;
 };
 
 /** Allocates instances of 'struct Process' */
@@ -335,12 +336,20 @@ void process_creation_thread (void * pProcessCreationContext)
     context->created = p = exec_into_current(context->executableName);
 
     /* Release the spawner now that we have the resulting Process object */
-    context->caller_should_release = true;
+    context->baton->Up();
 
     if (p) {
 
         /* Jump into the new process */
         uint32_t spsr;
+
+        assert(!InterruptsDisabled());
+
+        /*
+        Need to make sure that no context switch comes along and
+        trashes the value we're setting up in SPSR.
+        */
+        InterruptsDisable();
 
         /* Configure the SPSR to be user-mode execution */
         asm volatile(
@@ -371,6 +380,9 @@ void process_creation_thread (void * pProcessCreationContext)
             :
             : [user_pc] "r" (p->entry)
         );
+
+        /* Unreachable */
+        assert(false);
     }
 
     /*
@@ -386,6 +398,7 @@ void process_creation_thread (void * pProcessCreationContext)
 struct Process * ProcessCreate (const char executableName[])
 {
     struct process_creation_context context;
+    Semaphore baton(0);
 
     if (ProcessGetManager() == NULL) {
         /* Something bad happened. Process manager wasn't spawned. */
@@ -395,15 +408,13 @@ struct Process * ProcessCreate (const char executableName[])
     context.caller = THREAD_CURRENT();
     context.created = NULL;
     context.executableName = executableName;
-    context.caller_should_release = false;
+    context.baton = &baton;
 
     /* Resulting process object will be stored into context->created */
     Thread::Create(process_creation_thread, &context);
 
     /* Forked thread will wake us back up when the process creation is done */
-    while (!context.caller_should_release) {
-        Thread::YieldWithRequeue();
-    }
+    baton.Down();
 
     return context.created;
 }
@@ -491,8 +502,8 @@ static void process_manager_thread (void * pProcessCreationContext)
     if (!channel) {
         /* This is unrecoverably bad. */
         assert(false);
-        caller_context->caller_should_release = true;
         caller_context->created = NULL;
+        caller_context->baton->Up();
         return;
     }
 
@@ -519,7 +530,7 @@ static void process_manager_thread (void * pProcessCreationContext)
     Timer::StartPeriodic(1000);
   
     /* Release the spawner now that we have the resulting Process object */
-    caller_context->caller_should_release = true;
+    caller_context->baton->Up();
 
     while (true) {
         ssize_t len = KMessageReceive(
@@ -552,21 +563,20 @@ static struct Process * managerProcess = NULL;
 struct Process * ProcessStartManager ()
 {
     struct process_creation_context context;
+    Semaphore baton(0);
 
     assert(managerProcess == NULL);
 
     context.caller = THREAD_CURRENT();
     context.created = NULL;
     context.executableName = NULL;
-    context.caller_should_release = false;
+    context.baton = &baton;
 
     /* Resulting process object will be stored into context->created */
     Thread::Create(process_manager_thread, &context);
 
     /* Forked thread will wake us back up when the process creation is done */
-    while (!context.caller_should_release) {
-        Thread::YieldWithRequeue();
-    }
+    baton.Down();
 
     managerProcess = context.created;
 
@@ -743,7 +753,9 @@ static void HandleExit (
     message->sender->process = NULL;
 
     /* Force sender's kernel thread to appear done */
-    message->sender->state = Thread::STATE_FINISHED;
+    Thread::BeginTransaction();
+    Thread::MakeUnready(message->sender, Thread::STATE_FINISHED);
+    Thread::EndTransaction();
 
     /* Reap sender's kernel thread */
     message->sender->Join();

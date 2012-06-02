@@ -26,6 +26,11 @@ typedef struct
 #   define SPINLOCK_INIT { .lockval = SPINLOCK_LOCKVAL_UNLOCKED }
 #endif
 
+static inline bool SpinlockLocked (Spinlock_t * lock)
+{
+    return lock->lockval == SPINLOCK_LOCKVAL_LOCKED;
+}
+
 static inline void SpinlockInit (Spinlock_t * lock)
 {
     /* Initially unlocked */
@@ -47,6 +52,12 @@ static inline void SpinlockLock (Spinlock_t * lock)
     while (!AtomicCompareAndExchange(&lock->lockval, SPINLOCK_LOCKVAL_UNLOCKED, SPINLOCK_LOCKVAL_LOCKED))
     {
     }
+}
+
+static inline void SpinlockLockNoIrqSave (Spinlock_t * lock)
+{
+    SpinlockLock(lock);
+    lock->irq_saved_state = InterruptsEnabledState();
 }
 
 static inline void SpinlockUnlock (Spinlock_t * lock)

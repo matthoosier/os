@@ -156,7 +156,6 @@ void run_first_thread ()
     first_thread->kernel_stack.base     = &init_stack[0];
     first_thread->kernel_stack.page     = NULL;
     first_thread->process               = NULL;
-    first_thread->state                 = Thread::STATE_RUNNING;
     first_thread->queue_link.DynamicInit();
 
     /* Device-independent */
@@ -170,6 +169,9 @@ void run_first_thread ()
     ProcessCreate("pl011");
 
     while (true) {
-        Thread::YieldWithRequeue();
+        Thread::BeginTransaction();
+        Thread::MakeReady(THREAD_CURRENT());
+        Thread::RunNextThread();
+        Thread::EndTransaction();
     }
 }

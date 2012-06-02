@@ -55,9 +55,12 @@ public:
         STATE_REPLY,
         STATE_RECEIVE,
 
+        STATE_SEM,
+
         STATE_READY,
         STATE_RUNNING,
 
+        STATE_JOINING,
         STATE_FINISHED,
 
         /* This isn't a state, just a way to programatically calculate */
@@ -88,8 +91,6 @@ public:
         /* If non-NULL, stack was dynamically allocated */
         Page * page;
     } kernel_stack;
-
-    State state;
 
     struct Process * process;
 
@@ -128,30 +129,38 @@ public:
     void SetEffectivePriority (Thread::Priority priority);
 
     /**
-     * \brief   Yield to some other runnable thread
+     * \brief   Remove argument from ready-to-run list
      *
-     * Must not be called with interrupts disabled.
+     * Assumes #sched_spinlock is held.
      */
-    static void YieldNoRequeue ();
+    static void MakeUnready (Thread * thread, State state);
 
     /**
-     * \brief   Yield to some other runnable thread
+     * \brief   Add argument to ready-to-run list
      *
-     * Automatically marks the current thread as ready-to-run.
+     * Assumes #sched_spinlock is held.
      */
-    static void YieldWithRequeue ();
+    static void MakeReady (Thread * thread);
 
-    static void AddReady (Thread * thread);
+    /**
+     * Assumes #sched_spinlock is held.
+     */
+    static void RunNextThread ();
 
-    static void AddReadyFirst (Thread * thread);
+    /**
+     * Assumes #sched_spinlock is held.
+     */
+    static Thread * DequeueReady ();
 
-    static Thread * DequeueReady (void);
+    static void SetNeedResched ();
 
-    static void SetNeedResched (void);
+    static bool GetNeedResched ();
 
-    static bool GetNeedResched (void);
+    static bool ResetNeedResched ();
 
-    static bool ResetNeedResched (void);
+    static void BeginTransaction ();
+    static void BeginTransactionDuringIrq ();
+    static void EndTransaction ();
 
 private:
     /**
@@ -170,6 +179,14 @@ private:
      * \brief   Hidden to prevent assignment
      */
     const Thread& operator= (const Thread & other);
+
+    /**
+     *
+     */
+    static void Entry (Func func, void * func_arg);
+
+private:
+    State state;
 };
 
 /**
@@ -189,19 +206,18 @@ BEGIN_DECLS
  * A version of THREAD_STRUCT_FROM_SP(), but implemented as a symbol
  * for calling from places where macros aren't available (e.g., assembly).
  */
-extern Thread * ThreadStructFromStackPointer (uint32_t sp);
+extern Thread *     ThreadStructFromStackPointer    (uint32_t sp);
 
-extern void ThreadAddReady(struct Thread *);
-extern struct Thread * ThreadDequeueReady (void);
+extern Process *    ThreadGetProcess                (Thread *);
 
-extern bool ThreadResetNeedResched (void);
+extern void         ThreadMakeReady                 (Thread *);
+extern Thread *     ThreadDequeueReady              (void);
+extern void         ThreadBeginTransaction          (void);
+extern void         ThreadEndTransaction            (void);
+extern void         ThreadBeginTransactionDuringIrq (void);
+extern void         ThreadBeginTransactionEndingIrq (void);
 
-extern void ThreadSetStateReady (struct Thread *);
-extern void ThreadSetStateRunning (struct Thread *);
-extern void ThreadSetStateSend (struct Thread *);
-extern void ThreadSetStateReply (struct Thread *);
-extern void ThreadSetStateReceive (struct Thread *);
-extern void ThreadSetStateFinished (struct Thread *);
+extern bool         ThreadResetNeedResched          (void);
 
 END_DECLS
 
