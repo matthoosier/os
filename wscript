@@ -218,7 +218,7 @@ incorporated into the finished INCLUDES environment.
 @before_method('propagate_uselib_vars')
 def apply_asmoffsets(taskgen):
     input       = taskgen.path.find_resource(taskgen.asmoffsets)
-    input_ext   = input.name[input.name.rfind('.')]
+    input_ext   = input.name[input.name.rfind('.'):]
     asm         = input.change_ext('%s.%d.s' % (input_ext, taskgen.idx))
     header      = input.change_ext('.h')
 
