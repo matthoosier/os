@@ -143,13 +143,8 @@ irq_handler:
     teq r1, #usr
     beq irq_handler__do_boot_user$
 
-    /*
-    FIXME: kernel preemption isn't working right yet with the new scheduler
-    transaction locks.
-
     teq r1, #svc
     beq irq_handler__do_boot_kernel$
-    */
 
     b irq_handler__normal_exit$
 
@@ -566,16 +561,26 @@ fiq_handler:
  * most recently pushed word on the stack.
  */
 restart_interrupted_kernel_thread$:
-    push {r0-r3, r4, r12}
+    push {r0-r3, r4, r12, lr}
+
+    /*
+    The CPSR at this moment looks (except for the interrupt-enable bits)
+    exactly like it should from the interrupted thread's perspective.
+    But we're going to be doing some junk to the condition-code flags in
+    it when we perform the upcoming spinlock release.
+
+    So we have to save a copy of it.
+    */
     mrs r4, cpsr
     bic r4, r4, #cpsr_i_bit
     bic r4, r4, #cpsr_f_bit
-    bl ThreadEndTransaction
-    msr cpsr, r4
-    pop {r0-r3, r4, r12}
+
+    bl ThreadEndTransactionFromRestart
+    msr spsr, r4
+    pop {r0-r3, r4, r12, lr}
 
     /*
     Finish the shim by consuming the extra word encoding the PC and
     jumping to it.
     */
-    pop {pc}
+    ldmfd sp!, {pc}^

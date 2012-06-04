@@ -73,6 +73,18 @@ static inline void SpinlockUnlock (Spinlock_t * lock)
     InterruptsRestore(lock->irq_saved_state);
 }
 
+static inline void SpinlockUnlockNoIrqRestore (Spinlock_t * lock)
+{
+    #ifdef __KERNEL__
+        assert(InterruptsDisabled());
+        assert(SPINLOCK_LOCKVAL_UNLOCKED != lock->lockval);
+    #endif
+
+    while (!AtomicCompareAndExchange(&lock->lockval, SPINLOCK_LOCKVAL_LOCKED, SPINLOCK_LOCKVAL_UNLOCKED))
+    {
+    }
+}
+
 END_DECLS
 
 #endif /* __SPINLOCK_H__ */

@@ -146,6 +146,17 @@ void install_kernel_memory_map ()
 /* Retroactively filled in */
 static Thread *first_thread = (Thread *)&init_stack[N_ELEMENTS(init_stack) - ALIGNED_THREAD_STRUCT_SIZE];
 
+__attribute__((noreturn))
+void run_idle_loop ()
+{
+    while (true) {
+        Thread::BeginTransaction();
+        Thread::MakeReady(THREAD_CURRENT());
+        Thread::RunNextThread();
+        Thread::EndTransaction();
+    }
+}
+
 void run_first_thread ()
 {
     /*
@@ -168,10 +179,5 @@ void run_first_thread ()
     ProcessCreate("uio");
     ProcessCreate("pl011");
 
-    while (true) {
-        Thread::BeginTransaction();
-        Thread::MakeReady(THREAD_CURRENT());
-        Thread::RunNextThread();
-        Thread::EndTransaction();
-    }
+    run_idle_loop();
 }

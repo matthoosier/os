@@ -245,6 +245,7 @@ Thread * Thread::DequeueReady ()
 void Thread::MakeReady (Thread * thread)
 {
     assert(SpinlockLocked(&sched_spinlock));
+    assert(thread->queue_link.Unlinked());
 
     queue_for_thread(thread)->Append(thread);
     thread->state = Thread::STATE_READY;
@@ -329,4 +330,9 @@ void ThreadBeginTransactionEndingIrq ()
 void ThreadEndTransaction ()
 {
     SpinlockUnlock(&sched_spinlock);
+}
+
+void ThreadEndTransactionFromRestart ()
+{
+    SpinlockUnlockNoIrqRestore(&sched_spinlock);
 }

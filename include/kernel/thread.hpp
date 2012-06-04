@@ -213,9 +213,10 @@ extern Process *    ThreadGetProcess                (Thread *);
 extern void         ThreadMakeReady                 (Thread *);
 extern Thread *     ThreadDequeueReady              (void);
 extern void         ThreadBeginTransaction          (void);
-extern void         ThreadEndTransaction            (void);
 extern void         ThreadBeginTransactionDuringIrq (void);
 extern void         ThreadBeginTransactionEndingIrq (void);
+extern void         ThreadEndTransaction            (void);
+extern void         ThreadEndTransactionFromRestart (void);
 
 extern bool         ThreadResetNeedResched          (void);
 
