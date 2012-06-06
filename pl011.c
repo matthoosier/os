@@ -118,23 +118,23 @@ enum
     ICR_ALL = 0x7ff,
 };
 
-static bool pl011_read_ready (volatile pl011_t * uart)
+static bool pl011_read_ready (pl011_t volatile * uart)
 {
     return (uart->FR & FR_RXFE) == 0;
 }
 
-static uint8_t pl011_blocking_read (volatile pl011_t * uart)
+static uint8_t pl011_blocking_read (pl011_t volatile * uart)
 {
     while (!pl011_read_ready(uart));
     return uart->DR;
 }
 
-static bool pl011_write_ready (volatile pl011_t * uart)
+static bool pl011_write_ready (pl011_t volatile * uart)
 {
     return (uart->FR & FR_TXFF) == 0;
 }
 
-static void pl011_blocking_write (volatile pl011_t * uart, uint8_t c)
+static void pl011_blocking_write (pl011_t volatile * uart, uint8_t c)
 {
     while (!pl011_write_ready(uart));
     uart->DR = c;
@@ -156,7 +156,7 @@ char my_toupper (char c)
     }
 }
 
-void pl011_isr (volatile pl011_t * uart, InterruptHandler_t irq_id)
+void pl011_isr (pl011_t volatile * uart, InterruptHandler_t irq_id)
 {
     uint32_t mis = uart->MIS;
 
@@ -184,7 +184,7 @@ void pl011_isr (volatile pl011_t * uart, InterruptHandler_t irq_id)
 
 int main (int argc, char *argv[]) {
 
-    volatile pl011_t * uart0;
+    pl011_t volatile * uart0;
     InterruptHandler_t irq_id;
     int chid;
     int coid;
