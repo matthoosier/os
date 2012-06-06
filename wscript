@@ -224,6 +224,7 @@ def apply_asmoffsets(taskgen):
 
     cxx_task = taskgen.create_task('cxx', input, asm)
     cxx_task.env.CXX_TGT_F = ['-S', '-o']
+    cxx_task.env.append_value('CXXFLAGS', '-Wno-invalid-offsetof')
 
     grep_task = taskgen.create_task('asmoffsets', asm, header)
     taskgen.includes.append(header.parent)

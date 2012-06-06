@@ -325,6 +325,8 @@ private:
      * thread.
      */
     Thread * joiner;
+
+    friend void AsmOffsetsMain ();
 };
 
 /**
