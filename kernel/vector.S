@@ -166,73 +166,73 @@ irq_handler__do_boot_user$:
 
     /* R15 */
     ldr r3, [sp, #(14 * 4)]     /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R14 */
     stmfd sp, {r14}^            /* Load from banked register            */
     nop
     sub sp, sp, #4              /* (Stack is very temp. storage)        */
     ldmfd sp!, {r3}
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R13 */
     stmfd sp, {r13}^            /* Load from banked register            */
     nop
     sub sp, sp, #4              /* (Stack is very temp. storage)        */
     ldmfd sp!, {r3}
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R12 */
     ldr r3, [sp, #(12 * 4)]     /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R11 */
     ldr r3, [sp, #(11 * 4)]     /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R10 */
     ldr r3, [sp, #(10 * 4)]     /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R9 */
     ldr r3, [sp, #(9 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R8 */
     ldr r3, [sp, #(8 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R7 */
     ldr r3, [sp, #(7 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R6 */
     ldr r3, [sp, #(6 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R5 */
     ldr r3, [sp, #(5 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R4 */
     ldr r3, [sp, #(4 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R3 */
     ldr r3, [sp, #(3 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R2 */
     ldr r3, [sp, #(2 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R1 */
     ldr r3, [sp, #(1 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* R0 */
     ldr r3, [sp, #(0 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /* SPSR */
     ldr r3, [sp, #(13 * 4)]     /* Load from staged SPSR on IRQ stack   */
@@ -241,7 +241,7 @@ irq_handler__do_boot_user$:
                                 /* it's protected from preemption until */
                                 /* it finishes the handshake by calling */
                                 /* ThreadEndTransaction().              */
-    stmfd r2!, {r3}             /* Store to task's kernel stack         */
+    stmfd r2!, {r3}             /* Store on task's kernel stack         */
 
     /**
      * Because the task we're ejecting from the CPU was running in user
@@ -260,9 +260,9 @@ irq_handler__do_boot_user$:
      *     required to hold the user-space saved registers we just stored
      *     on the task's kernel stack.
      */
-    str r2, [r0, #(4 * 13)]     /* Outgoing task's kernel SP            */
+    str r2, [r0, K_R13]         /* Outgoing task's kernel SP            */
     ldr r2, =swi_handler__restart_after_irq$
-    str r2, [r0, #(4 * 15)]     /* Outgoing task's kernel PC            */
+    str r2, [r0, K_R15]         /* Outgoing task's kernel PC            */
 
     b irq_handler__do_load_next_task$
 
@@ -286,77 +286,77 @@ irq_handler__do_boot_kernel$:
     orr r3, r3, #cpsr_i_bit     /* Interrupted task should retain       */
                                 /* preemption protection when it's      */
                                 /* restored next time.                  */
-    str r3, [r0, #(16 * 4)]     /* Store to kernel thread structure     */
+    str r3, [r0, K_CPSR]        /* Store to kernel thread structure     */
 
     /* R15 */
     ldr r3, [sp, #(14 * 4)]     /* Load from IRQ stack                  */
-    str r3, [r0, #(15 * 4)]     /* Store to kernel thread structure     */
+    str r3, [r0, K_R15]         /* Store to kernel thread structure     */
 
     /* R14 */
     mrs r4, cpsr
     cps #svc
     mov r3, r14
     msr cpsr, r4                /* Load from banked register            */
-    str r3, [r0, #(14 * 4)]     /* Store to kernel thread structure     */
+    str r3, [r0, K_R14]         /* Store to kernel thread structure     */
 
     /* R13 */
     mrs r4, cpsr
     cps #svc
     mov r3, r13
     msr cpsr, r4                /* Load from banked register            */
-    str r3, [r0, #(13 * 4)]     /* Store to kernel thread structure     */
+    str r3, [r0, K_R13]         /* Store to kernel thread structure     */
 
     /* R12 */
     ldr r3, [sp, #(12 * 4)]     /* Load from IRQ stack                  */
-    str r3, [r0, #(12 * 4)]     /* Store to kernel thread structure     */
+    str r3, [r0, K_R12]         /* Store to kernel thread structure     */
 
     /* R11 */
     ldr r3, [sp, #(11 * 4)]     /* Load from IRQ stack                  */
-    str r3, [r0, #(11 * 4)]     /* Store to kernel thread structure     */
+    str r3, [r0, K_R11]         /* Store to kernel thread structure     */
 
     /* R10 */
     ldr r3, [sp, #(10 * 4)]     /* Load from IRQ stack                  */
-    str r3, [r0, #(10 * 4)]     /* Store to kernel thread structure     */
+    str r3, [r0, K_R10]         /* Store to kernel thread structure     */
 
     /* R9 */
     ldr r3, [sp, #(9 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, #(9 * 4)]      /* Store to kernel thread structure     */
+    str r3, [r0, K_R9]          /* Store to kernel thread structure     */
 
     /* R8 */
     ldr r3, [sp, #(8 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, #(8 * 4)]      /* Store to kernel thread structure     */
+    str r3, [r0, K_R8]          /* Store to kernel thread structure     */
 
     /* R7 */
     ldr r3, [sp, #(7 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, #(7 * 4)]      /* Store to kernel thread structure     */
+    str r3, [r0, K_R7]          /* Store to kernel thread structure     */
 
     /* R6 */
     ldr r3, [sp, #(6 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, #(6 * 4)]      /* Store to kernel thread structure     */
+    str r3, [r0, K_R6]          /* Store to kernel thread structure     */
 
     /* R5 */
     ldr r3, [sp, #(5 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, #(5 * 4)]      /* Store to kernel thread structure     */
+    str r3, [r0, K_R5]          /* Store to kernel thread structure     */
 
     /* R4 */
     ldr r3, [sp, #(4 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, #(4 * 4)]      /* Store to kernel thread structure     */
+    str r3, [r0, K_R4]          /* Store to kernel thread structure     */
 
     /* R3 */
     ldr r3, [sp, #(3 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, #(3 * 4)]      /* Store to kernel thread structure     */
+    str r3, [r0, K_R3]          /* Store to kernel thread structure     */
 
     /* R2 */
     ldr r3, [sp, #(2 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, #(2 * 4)]      /* Store to kernel thread structure     */
+    str r3, [r0, K_R2]          /* Store to kernel thread structure     */
 
     /* R1 */
     ldr r3, [sp, #(1 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, #(1 * 4)]      /* Store to kernel thread structure     */
+    str r3, [r0, K_R1]          /* Store to kernel thread structure     */
 
     /* R0 */
     ldr r3, [sp, #(0 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, #(0 * 4)]      /* Store to kernel thread structure     */
+    str r3, [r0, K_R0]          /* Store to kernel thread structure     */
 
     /*
     Insert a tiny little restart shim into the interrupted kernel
@@ -368,15 +368,15 @@ irq_handler__do_boot_kernel$:
     location addressed by it.
     */
 
-    ldr r4, [r0, #(15 * 4)]     /* r4 := interrupted task's PC          */
-    ldr r3, [r0, #(13 * 4)]     /* r3 := interrupted task's SP          */
+    ldr r4, [r0, K_R15]         /* r4 := interrupted task's PC          */
+    ldr r3, [r0, K_R13]         /* r3 := interrupted task's SP          */
 
     sub r3, r3, #4              /* Decrement interrupted task's stack   */
     str r4, [r3]                /* Stash PC in stack                    */
-    str r3, [r0, #(13 * 4)]     /* Write tweaked SP back to saved regs  */
+    str r3, [r0, K_R13]         /* Write tweaked SP back to saved regs  */
 
     ldr r5, =restart_interrupted_kernel_thread$
-    str r5, [r0, #(15 * 4)]     /* Hijack the saved PC of outgoing task */
+    str r5, [r0, K_R15]         /* Hijack the saved PC of outgoing task */
 
 /**
  * Requirements:
@@ -430,77 +430,77 @@ irq_handler__do_load_next_task$:
      */
 
     /* SPSR */
-    ldr r3, [r0, #(16 * 4)]     /* Load from kernel thread structure    */
+    ldr r3, [r0, K_CPSR]        /* Load from kernel thread structure    */
     str r3, [sp, #(13 * 4)]     /* Store as staged SPSR on IRQ stack    */
 
     /* R15 */
-    ldr r3, [r0, #(15 * 4)]     /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R15]         /* Load from kernel thread structure    */
     str r3, [sp, #(14 * 4)]     /* Store on IRQ stack                   */
 
     /* R14 */
-    ldr r3, [r0, #(14 * 4)]     /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R14]         /* Load from kernel thread structure    */
     mrs r4, cpsr
     cps #svc
     mov r14, r3                 /* Store in banked register             */
     msr cpsr, r4
 
     /* R13 */
-    ldr r3, [r0, #(13 * 4)]     /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R13]         /* Load from kernel thread structure    */
     mrs r4, cpsr
     cps #svc
     mov r13, r3                 /* Store in banked register             */
     msr cpsr, r4
 
     /* R12 */
-    ldr r3, [r0, #(12 * 4)]     /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R12]         /* Load from kernel thread structure    */
     str r3, [sp, #(12 * 4)]     /* Store on IRQ stack                   */
 
     /* R11 */
-    ldr r3, [r0, #(11 * 4)]     /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R11]         /* Load from kernel thread structure    */
     str r3, [sp, #(11 * 4)]     /* Store on IRQ stack                   */
 
     /* R10 */
-    ldr r3, [r0, #(10 * 4)]     /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R10]         /* Load from kernel thread structure    */
     str r3, [sp, #(10 * 4)]     /* Store on IRQ stack                   */
 
     /* R9 */
-    ldr r3, [r0, #(9 * 4)]      /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R9]          /* Load from kernel thread structure    */
     str r3, [sp, #(9 * 4)]      /* Store on IRQ stack                   */
 
     /* R8 */
-    ldr r3, [r0, #(8 * 4)]      /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R8]          /* Load from kernel thread structure    */
     str r3, [sp, #(8 * 4)]      /* Store on IRQ stack                   */
 
     /* R7 */
-    ldr r3, [r0, #(7 * 4)]      /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R7]          /* Load from kernel thread structure    */
     str r3, [sp, #(7 * 4)]      /* Store on IRQ stack                   */
 
     /* R6 */
-    ldr r3, [r0, #(6 * 4)]      /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R6]          /* Load from kernel thread structure    */
     str r3, [sp, #(6 * 4)]      /* Store on IRQ stack                   */
 
     /* R5 */
-    ldr r3, [r0, #(5 * 4)]      /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R5]          /* Load from kernel thread structure    */
     str r3, [sp, #(5 * 4)]      /* Store on IRQ stack                   */
 
     /* R4 */
-    ldr r3, [r0, #(4 * 4)]      /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R4]          /* Load from kernel thread structure    */
     str r3, [sp, #(4 * 4)]      /* Store on IRQ stack                   */
 
     /* R3 */
-    ldr r3, [r0, #(3 * 4)]      /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R3]          /* Load from kernel thread structure    */
     str r3, [sp, #(3 * 4)]      /* Store on IRQ stack                   */
 
     /* R2 */
-    ldr r3, [r0, #(2 * 4)]      /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R2]          /* Load from kernel thread structure    */
     str r3, [sp, #(2 * 4)]      /* Store on IRQ stack                   */
 
     /* R1 */
-    ldr r3, [r0, #(1 * 4)]      /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R1]          /* Load from kernel thread structure    */
     str r3, [sp, #(1 * 4)]      /* Store on IRQ stack                   */
 
     /* R0 */
-    ldr r3, [r0, #(0 * 4)]      /* Load from kernel thread structure    */
+    ldr r3, [r0, K_R0]          /* Load from kernel thread structure    */
     str r3, [sp, #(0 * 4)]      /* Store on IRQ stack                   */
 
     /**
