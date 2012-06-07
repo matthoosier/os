@@ -118,7 +118,7 @@ void install_kernel_memory_map ()
     extern char __VectorStartPhysical;
 
     bool success = kernel_tt->MapPage(
-                0xffff0000,
+                ARM_VECTOR_START_VIRTUAL,
                 (PhysAddr_t)&__VectorStartPhysical,
                 PROT_KERNEL
                 );

@@ -63,6 +63,8 @@
     #define ARM_UND_MODE_BITS   0b11011
     #define ARM_SYS_MODE_BITS   0b11111
 
+    #define ARM_VECTOR_START_VIRTUAL    0xffff0000
+
 #else
     #error
 #endif
