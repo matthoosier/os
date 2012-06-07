@@ -11,6 +11,8 @@ NATIVE  = 'native'
 kernel_sources = [
     'kernel/assert.cpp',
     'kernel/early-mmu.c',
+    'kernel/debug.cpp',
+    'kernel/debug-pl011.cpp',
     'kernel/init.cpp',
     'kernel/interrupts.cpp',
     'kernel/interrupts-pl190.cpp',
