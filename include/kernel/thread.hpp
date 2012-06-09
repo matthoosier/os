@@ -149,9 +149,14 @@ public:
 
 public:
     /**
-     * \brief   Main register-save area
+     * \brief   Saved contents of kernel-mode registers
      */
-    uint32_t    registers[REGISTER_COUNT];
+    uint32_t    k_reg[REGISTER_COUNT];
+
+    /**
+     * \brief   Saved contents of user-mode registers
+     */
+    uint32_t    u_reg[REGISTER_COUNT];
 
     /**
      * \brief   Metadata about the stack owned by this thread

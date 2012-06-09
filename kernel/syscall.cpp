@@ -175,11 +175,14 @@ static int DoEcho (int arg)
 }
 
 BEGIN_DECLS
-void do_syscall (uint32_t * p_regs);
+void do_syscall (Thread * current);
 END_DECLS
 
-void do_syscall (uint32_t * p_regs)
+void do_syscall (Thread * current)
 {
+
+    #define p_regs  (current->u_reg)
+
     switch (p_regs[8]) {
 
         case SYS_CHANNEL_CREATE:

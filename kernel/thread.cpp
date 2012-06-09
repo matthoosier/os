@@ -97,11 +97,11 @@ static void SwitchTo (
         "                                                   \n\t"
         : [next_pc] "+r" (next_pc),
           [cpsr_temp] "+r" (cpsr_temp)
-        : [p_outgoing] "r" (&outgoing->registers),
-          [p_incoming] "r" (&incoming->registers),
-          [p_saved_pc] "r" (&outgoing->registers[REGISTER_INDEX_PC]),
-          [p_outgoing_cpsr] "r" (&outgoing->registers[REGISTER_INDEX_PSR]),
-          [p_incoming_cpsr] "r" (&incoming->registers[REGISTER_INDEX_PSR])
+        : [p_outgoing] "r" (&outgoing->k_reg),
+          [p_incoming] "r" (&incoming->k_reg),
+          [p_saved_pc] "r" (&outgoing->k_reg[REGISTER_INDEX_PC]),
+          [p_outgoing_cpsr] "r" (&outgoing->k_reg[REGISTER_INDEX_PSR]),
+          [p_incoming_cpsr] "r" (&incoming->k_reg[REGISTER_INDEX_PSR])
         : "memory"
     );
 }
@@ -167,7 +167,7 @@ Thread * Thread::Create (Thread::Func body, void * param)
     */
     descriptor = THREAD_STRUCT_FROM_SP(stack_page->base_address);
 
-    memset(&descriptor->registers[0], 0, sizeof(descriptor->registers));
+    memset(&descriptor->k_reg[0], 0, sizeof(descriptor->k_reg));
 
     descriptor->kernel_stack.ceiling = descriptor;
     descriptor->kernel_stack.base = (void *)stack_page->base_address;
@@ -180,15 +180,15 @@ Thread * Thread::Create (Thread::Func body, void * param)
     descriptor->effective_priority = Thread::PRIORITY_NORMAL;
 
     /* Initially only the program and stack counter matter. */
-    descriptor->registers[REGISTER_INDEX_SP] = (uint32_t)descriptor->kernel_stack.ceiling;
+    descriptor->k_reg[REGISTER_INDEX_SP] = (uint32_t)descriptor->kernel_stack.ceiling;
 
     /* Set up the entrypoint function with argument values */
-    descriptor->registers[REGISTER_INDEX_PC]    = (uint32_t)Entry;
-    descriptor->registers[REGISTER_INDEX_ARG0]  = (uint32_t)body;
-    descriptor->registers[REGISTER_INDEX_ARG1]  = (uint32_t)param;
+    descriptor->k_reg[REGISTER_INDEX_PC]    = (uint32_t)Entry;
+    descriptor->k_reg[REGISTER_INDEX_ARG0]  = (uint32_t)body;
+    descriptor->k_reg[REGISTER_INDEX_ARG1]  = (uint32_t)param;
 
     /* Thread is initially running in kernel mode */
-    descriptor->registers[REGISTER_INDEX_PSR] = ARM_SVC_MODE_BITS;
+    descriptor->k_reg[REGISTER_INDEX_PSR] = ARM_SVC_MODE_BITS;
 
     /* Yield immediately to new thread so that it gets initialized */
     BeginTransaction();

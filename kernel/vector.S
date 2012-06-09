@@ -35,17 +35,44 @@ undef_handler:
     b undef_handler
 
 swi_handler:
-    /* User PC (stored in the SVC mode LR automatically by the SWI) */
+    /* User R15 (stored in LR_svc automatically by the SWI) */
     stmfd sp!, {lr}
 
-    /* Main user registers (caret selects user registers instead of current mode's )*/
+    /* LR is now free, so fetch the address of the current TCB into it              */
+    push {r0-r3,ip}
+    mov r0, sp
+    bl ThreadStructFromStackPointer
+    mov lr, r0
+    pop {r0-r3,ip}
+
+    /* Push main user registers */
     stmfd sp, {r0 - r14}^
     nop
-    sub sp, sp, #60
+    sub sp, sp, #(15 * 4)
 
-    /* Fetch user-mode CPSR into a register and push it too */
+    /* Store R0-R12 all out to the TCB's user register-save area */
+    add lr, lr, U_R0
+    ldm sp, {r0 - r12}
+    stm lr, {r0 - r12}
+    sub lr, lr, U_R0
+
+    /* Store R13-R15 all out to the TCB's user register-save area */
+    add lr, lr, U_R13
+    add sp, sp, #(13 * 4)
+    ldm sp, {r0 - r2}
+    stm lr, {r0 - r2}
+    sub sp, sp, #(13 * 4)
+    sub lr, lr, U_R13
+
+    /* Store user-mode CPSR into TCB's user register-save area */
     mrs r8, spsr
-    stmfd sp!, {r8}
+    str r8, [lr, U_CPSR]
+
+    /*
+    Okay, all the user registers are saved into Thread::u_reg. It's
+    safe to deallocate the stack space that temporarily held them.
+    */
+    add sp, sp, #(16 * 4)
 
     /* Re-enable regular interrupts (the SWI instruction disabled them) */
     mrs r8, cpsr
@@ -53,25 +80,47 @@ swi_handler:
     msr cpsr, r8
 
     /* Do actual work here... */
-    add r0, sp, #4
+    mov r0, lr
     bl do_syscall
 
 swi_handler__exit$:
+    /* Find address of TCB for current thread   */
+    mov r0, sp
+    bl ThreadStructFromStackPointer
+    mov lr, r0
+
     /* Disable interrupts to keep context change atomic */
     mrs r8, cpsr
     orr r8, r8, #cpsr_i_bit
     msr cpsr, r8
 
-    /* Restore user-mode CPSR from stack (using an intermediate register) */
-    ldmfd sp!, {r8}
+    /* Make room on stack to reconstruct user registers from Thread::u_reg */
+    sub sp, sp, #(16 * 4)
+
+    /* Transfer user-mode CPSR out of TCB's user register-save area */
+    ldr r8, [lr, U_CPSR]
     msr spsr, r8
 
-    /* Main user registers (caret selects user registers instead of current mode's ) */
+    /* Restore main user registers (R0-R12) */
+    add lr, lr, U_R0
+    ldm lr, {r0 - r12}      /* TCB -> regs */
+    stm sp, {r0 - r12}      /* regs -> stack */
+    sub lr, lr, U_R0
+
+    /* Restore main user registers (R13 - R15) */
+    add lr, lr, U_R13
+    add sp, sp, #(13 * 4)
+    ldm lr, {r0 - r2}
+    stm sp, {r0 - r2}
+    sub sp, sp, #(13 * 4)
+    sub lr, lr, U_R13
+
+    /* Pop saved user R0-R14 from stack into live registers */
     ldmfd sp, {r0 - r14}^
     nop
-    add sp, sp, #60
+    add sp, sp, #(15 * 4)
 
-    /* Put user PC into LR in preparation for special exception-return MOVS op */
+    /* Pop user PC into LR in preparation for special exception-return MOVS op */
     ldmfd sp!, {lr}
 
     /* Atomically transfer current LR into PC, and load SPSR into CPSR */
@@ -154,6 +203,7 @@ irq_handler:
  *
  * Requirements:
  *
+ * r0: Interrupted task's TCB (struct Thread *)
  * r2: Interrupted task's SP
  * sp:  Bottom of IRQ stack's saved-register area
  */
@@ -166,73 +216,31 @@ irq_handler__do_boot_user$:
 
     /* R15 */
     ldr r3, [sp, #(14 * 4)]     /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
+    str r3, [r0, U_R15]         /* Store to TCB                         */
 
     /* R14 */
     stmfd sp, {r14}^            /* Load from banked register            */
     nop
     sub sp, sp, #4              /* (Stack is very temp. storage)        */
     ldmfd sp!, {r3}
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
+    str r3, [r0, U_R14]         /* Store to TCB                         */
 
     /* R13 */
     stmfd sp, {r13}^            /* Load from banked register            */
     nop
     sub sp, sp, #4              /* (Stack is very temp. storage)        */
     ldmfd sp!, {r3}
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
+    str r3, [r0, U_R13]         /* Store to TCB                         */
 
     /* R12 */
     ldr r3, [sp, #(12 * 4)]     /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
+    str r3, [r0, U_R12]         /* Store to TCB                         */
 
-    /* R11 */
-    ldr r3, [sp, #(11 * 4)]     /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
-
-    /* R10 */
-    ldr r3, [sp, #(10 * 4)]     /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
-
-    /* R9 */
-    ldr r3, [sp, #(9 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
-
-    /* R8 */
-    ldr r3, [sp, #(8 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
-
-    /* R7 */
-    ldr r3, [sp, #(7 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
-
-    /* R6 */
-    ldr r3, [sp, #(6 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
-
-    /* R5 */
-    ldr r3, [sp, #(5 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
-
-    /* R4 */
-    ldr r3, [sp, #(4 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
-
-    /* R3 */
-    ldr r3, [sp, #(3 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
-
-    /* R2 */
-    ldr r3, [sp, #(2 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
-
-    /* R1 */
-    ldr r3, [sp, #(1 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
-
-    /* R0 */
-    ldr r3, [sp, #(0 * 4)]      /* Load from IRQ stack                  */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
+    /* R0 - R11 */
+    ldm sp, {r1 - r12}
+    add r0, r0, U_R0            /* r0 += offsetof(Thread, u_reg[0])     */
+    stm r0, {r1 - r12}
+    sub r0, r0, U_R0            /* r0 -= offsetof(Thread, u_reg[0])     */
 
     /* SPSR */
     ldr r3, [sp, #(13 * 4)]     /* Load from staged SPSR on IRQ stack   */
@@ -241,7 +249,8 @@ irq_handler__do_boot_user$:
                                 /* it's protected from preemption until */
                                 /* it finishes the handshake by calling */
                                 /* ThreadEndTransaction().              */
-    stmfd r2!, {r3}             /* Store on task's kernel stack         */
+                                /*                                      */
+    str r3, [r0, U_CPSR]        /* Store to TCB                         */
 
     /**
      * Because the task we're ejecting from the CPU was running in user
@@ -310,53 +319,11 @@ irq_handler__do_boot_kernel$:
     ldr r3, [sp, #(12 * 4)]     /* Load from IRQ stack                  */
     str r3, [r0, K_R12]         /* Store to kernel thread structure     */
 
-    /* R11 */
-    ldr r3, [sp, #(11 * 4)]     /* Load from IRQ stack                  */
-    str r3, [r0, K_R11]         /* Store to kernel thread structure     */
-
-    /* R10 */
-    ldr r3, [sp, #(10 * 4)]     /* Load from IRQ stack                  */
-    str r3, [r0, K_R10]         /* Store to kernel thread structure     */
-
-    /* R9 */
-    ldr r3, [sp, #(9 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, K_R9]          /* Store to kernel thread structure     */
-
-    /* R8 */
-    ldr r3, [sp, #(8 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, K_R8]          /* Store to kernel thread structure     */
-
-    /* R7 */
-    ldr r3, [sp, #(7 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, K_R7]          /* Store to kernel thread structure     */
-
-    /* R6 */
-    ldr r3, [sp, #(6 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, K_R6]          /* Store to kernel thread structure     */
-
-    /* R5 */
-    ldr r3, [sp, #(5 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, K_R5]          /* Store to kernel thread structure     */
-
-    /* R4 */
-    ldr r3, [sp, #(4 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, K_R4]          /* Store to kernel thread structure     */
-
-    /* R3 */
-    ldr r3, [sp, #(3 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, K_R3]          /* Store to kernel thread structure     */
-
-    /* R2 */
-    ldr r3, [sp, #(2 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, K_R2]          /* Store to kernel thread structure     */
-
-    /* R1 */
-    ldr r3, [sp, #(1 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, K_R1]          /* Store to kernel thread structure     */
-
-    /* R0 */
-    ldr r3, [sp, #(0 * 4)]      /* Load from IRQ stack                  */
-    str r3, [r0, K_R0]          /* Store to kernel thread structure     */
+    /* R0 - R11 */
+    ldm sp, {r1 - r12}
+    add r0, r0, K_R0            /* r0 += offsetof(Thread, k_reg[0])     */
+    stm r0, {r1 - r12}
+    sub r0, r0, K_R0            /* r0 -= offsetof(Thread, k_reg[0])     */
 
     /*
     Insert a tiny little restart shim into the interrupted kernel
