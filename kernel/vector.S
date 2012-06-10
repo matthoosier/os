@@ -158,6 +158,19 @@ irq_handler:
     /* Main registers */
     stmfd sp!, {r0 - r12}
 
+#if 0
+    /* assert(sched_spinlock.lockval == SPINLOCK_LOCKVAL_LOCKED); */
+    push {r0-r3}
+    ldr r0, =sched_spinlock
+    ldr r1, [r0, Spinlock_t__lockval]
+    mov r2, SPINLOCK_LOCKVAL_UNLOCKED
+    teq r1, r2
+    moveq r0, #1
+    movne r0, #0
+    bl assert
+    pop {r0-r3}
+#endif
+
     bl InterruptHandler
 
     /*
@@ -284,6 +297,32 @@ irq_handler__do_boot_user$:
  * sp:  Bottom of IRQ stack's saved-register area
  */
 irq_handler__do_boot_kernel$:
+
+#if 0
+    push {r0-r3}
+    ldr r0, =DEBUG_KERNEL_INTERRUPTED_MESSAGE
+
+    ldr r1, [sp, #((14 + 4) * 4)]       /* r1 := interrupted PC     */
+
+    mrs r3, cpsr                        /* r2 := interrupted SP     */
+    cps #svc
+    mov r2, sp
+    msr cpsr, r3
+
+    bl printk
+    pop {r0-r3}
+
+    /* assert(sched_spinlock.lockval == SPINLOCK_LOCKVAL_LOCKED); */
+    push {r0-r3}
+    ldr r0, =sched_spinlock
+    ldr r1, [r0, Spinlock_t__lockval]
+    mov r2, SPINLOCK_LOCKVAL_UNLOCKED
+    teq r1, r2
+    moveq r0, #1
+    movne r0, #0
+    bl assert
+    pop {r0-r3}
+#endif
 
     /* Acquire scheduler lock */
     push {r0-r3}
@@ -484,13 +523,25 @@ irq_handler__do_load_next_task$:
     teq r8, r9                      /* Are outgoing and incoming        */
                                     /* pagetables the same?             */
 
-    beq irq_handler__normal_exit$   /* If so, we're done.               */
+    beq irq_handler__enforce_lock$  /* If so, we're done.               */
 
     mov r0, r9                      /* r0 := address of incoming        */
                                     /* thread's pagetable               */
 
     bl TranslationTableSetUser      /* Install new pagetable...         */
-    b irq_handler__normal_exit$     /* Done.                            */
+
+irq_handler__enforce_lock$:
+
+#if 0
+    /* assert(sched_spinlock.lockval == SPINLOCK_LOCKVAL_LOCKED); */
+    ldr r0, =sched_spinlock
+    ldr r1, [r0, Spinlock_t__lockval]
+    mov r2, SPINLOCK_LOCKVAL_LOCKED
+    teq r1, r2
+    moveq r0, #1
+    movne r0, #0
+    bl assert
+#endif
 
 /**
  * Normal unraveling point. Assumes that the only thing on the
@@ -529,6 +580,17 @@ fiq_handler:
  */
 restart_interrupted_kernel_thread$:
     push {r0-r3, r4, r12, lr}
+
+#if 0
+    /* assert(sched_spinlock.lockval == SPINLOCK_LOCKVAL_LOCKED); */
+    ldr r0, =sched_spinlock
+    ldr r1, [r0, Spinlock_t__lockval]
+    mov r2, SPINLOCK_LOCKVAL_LOCKED
+    teq r1, r2
+    moveq r0, #1
+    movne r0, #0
+    bl assert
+#endif
 
     /*
     The CPSR at this moment looks (except for the interrupt-enable bits)
