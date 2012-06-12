@@ -280,7 +280,7 @@ struct UserInterruptHandlerRecord * UserInterruptHandlerRecordAlloc ()
 
     if (ret) {
         memset(ret, 0, sizeof(*ret));
-        ret->link.DynamicInit();
+        new (&ret->link) ListElement();
     }
 
     return ret;

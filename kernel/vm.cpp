@@ -111,7 +111,7 @@ static void vm_init (void * ignored)
 
         page_structs[i].base_address = base_address;
 
-        page_structs[i].list_link.DynamicInit();
+        new (&page_structs[i].list_link) ListElement();
 
         buddylists[buddy_level].freelist_head.Append(&page_structs[i]);
     }
@@ -162,8 +162,8 @@ Page * vm_pages_alloc_internal (
         But just do this to make sure, since we already have to initialize
         second_half_struct's list head anyway.
         */
-        block_to_split->list_link.DynamicInit();
-        second_half_struct->list_link.DynamicInit();
+        new (&block_to_split->list_link) ListElement();
+        new (&second_half_struct->list_link) ListElement();
 
         /*
         Insert these two new (PAGE_SIZE << order)-sized chunks of memory
@@ -268,7 +268,7 @@ void Page::Free (Page * page)
         if (BitmapGet(buddylists[order].bitmap.elements, idx)) {
 
             /* Found it. Return to freelist and clear bitmap. Then done. */
-            page->list_link.DynamicInit();
+            new (&page->list_link) ListElement();
             buddylists[order].freelist_head.Prepend(page);
             BitmapClear(buddylists[order].bitmap.elements, idx);
             try_merge_block(page, order);

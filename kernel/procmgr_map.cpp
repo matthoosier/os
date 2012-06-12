@@ -67,7 +67,7 @@ static void HandleMapPhys (
 
             if (mapped) {
                 page->page_base = virt;
-                page->link.DynamicInit();
+                new (&page->link) ListElement();
                 mapped_pages.Append(page);
             }
             else if (!mapped) {

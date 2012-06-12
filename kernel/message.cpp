@@ -53,9 +53,9 @@ struct Channel * KChannelAlloc (void)
 
     if (result) {
         memset(result, 0, sizeof(*result));
-        result->send_blocked_head.DynamicInit();
-        result->receive_blocked_head.DynamicInit();
-        result->link.DynamicInit();
+        new (&result->send_blocked_head) List<Message, &Message::queue_link>();
+        new (&result->receive_blocked_head) List<Message, &Message::queue_link>();
+        new (&result->link) ListElement();
     }
 
     return result;
@@ -86,7 +86,7 @@ static struct Connection * ConnectionAlloc (void)
 
     if (c) {
         memset(c, 0, sizeof(*c));
-        c->link.DynamicInit();
+        new (&c->link) ListElement();
     }
 
     return c;
@@ -129,7 +129,7 @@ struct Message * KMessageAlloc (void)
 
     if (message) {
         memset(message, 0, sizeof(*message));
-        message->queue_link.DynamicInit();
+        new (&message->queue_link) ListElement();
     }
 
     return message;

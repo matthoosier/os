@@ -7,6 +7,7 @@
 #   include <assert.h>
 #endif
 
+#include <new>
 #include <stdint.h>
 
 /**
@@ -24,11 +25,6 @@ public:
         : prev(this)
         , next(this)
     {
-    }
-
-    void DynamicInit ()
-    {
-        prev = next = this;
     }
 
     bool Unlinked ()
@@ -168,15 +164,6 @@ template <class T, ListElement T::* Ptr>
         ~List ()
         {
             assert(Empty());
-        }
-
-        /**
-         * \brief   Perform explicit run-time initialization of
-         *          a List instance, exactly like a constructor
-         *          would.
-         */
-        void DynamicInit () {
-            mHead.DynamicInit();
         }
 
         /**

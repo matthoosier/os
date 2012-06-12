@@ -173,7 +173,7 @@ Thread * Thread::Create (Thread::Func body, void * param)
     descriptor->kernel_stack.base = (void *)stack_page->base_address;
     descriptor->kernel_stack.page = stack_page;
     descriptor->process = THREAD_CURRENT()->process;
-    descriptor->queue_link.DynamicInit();
+    new (&descriptor->queue_link) ListElement();
     descriptor->state = Thread::STATE_READY;
     descriptor->joiner = NULL;
     descriptor->assigned_priority = Thread::PRIORITY_NORMAL;

@@ -14,7 +14,7 @@ void ObjectCacheInit (struct ObjectCache * cache, size_t element_size)
     }
 
     cache->element_size = element_size;
-    cache->slab_head.DynamicInit();
+    new (&cache->slab_head) List<Slab, &Slab::cache_link>();
 
     if (cache->element_size >= MAX_SMALL_OBJECT_SIZE) {
         cache->ops = &large_objects_ops;
@@ -89,8 +89,8 @@ void InitSlab (struct Slab * slab)
 {
     slab->page = NULL;
     slab->refcount = 0;
-    slab->freelist_head.DynamicInit();
-    slab->cache_link.DynamicInit();
+    new (&slab->freelist_head) List<Bufctl, &Bufctl::freelist_link>();
+    new (&slab->cache_link) ListElement();
 }
 
 void InitBufctl (struct Bufctl * bufctl)
@@ -98,6 +98,6 @@ void InitBufctl (struct Bufctl * bufctl)
     /* When not allocated to user, the object itself is freelist element */
     bufctl->buf = (void *)bufctl;
 
-    bufctl->freelist_link.DynamicInit();
+    new (&bufctl->freelist_link) ListElement();
 }
 
