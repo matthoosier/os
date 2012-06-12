@@ -14,7 +14,7 @@ static Channel_t DoChannelCreate ()
     Channel_t ret;
 
     if (c) {
-        ret = ProcessRegisterChannel(THREAD_CURRENT()->process, c);
+        ret = THREAD_CURRENT()->process->RegisterChannel(c);
 
         if (ret < 0) {
             KChannelFree(c);
@@ -28,14 +28,14 @@ static Channel_t DoChannelCreate ()
 
 static int DoChannelDestroy (Channel_t chid)
 {
-    struct Channel * c = ProcessLookupChannel(THREAD_CURRENT()->process, chid);
+    struct Channel * c = THREAD_CURRENT()->process->LookupChannel(chid);
     int ret;
 
     if (!c) {
         return -ERROR_INVALID;
     }
 
-    ret = ProcessUnregisterChannel(THREAD_CURRENT()->process, chid);
+    ret = THREAD_CURRENT()->process->UnregisterChannel(chid);
 
     if (ret >= 0) {
         KChannelFree(c);
@@ -46,7 +46,7 @@ static int DoChannelDestroy (Channel_t chid)
 
 static Connection_t DoConnect (Pid_t pid, Channel_t chid)
 {
-    struct Process * other;
+    Process * other;
     struct Connection * conn;
     struct Channel * chan;
     Connection_t ret;
@@ -54,14 +54,14 @@ static Connection_t DoConnect (Pid_t pid, Channel_t chid)
     if (pid == SELF_PID) {
         other = THREAD_CURRENT()->process;
     } else {
-        other = ProcessLookup(pid);
+        other = Process::Lookup(pid);
     }
 
     if (!other) {
         return -ERROR_INVALID;
     }
 
-    chan = ProcessLookupChannel(other, chid);
+    chan = other->LookupChannel(chid);
 
     if (!chan) {
         return -ERROR_INVALID;
@@ -73,7 +73,7 @@ static Connection_t DoConnect (Pid_t pid, Channel_t chid)
         return -ERROR_NO_MEM;
     }
 
-    ret = ProcessRegisterConnection(THREAD_CURRENT()->process, conn);
+    ret = THREAD_CURRENT()->process->RegisterConnection(conn);
 
     if (ret < 0) {
         KDisconnect(conn);
@@ -91,7 +91,7 @@ static int DoDisconnect (Connection_t coid)
         ret = -ERROR_INVALID;
     }
     else {
-        ret = ProcessUnregisterConnection(THREAD_CURRENT()->process, coid);
+        ret = THREAD_CURRENT()->process->UnregisterConnection(coid);
     }
     return ret;
 }
@@ -107,7 +107,7 @@ static ssize_t DoMessageSend (
     struct Connection * c;
     int ret;
 
-    c = ProcessLookupConnection(THREAD_CURRENT()->process, coid);
+    c = THREAD_CURRENT()->process->LookupConnection(coid);
 
     if (!c) {
         return -ERROR_INVALID;
@@ -129,7 +129,7 @@ static ssize_t DoMessageReceive (
     struct Message * m;
     int ret;
 
-    c = ProcessLookupChannel(THREAD_CURRENT()->process, chid);
+    c = THREAD_CURRENT()->process->LookupChannel(chid);
 
     if (!c) {
         return -ERROR_INVALID;
@@ -144,7 +144,7 @@ static ssize_t DoMessageReceive (
             *msgid = 0;
         }
         else {
-            *msgid = ProcessRegisterMessage(THREAD_CURRENT()->process, m);
+            *msgid = THREAD_CURRENT()->process->RegisterMessage(m);
         }
     }
 
@@ -161,8 +161,8 @@ static ssize_t DoMessageReply (
     struct Message * m;
     int ret;
 
-    m = ProcessLookupMessage(THREAD_CURRENT()->process, msgid);
-    ProcessUnregisterMessage(THREAD_CURRENT()->process, msgid);
+    m = THREAD_CURRENT()->process->LookupMessage(msgid);
+    THREAD_CURRENT()->process->UnregisterMessage(msgid);
 
     ret = KMessageReply(m, status, replybuf, replybuf_len);
 

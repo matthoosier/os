@@ -23,7 +23,7 @@ static void HandleInterruptAttach (
         KMessageReply(message, ERROR_NO_MEM, &reply, 0);
     } else {
         rec->handler_info.irq_number = buf->payload.interrupt_attach.irq_number;
-        rec->handler_info.pid = message->sender->process->pid;
+        rec->handler_info.pid = message->sender->process->GetId();
         rec->handler_info.coid = buf->payload.interrupt_attach.connection_id;
         rec->handler_info.param = (uintptr_t)buf->payload.interrupt_attach.param;
 

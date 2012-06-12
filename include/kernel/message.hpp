@@ -12,7 +12,7 @@
 BEGIN_DECLS
 
 class Thread;
-struct Process;
+class Process;
 
 typedef int Channel_t;
 typedef int Connection_t;

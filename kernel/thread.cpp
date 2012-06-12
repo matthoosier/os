@@ -56,7 +56,7 @@ static void SwitchTo (
     uint32_t cpsr_temp = 0;             /* Used by assembly fragment    */
 
     TranslationTable * incoming_tt = incoming->process
-            ? incoming->process->pagetable
+            ? incoming->process->GetTranslationTable()
             : NULL;
 
     /*

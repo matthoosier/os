@@ -413,14 +413,14 @@ static ssize_t TransferPayload (
         src_tt = TranslationTable::GetKernel();
     } else {
         assert(source_thread->process != NULL);
-        src_tt = source_thread->process->pagetable;
+        src_tt = source_thread->process->GetTranslationTable();
     }
 
     if ((VmAddr_t)dest_buf >= KERNEL_MODE_OFFSET) {
         dst_tt = TranslationTable::GetKernel();
     } else {
         assert(dest_thread->process != NULL);
-        dst_tt = dest_thread->process->pagetable;
+        dst_tt = dest_thread->process->GetTranslationTable();
     }
 
     return TranslationTable::CopyWithAddressSpaces(

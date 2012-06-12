@@ -222,23 +222,20 @@ void InterruptHandler ()
          cursor;
          cursor++) {
 
-        struct Process            * process;
+        Process                   * process;
         struct Connection         * connection;
 
         struct UserInterruptHandlerRecord * record = *cursor;
 
         assert(!record->state_info.masked);
 
-        process = ProcessLookup(record->handler_info.pid);
+        process = Process::Lookup(record->handler_info.pid);
 
         if (process == NULL) {
             continue;
         }
 
-        connection = ProcessLookupConnection(
-                process,
-                record->handler_info.coid
-                );
+        connection = process->LookupConnection(record->handler_info.coid);
 
         if (connection != NULL) {
             int result = KMessageSendAsync(connection, (uintptr_t)record->handler_info.param);

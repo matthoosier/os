@@ -42,8 +42,13 @@
  * \brief   Task control block implementation, and core scheduler
  *          mechanism.
  *
+ * Threads in the operating system can either be pure kernel-space
+ * entities or can be the stream of control for a classical protected-
+ * memory Process. If belonging to a process, then the kernel-space
+ * stack is used to host the supervisor-mode backend of system calls.
+ *
  * Each thread's instance of this structure is housed inside the top of
- * the VM page used for the thread's stack. This avoids object allocations
+ * the VM page used for the thread's kernel stack. This avoids object allocations
  * and also makes deducing the current thread easy: just compute the right
  * offset in the page containing the current stack pointer.
  *
@@ -163,7 +168,7 @@ public:
      */
     StackData   kernel_stack;
 
-    struct Process * process;
+    Process * process;
 
     /* For use in scheduling queues. */
     ListElement queue_link;

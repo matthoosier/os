@@ -20,16 +20,16 @@
 /** Handed off between spawner and spawnee threads */
 struct process_creation_context
 {
-    Thread            * caller;
-    struct Process    * created;
-    const char        * executableName;
-    Semaphore         * baton;
+    Thread      * caller;
+    Process     * created;
+    const char  * executableName;
+    Semaphore   * baton;
 };
 
-/** Allocates instances of 'struct Process' */
+/** Allocates instances of Process */
 static struct ObjectCache   process_cache;
 
-/** Allocates instances of 'struct Segment' */
+/** Allocates instances of 'Segment' */
 static struct ObjectCache   segment_cache;
 
 static Once_t               caches_init_control = ONCE_INIT;
@@ -37,146 +37,134 @@ static Once_t               caches_init_control = ONCE_INIT;
 /** Allocates monotonically increasing process identifiers */
 static Pid_t get_next_pid (void);
 
-/** Fetches Pid_t -> (struct Process *) mappings */
-static struct Process * PidMapLookup (Pid_t key);
-static struct Process * PidMapInsert (Pid_t key, struct Process * process);
-static struct Process * PidMapRemove (Pid_t key);
+/** Fetches Pid_t -> (Process *) mappings */
+static Process * PidMapLookup (Pid_t key);
+static Process * PidMapInsert (Pid_t key, Process * process);
+static Process * PidMapRemove (Pid_t key);
 
 static void init_caches (void * ignored)
 {
-    ObjectCacheInit(&process_cache, sizeof(struct Process));
-    ObjectCacheInit(&segment_cache, sizeof(struct Segment));
+    ObjectCacheInit(&process_cache, sizeof(Process));
+    ObjectCacheInit(&segment_cache, sizeof(Segment));
 }
 
-static struct Segment * SegmentAlloc ()
+void * Segment::operator new (size_t size) throw (std::bad_alloc)
 {
-    struct Segment * s;
+    void * ret;
 
     Once(&caches_init_control, init_caches, NULL);
-    s = (struct Segment *)ObjectCacheAlloc(&segment_cache);
+    ret = ObjectCacheAlloc(&segment_cache);
 
-    if (s) {
-        memset(s, 0, sizeof(*s));
-        s->pages_head.DynamicInit();
-        s->link.DynamicInit();
+    if (!ret) {
+        throw std::bad_alloc();
     }
 
-    return s;
+    return ret;
 }
 
-static void SegmentFree (
-        struct Segment * segment,
-        TranslationTable * table
-        )
+void Segment::operator delete (void * mem) throw ()
+{
+    ObjectCacheFree(&segment_cache, mem);
+}
+
+Segment::Segment (Process & p)
+    : base(0)
+    , length(0)
+    , owner(p)
+{
+}
+
+Segment::~Segment ()
 {
     typedef List<Page, &Page::list_link> list_t;
 
-    VmAddr_t map_addr;
+    VmAddr_t map_addr = this->base;
+    TranslationTable * pagetable = owner.GetTranslationTable();
 
-    map_addr = segment->base;
-
-    for (list_t::Iterator i = segment->pages_head.Begin(); i; ++i) {
+    for (list_t::Iterator i = this->pages_head.Begin(); i; ++i) {
 
         Page * page = *i;
 
-        bool unmapped = table->UnmapPage(map_addr);
+        bool unmapped = pagetable->UnmapPage(map_addr);
 
         assert(unmapped);
         map_addr += PAGE_SIZE;
 
-        segment->pages_head.Remove(page);
+        this->pages_head.Remove(page);
         Page::Free(page);
     }
-
-    ObjectCacheFree(&segment_cache, segment);
 }
 
-static struct Process * ProcessAlloc ()
+void * Process::operator new (size_t size) throw (std::bad_alloc)
 {
-    struct Process * p;
+    void * ret;
 
     Once(&caches_init_control, init_caches, NULL);
-    p = (struct Process *)ObjectCacheAlloc(&process_cache);
+    ret = ObjectCacheAlloc(&process_cache);
 
-    if (p) {
-        memset(p, 0, sizeof(*p));
-
-        SpinlockInit(&p->lock);
-
-        p->id_to_channel_map    = new Process::IdToChannelMap_t(Process::IdToChannelMap_t::SignedIntCompareFunc);
-        p->id_to_connection_map = new Process::IdToConnectionMap_t(Process::IdToConnectionMap_t::SignedIntCompareFunc);
-        p->id_to_message_map    = new Process::IdToMessageMap_t(Process::IdToMessageMap_t::SignedIntCompareFunc);
-
-        if (p->id_to_channel_map && p->id_to_connection_map && p->id_to_message_map) {
-            p->segments_head.DynamicInit();
-            p->channels_head.DynamicInit();
-            p->connections_head.DynamicInit();
-            p->next_chid = FIRST_CHANNEL_ID;
-            p->next_coid = FIRST_CONNECTION_ID;
-            p->next_msgid = 1;
-        }
-        else {
-            if (p->id_to_channel_map)       delete p->id_to_channel_map;
-            if (p->id_to_connection_map)    delete p->id_to_connection_map;
-            if (p->id_to_message_map)       delete p->id_to_message_map;
-
-            ObjectCacheFree(&process_cache, p);
-            p = NULL;
-        }
+    if (!ret) {
+        throw std::bad_alloc();
     }
 
-    return p;
+    return ret;
 }
 
-static void ProcessFree (struct Process * process)
+void Process::operator delete (void * mem) throw ()
+{
+    ObjectCacheFree(&process_cache, mem);
+}
+
+Process::Process ()
+    : pagetable(0)
+    , entry(0)
+    , thread(NULL)
+{
+    SpinlockInit(&this->lock);
+
+    this->id_to_channel_map    = new IdToChannelMap_t(IdToChannelMap_t::SignedIntCompareFunc);
+    this->id_to_connection_map = new IdToConnectionMap_t(IdToConnectionMap_t::SignedIntCompareFunc);
+    this->id_to_message_map    = new IdToMessageMap_t(IdToMessageMap_t::SignedIntCompareFunc);
+
+    this->next_chid = FIRST_CHANNEL_ID;
+    this->next_coid = FIRST_CONNECTION_ID;
+    this->next_msgid = 1;
+}
+
+Process::~Process ()
 {
     /* Free all channels owned by process */
-    while (!process->channels_head.Empty()) {
-        struct Channel * channel = process->channels_head.PopFirst();
+    while (!this->channels_head.Empty()) {
+        struct Channel * channel = this->channels_head.PopFirst();
         KChannelFree(channel);
     }
 
     /* Free all connections owned by process */
-    while (!process->connections_head.Empty()) {
-        struct Connection * connection = process->connections_head.PopFirst();
+    while (!this->connections_head.Empty()) {
+        struct Connection * connection = this->connections_head.PopFirst();
         KDisconnect(connection);
     }
 
     /* XXX: Free the message (if any) the process has sent but not yet been replied */
 
     /* XXX: Free all messages that the process has received but not yet responded to */
-
-    delete process->id_to_channel_map;
-    delete process->id_to_connection_map;
-    delete process->id_to_message_map;
     
     /* Deallocate virtual memory of the process */
-    while (!process->segments_head.Empty()) {
-        struct Segment * s = process->segments_head.PopFirst();
-        SegmentFree(s, process->pagetable);
+    while (!this->segments_head.Empty()) {
+        Segment * s = this->segments_head.PopFirst();
+        delete s;
     }
-
-    /* Reclaim the memory of the process's pagetable */
-    if (process->pagetable) {
-        delete process->pagetable;
-        process->pagetable = NULL;
-    }
-
-    ObjectCacheFree(&process_cache, process);
 }
 
-struct Process * exec_into_current (
-        const char executableName[]
-        )
+Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad_alloc)
 {
     TranslationTable *tt;
-    struct Process * p;
+    Process * p;
     const struct ImageEntry * image;
     const Elf32_Ehdr * hdr;
     unsigned int i;
     Connection_t procmgr_coid;
     struct Connection * procmgr_con;
-    struct Process * procmgr;
+    Process * procmgr;
     struct Channel * procmgr_chan;
 
     image = RamFsGetImage(executableName);
@@ -197,20 +185,26 @@ struct Process * exec_into_current (
         return NULL;
     }
 
-    if ((p = ProcessAlloc()) == NULL) {
+    // May throw. If it does, this function'll just cascade unwind to the caller,
+    // who's trapping the exception
+    try {
+        p = new Process();
+    } catch (std::bad_alloc) {
         return NULL;
     }
 
     /* Record our name */
     strncpy(p->comm, executableName, sizeof(p->comm));
 
-    /* Get pagetable for the new process */
-    tt = p->pagetable = new TranslationTable();
-
-    if (!tt) {
+    // Get pagetable for the new process.
+    try {
+        p->pagetable = new TranslationTable();
+    } catch (std::bad_alloc a) {
         assert(false);
         goto free_process;
     }
+
+    tt = *p->pagetable;
 
     TranslationTable::SetUser(tt);
 
@@ -224,13 +218,13 @@ struct Process * exec_into_current (
 
         if (phdr->p_type == PT_LOAD) {
 
-            struct Segment * segment;
+            Segment * segment;
             unsigned int num_pages;
             unsigned int j;
 
-            segment = SegmentAlloc();
-
-            if (!segment) {
+            try {
+                segment = new Segment(*p);
+            } catch (std::bad_alloc) {
                 assert(false);
                 goto free_process;
             }
@@ -257,7 +251,7 @@ struct Process * exec_into_current (
 
                 if (!mapped) {
                     assert(false);
-                    SegmentFree(segment, tt);
+                    delete segment;
                     segment = NULL;
                     goto free_process;
                 }
@@ -296,9 +290,9 @@ struct Process * exec_into_current (
     THREAD_CURRENT()->process = p;
 
     /* Establish the connection to the Process Manager's single channel. */
-    procmgr = ProcessLookup(PROCMGR_PID);
+    procmgr = Lookup(PROCMGR_PID);
     assert(procmgr != NULL);
-    procmgr_chan = ProcessLookupChannel(procmgr, FIRST_CHANNEL_ID);
+    procmgr_chan = procmgr->LookupChannel(FIRST_CHANNEL_ID);
     assert(procmgr_chan != NULL);
 
     procmgr_con = KConnect(procmgr_chan);
@@ -307,7 +301,7 @@ struct Process * exec_into_current (
         goto free_process;
     }
 
-    procmgr_coid = ProcessRegisterConnection(p, procmgr_con);
+    procmgr_coid = p->RegisterConnection(procmgr_con);
     
     if (procmgr_coid < 0) {
         /* Not enough resources to register the connection */
@@ -321,19 +315,17 @@ struct Process * exec_into_current (
 
 free_process:
 
-    ProcessFree(p);
-    p = NULL;
-
-    return p;
+    delete p;
+    return NULL;
 }
 
-void process_creation_thread (void * pProcessCreationContext)
+void Process::UserProcessThreadBody (void * pProcessCreationContext)
 {
     struct process_creation_context * context;
-    struct Process * p;
+    Process * p;
 
     context  = (struct process_creation_context *)pProcessCreationContext;
-    context->created = p = exec_into_current(context->executableName);
+    context->created = p = Process::execIntoCurrent(context->executableName);
 
     /* Release the spawner now that we have the resulting Process object */
     context->baton->Up();
@@ -395,12 +387,12 @@ void process_creation_thread (void * pProcessCreationContext)
     */
 }
 
-struct Process * ProcessCreate (const char executableName[])
+Process * Process::Create (const char executableName[])
 {
     struct process_creation_context context;
     Semaphore baton(0);
 
-    if (ProcessGetManager() == NULL) {
+    if (GetManager() == NULL) {
         /* Something bad happened. Process manager wasn't spawned. */
         return NULL;
     }
@@ -411,7 +403,7 @@ struct Process * ProcessCreate (const char executableName[])
     context.baton = &baton;
 
     /* Resulting process object will be stored into context->created */
-    Thread::Create(process_creation_thread, &context);
+    Thread::Create(UserProcessThreadBody, &context);
 
     /* Forked thread will wake us back up when the process creation is done */
     baton.Down();
@@ -428,7 +420,7 @@ static Pid_t get_next_pid ()
 
 static Spinlock_t pid_map_lock = SPINLOCK_INIT;
 
-typedef TreeMap<Pid_t, struct Process *> PidMap_t;
+typedef TreeMap<Pid_t, Process *> PidMap_t;
 
 static void alloc_pid_map (void * ppPidMap)
 {
@@ -447,9 +439,9 @@ static PidMap_t * get_pid_map ()
     return pid_map;
 }
 
-static struct Process * PidMapLookup (Pid_t key)
+static Process * PidMapLookup (Pid_t key)
 {
-    struct Process * ret;
+    Process * ret;
 
     SpinlockLock(&pid_map_lock);
     ret = get_pid_map()->Lookup(key);
@@ -458,9 +450,9 @@ static struct Process * PidMapLookup (Pid_t key)
     return ret;
 }
 
-static struct Process * PidMapInsert (Pid_t key, struct Process * process)
+static Process * PidMapInsert (Pid_t key, Process * process)
 {
-    struct Process * ret;
+    Process * ret;
 
     SpinlockLock(&pid_map_lock);
     ret = get_pid_map()->Insert(key, process);
@@ -469,9 +461,9 @@ static struct Process * PidMapInsert (Pid_t key, struct Process * process)
     return ret;
 }
 
-static struct Process * PidMapRemove (Pid_t key)
+static Process * PidMapRemove (Pid_t key)
 {
-    struct Process * ret;
+    Process * ret;
 
     SpinlockLock(&pid_map_lock);
     ret = get_pid_map()->Remove(key);
@@ -480,15 +472,20 @@ static struct Process * PidMapRemove (Pid_t key)
     return ret;
 }
 
-struct Process * ProcessLookup (Pid_t pid)
+Process * Process::Lookup (Pid_t pid)
 {
     return PidMapLookup(pid);
 }
 
-static void process_manager_thread (void * pProcessCreationContext)
+Pid_t Process::GetId ()
+{
+    return this->pid;
+}
+
+void Process::ManagerThreadBody (void * pProcessCreationContext)
 {
     struct process_creation_context * caller_context;
-    struct Process * p;
+    Process * p;
     struct Channel * channel;
 
     struct ProcMgrMessage   buf;
@@ -507,7 +504,11 @@ static void process_manager_thread (void * pProcessCreationContext)
         return;
     }
 
-    caller_context->created = p = ProcessAlloc();
+    try {
+        caller_context->created = p = new Process();
+    } catch (std::bad_alloc a) {
+        assert(false);
+    }
 
     /* Record our name */
     strncpy(p->comm, "procmgr", sizeof(p->comm));
@@ -558,9 +559,9 @@ static void process_manager_thread (void * pProcessCreationContext)
     }
 }
 
-static struct Process * managerProcess = NULL;
+static Process * managerProcess = NULL;
 
-struct Process * ProcessStartManager ()
+Process * Process::StartManager ()
 {
     struct process_creation_context context;
     Semaphore baton(0);
@@ -573,7 +574,7 @@ struct Process * ProcessStartManager ()
     context.baton = &baton;
 
     /* Resulting process object will be stored into context->created */
-    Thread::Create(process_manager_thread, &context);
+    Thread::Create(ManagerThreadBody, &context);
 
     /* Forked thread will wake us back up when the process creation is done */
     baton.Down();
@@ -583,130 +584,106 @@ struct Process * ProcessStartManager ()
     return managerProcess;
 }
 
-struct Process * ProcessGetManager ()
+Process * Process::GetManager ()
 {
     assert(managerProcess != NULL);
     return managerProcess;
 }
 
-Channel_t ProcessRegisterChannel (
-        struct Process * p,
-        struct Channel * c
-        )
+Channel_t Process::RegisterChannel (struct Channel * c)
 {
-    Channel_t id = p->next_chid++;
+    Channel_t id = this->next_chid++;
 
-    if (p->id_to_channel_map->Lookup(id) != NULL) {
+    if (this->id_to_channel_map->Lookup(id) != NULL) {
         assert(false);
         return -ERROR_INVALID;
     }
 
-    p->id_to_channel_map->Insert(id, c);
+    this->id_to_channel_map->Insert(id, c);
 
-    if (p->id_to_channel_map->Lookup(id) != c) {
+    if (this->id_to_channel_map->Lookup(id) != c) {
         return -ERROR_NO_MEM;
     }
 
-    p->channels_head.Append(c);
+    this->channels_head.Append(c);
     return id;
 }
 
-int ProcessUnregisterChannel (
-        struct Process * p,
-        Channel_t id
-        )
+int Process::UnregisterChannel (Channel_t id)
 {
-    struct Channel * c = p->id_to_channel_map->Remove(id);
+    struct Channel * c = this->id_to_channel_map->Remove(id);
 
     if (!c) {
         return -ERROR_INVALID;
     }
 
-    p->channels_head.Remove(c);
+    this->channels_head.Remove(c);
 
     return ERROR_OK;
 }
 
-struct Channel * ProcessLookupChannel (
-        struct Process * p,
-        Channel_t id
-        )
+struct Channel * Process::LookupChannel (Channel_t id)
 {
-    return p->id_to_channel_map->Lookup(id);
+    return this->id_to_channel_map->Lookup(id);
 }
 
-Connection_t ProcessRegisterConnection (
-        struct Process * p,
-        struct Connection * c
-        )
+Connection_t Process::RegisterConnection (struct Connection * c)
 {
-    Connection_t id = p->next_coid++;
+    Connection_t id = this->next_coid++;
 
-    if (p->id_to_connection_map->Lookup(id) != NULL) {
+    if (this->id_to_connection_map->Lookup(id) != NULL) {
         assert(false);
         return -ERROR_INVALID;
     }
 
-    p->id_to_connection_map->Insert(id, c);
+    this->id_to_connection_map->Insert(id, c);
 
-    if (p->id_to_connection_map->Lookup(id) != c) {
+    if (this->id_to_connection_map->Lookup(id) != c) {
         return -ERROR_NO_MEM;
     }
 
-    p->connections_head.Append(c);
+    this->connections_head.Append(c);
     return id;
 }
 
-int ProcessUnregisterConnection (
-        struct Process * p,
-        Connection_t id
-        )
+int Process::UnregisterConnection (Connection_t id)
 {
-    struct Connection * c = p->id_to_connection_map->Remove(id);
+    struct Connection * c = this->id_to_connection_map->Remove(id);
 
     if (!c) {
         return -ERROR_INVALID;
     }
 
-    p->connections_head.Remove(c);
+    this->connections_head.Remove(c);
     return ERROR_OK;
 }
 
-struct Connection * ProcessLookupConnection (
-        struct Process * p,
-        Connection_t id
-        )
+struct Connection * Process::LookupConnection (Connection_t id)
 {
-    return p->id_to_connection_map->Lookup(id);
+    return this->id_to_connection_map->Lookup(id);
 }
 
-Message_t ProcessRegisterMessage (
-        struct Process * p,
-        struct Message * m
-        )
+Message_t Process::RegisterMessage (struct Message * m)
 {
-    int msgid = p->next_msgid++;
+    int msgid = this->next_msgid++;
 
-    if (p->id_to_message_map->Lookup(msgid) != NULL) {
+    if (this->id_to_message_map->Lookup(msgid) != NULL) {
         assert(false);
         return -ERROR_INVALID;
     }
 
-    p->id_to_message_map->Insert(msgid, m);
+    this->id_to_message_map->Insert(msgid, m);
 
-    if (p->id_to_message_map->Lookup(msgid) != m) {
+    if (this->id_to_message_map->Lookup(msgid) != m) {
         return -ERROR_NO_MEM;
     }
 
     return msgid;
 }
 
-int ProcessUnregisterMessage (
-        struct Process * p,
-        Message_t id
-        )
+int Process::UnregisterMessage (Message_t id)
 {
-    struct Message * m = p->id_to_message_map->Remove(id);
+    struct Message * m = this->id_to_message_map->Remove(id);
 
     if (!m) {
         return -ERROR_INVALID;
@@ -715,23 +692,25 @@ int ProcessUnregisterMessage (
     return ERROR_OK;
 }
 
-struct Message * ProcessLookupMessage (
-        struct Process * p,
-        Message_t id
-        )
+struct Message * Process::LookupMessage (Message_t id)
 {
-    return p->id_to_message_map->Lookup(id);
+    return this->id_to_message_map->Lookup(id);
 }
 
-TranslationTable * ProcessGetTranslationTable (struct Process * process)
+TranslationTable * Process::GetTranslationTable ()
 {
-    return process->pagetable;
+    return *this->pagetable;
+}
+
+TranslationTable * ProcessGetTranslationTable (Process * p)
+{
+    return p->GetTranslationTable();
 }
 
 /**
  * Handler for PROC_MGR_MESSAGE_EXIT.
  */
-static void HandleExit (
+void HandleExit (
         struct Message * message,
         const struct ProcMgrMessage * buf
         )
@@ -741,15 +720,15 @@ static void HandleExit (
 
     /* Get rid of mapping */
     assert(
-        PidMapLookup(message->sender->process->pid)
+        PidMapLookup(message->sender->process->GetId())
         ==
         message->sender->process
         );
 
-    PidMapRemove(message->sender->process->pid);
+    PidMapRemove(message->sender->process->GetId());
 
     /* Reclaim all userspace resources */
-    ProcessFree(message->sender->process);
+    delete message->sender->process;
     message->sender->process = NULL;
 
     /* Force sender's kernel thread to appear done */

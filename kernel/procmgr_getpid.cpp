@@ -13,7 +13,7 @@ static void HandleGetPid (
     struct ProcMgrReply reply;
 
     memset(&reply, 0, sizeof(reply));
-    reply.payload.getpid.pid = message->sender->process->pid;
+    reply.payload.getpid.pid = message->sender->process->GetId();
     KMessageReply(message, ERROR_OK, &reply, sizeof(reply));
 }
 
