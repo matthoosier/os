@@ -222,8 +222,8 @@ void InterruptHandler ()
          cursor;
          cursor++) {
 
-        Process                   * process;
-        struct Connection         * connection;
+        Process       * process;
+        Connection    * connection;
 
         struct UserInterruptHandlerRecord * record = *cursor;
 
@@ -238,7 +238,7 @@ void InterruptHandler ()
         connection = process->LookupConnection(record->handler_info.coid);
 
         if (connection != NULL) {
-            int result = KMessageSendAsync(connection, (uintptr_t)record->handler_info.param);
+            int result = connection->SendMessageAsync((uintptr_t)record->handler_info.param);
             if (result == ERROR_OK) {
                 record->state_info.masked = true;
                 increment_irq_mask(record->handler_info.irq_number);

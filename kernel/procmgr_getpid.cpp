@@ -6,15 +6,16 @@
 #include <kernel/thread.hpp>
 
 static void HandleGetPid (
-        struct Message * message,
+        Message * message,
         const struct ProcMgrMessage * buf
         )
 {
     struct ProcMgrReply reply;
+    Thread * sender = message->GetSender();
 
     memset(&reply, 0, sizeof(reply));
-    reply.payload.getpid.pid = message->sender->process->GetId();
-    KMessageReply(message, ERROR_OK, &reply, sizeof(reply));
+    reply.payload.getpid.pid = sender->process->GetId();
+    message->Reply(ERROR_OK, &reply, sizeof(reply));
 }
 
 PROC_MGR_OPERATION(PROC_MGR_MESSAGE_GETPID, HandleGetPid)

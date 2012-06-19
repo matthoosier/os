@@ -20,7 +20,7 @@ struct mapped_page
 };
 
 static void HandleMapPhys (
-        struct Message * message,
+        Message * message,
         const struct ProcMgrMessage * buf
         )
 {
@@ -35,13 +35,14 @@ static void HandleMapPhys (
     len = buf->payload.map_phys.len;
 
     if ((phys % PAGE_SIZE != 0) || (len < 0)) {
-        KMessageReply(message, ERROR_INVALID, buf, 0);
+        message->Reply(ERROR_INVALID, buf, 0);
     }
     else {
 
         List<mapped_page, &mapped_page::link> mapped_pages;
 
         struct mapped_page * page;
+        Thread * sender = message->GetSender();
 
         for (i = 0; i < len; i += PAGE_SIZE) {
 
@@ -51,7 +52,7 @@ static void HandleMapPhys (
                 break;
             }
 
-            mapped = message->sender->process->GetTranslationTable()->MapNextPage(
+            mapped = sender->process->GetTranslationTable()->MapNextPage(
                     &virt,
                     phys,
                     PROT_USER_READWRITE
@@ -75,7 +76,7 @@ static void HandleMapPhys (
                 /* Back out all the existing mappings */
                 while (!mapped_pages.Empty()) {
                     page = mapped_pages.PopFirst();
-                    message->sender->process->GetTranslationTable()->UnmapPage(page->page_base);
+                    sender->process->GetTranslationTable()->UnmapPage(page->page_base);
 
                     /* Free the block hosting the list node */
                     kfree(page, sizeof(*page));
@@ -86,9 +87,9 @@ static void HandleMapPhys (
         }
 
         if (mapped_pages.Empty()) {
-            KMessageReply(message, ERROR_INVALID, &reply, sizeof(reply));
+            message->Reply(ERROR_INVALID, &reply, sizeof(reply));
         } else {
-            KMessageReply(message, ERROR_OK, &reply, sizeof(reply));
+            message->Reply(ERROR_OK, &reply, sizeof(reply));
 
             /* List of partial pages no longer needed */
             while (!mapped_pages.Empty()) {

@@ -10,25 +10,27 @@
 
 static Channel_t DoChannelCreate ()
 {
-    struct Channel * c = KChannelAlloc();
     Channel_t ret;
 
-    if (c) {
+    try {
+        Channel * c = new Channel();
+
         ret = THREAD_CURRENT()->process->RegisterChannel(c);
 
         if (ret < 0) {
-            KChannelFree(c);
+            delete c;
         }
-    } else {
-        ret = -ERROR_NO_MEM;
-    }
 
-    return ret;
+        return ret;
+    }
+    catch (std::bad_alloc) {
+        return -ERROR_NO_MEM;
+    }
 }
 
 static int DoChannelDestroy (Channel_t chid)
 {
-    struct Channel * c = THREAD_CURRENT()->process->LookupChannel(chid);
+    Channel * c = THREAD_CURRENT()->process->LookupChannel(chid);
     int ret;
 
     if (!c) {
@@ -38,7 +40,7 @@ static int DoChannelDestroy (Channel_t chid)
     ret = THREAD_CURRENT()->process->UnregisterChannel(chid);
 
     if (ret >= 0) {
-        KChannelFree(c);
+        delete c;
     }
 
     return ret;
@@ -47,8 +49,8 @@ static int DoChannelDestroy (Channel_t chid)
 static Connection_t DoConnect (Pid_t pid, Channel_t chid)
 {
     Process * other;
-    struct Connection * conn;
-    struct Channel * chan;
+    Connection * conn;
+    Channel * chan;
     Connection_t ret;
 
     if (pid == SELF_PID) {
@@ -67,16 +69,16 @@ static Connection_t DoConnect (Pid_t pid, Channel_t chid)
         return -ERROR_INVALID;
     }
 
-    conn = KConnect(chan);
-
-    if (!conn) {
+    try {
+        conn = new Connection(chan);
+    } catch (std::bad_alloc) {
         return -ERROR_NO_MEM;
     }
 
     ret = THREAD_CURRENT()->process->RegisterConnection(conn);
 
     if (ret < 0) {
-        KDisconnect(conn);
+        delete conn;
     }
 
     return ret;
@@ -104,7 +106,7 @@ static ssize_t DoMessageSend (
         size_t replybuf_len
         )
 {
-    struct Connection * c;
+    Connection * c;
     int ret;
 
     c = THREAD_CURRENT()->process->LookupConnection(coid);
@@ -113,7 +115,7 @@ static ssize_t DoMessageSend (
         return -ERROR_INVALID;
     }
 
-    ret = KMessageSend(c, msgbuf, msgbuf_len, replybuf, replybuf_len);
+    ret = c->SendMessage(msgbuf, msgbuf_len, replybuf, replybuf_len);
 
     return ret;
 }
@@ -125,8 +127,8 @@ static ssize_t DoMessageReceive (
         size_t msgbuf_len
         )
 {
-    struct Channel * c;
-    struct Message * m;
+    Channel * c;
+    Message * m;
     int ret;
 
     c = THREAD_CURRENT()->process->LookupChannel(chid);
@@ -135,7 +137,7 @@ static ssize_t DoMessageReceive (
         return -ERROR_INVALID;
     }
 
-    ret = KMessageReceive(c, &m, msgbuf, msgbuf_len);
+    ret = c->ReceiveMessage(&m, msgbuf, msgbuf_len);
 
     if (ret < 0) {
         *msgid = -1;
@@ -158,13 +160,13 @@ static ssize_t DoMessageReply (
         size_t replybuf_len
         )
 {
-    struct Message * m;
+    Message * m;
     int ret;
 
     m = THREAD_CURRENT()->process->LookupMessage(msgid);
     THREAD_CURRENT()->process->UnregisterMessage(msgid);
 
-    ret = KMessageReply(m, status, replybuf, replybuf_len);
+    ret = m->Reply(status, replybuf, replybuf_len);
 
     return ret;
 }

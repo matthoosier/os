@@ -120,7 +120,7 @@ class Process
 public:
     typedef TreeMap<Channel_t, Channel *>       IdToChannelMap_t;
     typedef TreeMap<Connection_t, Connection *> IdToConnectionMap_t;
-    typedef TreeMap<int, struct Message *>      IdToMessageMap_t;
+    typedef TreeMap<int, Message *>             IdToMessageMap_t;
 
 public:
     /**
@@ -159,23 +159,23 @@ public:
      */
     Pid_t GetId ();
 
-    Channel_t RegisterChannel (struct Channel * c);
+    Channel_t RegisterChannel (Channel * c);
 
     int UnregisterChannel (Channel_t id);
 
-    struct Channel * LookupChannel (Channel_t id);
+    Channel * LookupChannel (Channel_t id);
 
-    Connection_t RegisterConnection (struct Connection * c);
+    Connection_t RegisterConnection (Connection * c);
 
     int UnregisterConnection (Connection_t id);
 
-    struct Connection * LookupConnection (Connection_t id);
+    Connection * LookupConnection (Connection_t id);
 
-    Message_t RegisterMessage (struct Message * m);
+    Message_t RegisterMessage (Message * m);
 
     int UnregisterMessage (Message_t id);
 
-    struct Message * LookupMessage (Message_t id);
+    Message * LookupMessage (Message_t id);
 
 public:
     /**

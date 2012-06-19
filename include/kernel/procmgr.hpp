@@ -18,7 +18,7 @@ BEGIN_DECLS
     }
 
 typedef void (*ProcMgrOperationFunc) (
-        struct Message * message,
+        Message * message,
         const struct ProcMgrMessage * buf
         );
 

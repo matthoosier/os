@@ -134,14 +134,14 @@ Process::~Process ()
 {
     /* Free all channels owned by process */
     while (!this->channels_head.Empty()) {
-        struct Channel * channel = this->channels_head.PopFirst();
-        KChannelFree(channel);
+        Channel * channel = this->channels_head.PopFirst();
+        delete channel;
     }
 
     /* Free all connections owned by process */
     while (!this->connections_head.Empty()) {
-        struct Connection * connection = this->connections_head.PopFirst();
-        KDisconnect(connection);
+        Connection * connection = this->connections_head.PopFirst();
+        delete connection;
     }
 
     /* XXX: Free the message (if any) the process has sent but not yet been replied */
@@ -163,9 +163,9 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
     const Elf32_Ehdr * hdr;
     unsigned int i;
     Connection_t procmgr_coid;
-    struct Connection * procmgr_con;
+    Connection * procmgr_con;
     Process * procmgr;
-    struct Channel * procmgr_chan;
+    Channel * procmgr_chan;
 
     image = RamFsGetImage(executableName);
 
@@ -295,9 +295,9 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
     procmgr_chan = procmgr->LookupChannel(FIRST_CHANNEL_ID);
     assert(procmgr_chan != NULL);
 
-    procmgr_con = KConnect(procmgr_chan);
-
-    if (!procmgr_chan) {
+    try {
+        procmgr_con = new Connection(procmgr_chan);
+    } catch (std::bad_alloc) {
         goto free_process;
     }
 
@@ -305,7 +305,7 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
     
     if (procmgr_coid < 0) {
         /* Not enough resources to register the connection */
-        KDisconnect(procmgr_con);
+        delete procmgr_con;
         goto free_process;
     }
 
@@ -486,17 +486,17 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
 {
     struct process_creation_context * caller_context;
     Process * p;
-    struct Channel * channel;
+    Channel * channel;
 
     struct ProcMgrMessage   buf;
-    struct Message        * m;
+    Message               * m;
 
     caller_context = (struct process_creation_context *)pProcessCreationContext;
 
     /* Allocate the singular channel on which the Process Manager listens for messages */
-    channel = KChannelAlloc();
-
-    if (!channel) {
+    try {
+        channel = new Channel();
+    } catch (std::bad_alloc) {
         /* This is unrecoverably bad. */
         assert(false);
         caller_context->created = NULL;
@@ -534,12 +534,7 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
     caller_context->baton->Up();
 
     while (true) {
-        ssize_t len = KMessageReceive(
-                channel,
-                &m,
-                &buf,
-                sizeof(buf)
-                );
+        ssize_t len = channel->ReceiveMessage(&m, &buf, sizeof(buf));
 
         if (len == sizeof(buf)) {
 
@@ -548,13 +543,13 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
             if (handler != NULL ) {
                 handler(m, &buf);
             } else {
-                KMessageReply(m, ERROR_NO_SYS, &buf, 0);
+                m->Reply(ERROR_NO_SYS, &buf, 0);
             }
 
         }
         else {
             /* Send back empty reply */
-            KMessageReply(m, ERROR_NO_SYS, &buf, 0);
+            m->Reply(ERROR_NO_SYS, &buf, 0);
         }
     }
 }
@@ -590,7 +585,7 @@ Process * Process::GetManager ()
     return managerProcess;
 }
 
-Channel_t Process::RegisterChannel (struct Channel * c)
+Channel_t Process::RegisterChannel (Channel * c)
 {
     Channel_t id = this->next_chid++;
 
@@ -611,7 +606,7 @@ Channel_t Process::RegisterChannel (struct Channel * c)
 
 int Process::UnregisterChannel (Channel_t id)
 {
-    struct Channel * c = this->id_to_channel_map->Remove(id);
+    Channel * c = this->id_to_channel_map->Remove(id);
 
     if (!c) {
         return -ERROR_INVALID;
@@ -622,12 +617,12 @@ int Process::UnregisterChannel (Channel_t id)
     return ERROR_OK;
 }
 
-struct Channel * Process::LookupChannel (Channel_t id)
+Channel * Process::LookupChannel (Channel_t id)
 {
     return this->id_to_channel_map->Lookup(id);
 }
 
-Connection_t Process::RegisterConnection (struct Connection * c)
+Connection_t Process::RegisterConnection (Connection * c)
 {
     Connection_t id = this->next_coid++;
 
@@ -648,7 +643,7 @@ Connection_t Process::RegisterConnection (struct Connection * c)
 
 int Process::UnregisterConnection (Connection_t id)
 {
-    struct Connection * c = this->id_to_connection_map->Remove(id);
+    Connection * c = this->id_to_connection_map->Remove(id);
 
     if (!c) {
         return -ERROR_INVALID;
@@ -658,12 +653,12 @@ int Process::UnregisterConnection (Connection_t id)
     return ERROR_OK;
 }
 
-struct Connection * Process::LookupConnection (Connection_t id)
+Connection * Process::LookupConnection (Connection_t id)
 {
     return this->id_to_connection_map->Lookup(id);
 }
 
-Message_t Process::RegisterMessage (struct Message * m)
+Message_t Process::RegisterMessage (Message * m)
 {
     int msgid = this->next_msgid++;
 
@@ -683,7 +678,7 @@ Message_t Process::RegisterMessage (struct Message * m)
 
 int Process::UnregisterMessage (Message_t id)
 {
-    struct Message * m = this->id_to_message_map->Remove(id);
+    Message * m = this->id_to_message_map->Remove(id);
 
     if (!m) {
         return -ERROR_INVALID;
@@ -692,7 +687,7 @@ int Process::UnregisterMessage (Message_t id)
     return ERROR_OK;
 }
 
-struct Message * Process::LookupMessage (Message_t id)
+Message * Process::LookupMessage (Message_t id)
 {
     return this->id_to_message_map->Lookup(id);
 }
@@ -711,36 +706,34 @@ TranslationTable * ProcessGetTranslationTable (Process * p)
  * Handler for PROC_MGR_MESSAGE_EXIT.
  */
 void HandleExit (
-        struct Message * message,
+        Message * message,
         const struct ProcMgrMessage * buf
         )
 {
+    Thread * sender = message->GetSender();
+
     /* Syscalls are always invoked by processes */
-    assert(message->sender->process != NULL);
+    assert(sender->process != NULL);
 
     /* Get rid of mapping */
-    assert(
-        PidMapLookup(message->sender->process->GetId())
-        ==
-        message->sender->process
-        );
+    assert(PidMapLookup(sender->process->GetId()) == sender->process);
 
-    PidMapRemove(message->sender->process->GetId());
+    PidMapRemove(sender->process->GetId());
 
     /* Reclaim all userspace resources */
-    delete message->sender->process;
-    message->sender->process = NULL;
+    delete sender->process;
+    sender->process = NULL;
 
     /* Force sender's kernel thread to appear done */
     Thread::BeginTransaction();
-    Thread::MakeUnready(message->sender, Thread::STATE_FINISHED);
+    Thread::MakeUnready(sender, Thread::STATE_FINISHED);
     Thread::EndTransaction();
 
     /* Reap sender's kernel thread */
-    message->sender->Join();
+    sender->Join();
 
     /* No MessageReply(), so manually free the Message */
-    KMessageFree(message);
+    delete message;
 }
 
 PROC_MGR_OPERATION(PROC_MGR_MESSAGE_EXIT, HandleExit)

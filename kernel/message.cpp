@@ -22,9 +22,6 @@ static Spinlock_t           connection_cache_lock = SPINLOCK_INIT;
 static struct ObjectCache   message_cache;
 static Spinlock_t           message_cache_lock = SPINLOCK_INIT;
 
-static struct Connection * ConnectionAlloc (void);
-static void ConnectionFree (struct Connection * connection);
-
 static ssize_t TransferPayload (
         Thread *        source_thread,
         const void *    source_buf,
@@ -36,147 +33,153 @@ static ssize_t TransferPayload (
 
 static void init (void * ignored)
 {
-    ObjectCacheInit(&channel_cache, sizeof(struct Channel));
-    ObjectCacheInit(&connection_cache, sizeof(struct Connection));
-    ObjectCacheInit(&message_cache, sizeof(struct Message));
+    ObjectCacheInit(&channel_cache, sizeof(Channel));
+    ObjectCacheInit(&connection_cache, sizeof(Connection));
+    ObjectCacheInit(&message_cache, sizeof(Message));
 }
 
-struct Channel * KChannelAlloc (void)
+void * Channel::operator new (size_t size) throw (std::bad_alloc)
 {
-    struct Channel * result;
+    void * ret;
 
     Once(&inited, init, NULL);
 
     SpinlockLock(&channel_cache_lock);
-    result = (struct Channel*)ObjectCacheAlloc(&channel_cache);
+    ret = ObjectCacheAlloc(&channel_cache);
     SpinlockUnlock(&channel_cache_lock);
 
-    if (result) {
-        memset(result, 0, sizeof(*result));
-        new (&result->send_blocked_head) List<Message, &Message::queue_link>();
-        new (&result->receive_blocked_head) List<Message, &Message::queue_link>();
-        new (&result->link) ListElement();
+    if (!ret) {
+        throw std::bad_alloc();
     }
 
-    return result;
+    return ret;
 }
 
-void KChannelFree (struct Channel * channel)
+void Channel::operator delete (void * mem) throw ()
 {
     Once(&inited, init, NULL);
-
-    assert(channel->send_blocked_head.Empty());
-    assert(channel->receive_blocked_head.Empty());
-    assert(channel->link.Unlinked());
 
     SpinlockLock(&channel_cache_lock);
-    ObjectCacheFree(&channel_cache, channel);
+    ObjectCacheFree(&channel_cache, mem);
     SpinlockUnlock(&channel_cache_lock);
 }
 
-static struct Connection * ConnectionAlloc (void)
+Channel::Channel ()
 {
-    struct Connection * c;
+}
+
+Channel::~Channel ()
+{
+    assert(this->send_blocked_head.Empty());
+    assert(this->receive_blocked_head.Empty());
+    assert(this->link.Unlinked());
+}
+
+void * Connection::operator new (size_t size) throw (std::bad_alloc)
+{
+    void * ret;
 
     Once(&inited, init, NULL);
 
     SpinlockLock(&connection_cache_lock);
-    c = (struct Connection *)ObjectCacheAlloc(&connection_cache);
+    ret = ObjectCacheAlloc(&connection_cache);
     SpinlockUnlock(&connection_cache_lock);
 
-    if (c) {
-        memset(c, 0, sizeof(*c));
-        new (&c->link) ListElement();
+    if (!ret) {
+        throw std::bad_alloc();
     }
 
-    return c;
+    return ret;
 }
 
-static void ConnectionFree (struct Connection * connection)
+void Connection::operator delete (void * mem) throw ()
 {
     Once(&inited, init, NULL);
 
     SpinlockLock(&connection_cache_lock);
-    ObjectCacheFree(&connection_cache, connection);
+    ObjectCacheFree(&connection_cache, mem);
     SpinlockUnlock(&connection_cache_lock);
 }
 
-struct Connection * KConnect (struct Channel * channel)
+Connection::Connection (Channel * server)
+    : channel(server)
 {
-    struct Connection * result = ConnectionAlloc();
-
-    if (result) {
-        result->channel = channel;
-    }
-
-    return result;
 }
 
-void KDisconnect (struct Connection * connection)
+Connection::~Connection ()
 {
-    ConnectionFree(connection);
 }
 
-struct Message * KMessageAlloc (void)
+void * Message::operator new (size_t size) throw (std::bad_alloc)
 {
-    struct Message * message;
+    void * ret;
 
     Once(&inited, init, NULL);
 
     SpinlockLock(&message_cache_lock);
-    message = (struct Message *)ObjectCacheAlloc(&message_cache);
+    ret = ObjectCacheAlloc(&message_cache);
     SpinlockUnlock(&message_cache_lock);
 
-    if (message) {
-        memset(message, 0, sizeof(*message));
-        new (&message->queue_link) ListElement();
+    if (!ret) {
+        throw std::bad_alloc();
     }
 
-    return message;
+    return ret;
 }
 
-void KMessageFree (struct Message * context)
+void Message::operator delete (void * mem) throw ()
 {
     Once(&inited, init, NULL);
 
     SpinlockLock(&message_cache_lock);
-    ObjectCacheFree(&message_cache, context);
+    ObjectCacheFree(&message_cache, mem);
     SpinlockUnlock(&message_cache_lock);
 }
 
-ssize_t KMessageSendAsync (
-        struct Connection * connection,
-        uintptr_t payload
-        )
+Message::Message ()
+    : connection (NULL)
+    , sender (NULL)
+    , receiver (NULL)
+    , result (0)
 {
-    struct Message * message;
+    memset(&this->send_data, 0, sizeof(this->send_data));
+    memset(&this->receive_data, 0, sizeof(this->receive_data));
+}
+
+Message::~Message ()
+{
+}
+
+ssize_t Connection::SendMessageAsync (uintptr_t payload)
+{
+    Message * message;
 
     Once(&inited, init, NULL);
 
-    if (connection->channel->receive_blocked_head.Empty()) {
+    if (this->channel->receive_blocked_head.Empty()) {
         /* No receiver thread is waiting on the channel at the moment */
-        message = KMessageAlloc();
-
-        if (message == NULL) {
+        try {
+            message = new Message();
+        } catch (std::bad_alloc) {
             return -ERROR_NO_MEM;
         }
 
-        message->connection = connection;
+        message->connection = this;
         message->sender = NULL;
         message->send_data.async.payload = payload;
 
         message->receiver = NULL;
 
         /* Enqueue message for delivery whenever receiver asks for it */
-        connection->channel->send_blocked_head.Append(message);
+        this->channel->send_blocked_head.Append(message);
     }
     else {
         /* Receiver thread is ready to go */
-        message = connection->channel->receive_blocked_head.PopFirst();
+        message = this->channel->receive_blocked_head.PopFirst();
 
         assert(message->receiver != NULL);
 
-        message->connection = connection;
+        message->connection = this;
         message->sender = NULL;
         message->send_data.async.payload = payload;
 
@@ -190,24 +193,27 @@ ssize_t KMessageSendAsync (
     return ERROR_OK;
 }
 
-ssize_t KMessageSend (
-        struct Connection * connection,
-        const void * msgbuf,
-        size_t msgbuf_len,
-        void * replybuf,
-        size_t replybuf_len
+ssize_t Connection::SendMessage (
+        const void    * msgbuf,
+        size_t          msgbuf_len,
+        void          * replybuf,
+        size_t          replybuf_len
         )
 {
-    struct Message * message;
+    Message * message;
     ssize_t result;
 
     Once(&inited, init, NULL);
 
-    if (connection->channel->receive_blocked_head.Empty()) {
+    if (this->channel->receive_blocked_head.Empty()) {
         /* No receiver thread is waiting on the channel at the moment */
-        message = KMessageAlloc();
+        try {
+            message = new Message();
+        } catch (std::bad_alloc) {
+            return -ERROR_NO_MEM;
+        }
 
-        message->connection = connection;
+        message->connection = this;
         message->sender = THREAD_CURRENT();
         message->send_data.sync.sender_msgbuf = msgbuf;
         message->send_data.sync.sender_msgbuf_len = msgbuf_len;
@@ -217,7 +223,7 @@ ssize_t KMessageSend (
         message->receiver = NULL;
 
         /* Enqueue as blocked on the channel */
-        connection->channel->send_blocked_head.Append(message);
+        this->channel->send_blocked_head.Append(message);
 
         Thread::BeginTransaction();
         Thread::MakeUnready(THREAD_CURRENT(), Thread::STATE_SEND);
@@ -226,11 +232,11 @@ ssize_t KMessageSend (
     }
     else {
         /* Receiver thread is ready to go */
-        message = connection->channel->receive_blocked_head.PopFirst();
+        message = this->channel->receive_blocked_head.PopFirst();
 
         assert(message->receiver != NULL);
 
-        message->connection = connection;
+        message->connection = this;
         message->sender = THREAD_CURRENT();
         message->send_data.sync.sender_msgbuf = msgbuf;
         message->send_data.sync.sender_msgbuf_len = msgbuf_len;
@@ -255,36 +261,39 @@ ssize_t KMessageSend (
     */
 
     result = message->result;
-    KMessageFree(message);
+    delete message;
 
     return result;
-} /* KMessageSend() */
+} /* Connection::SendMessage() */
 
-ssize_t KMessageReceive (
-        struct Channel * channel,
-        struct Message ** context,
-        void * msgbuf,
-        size_t msgbuf_len
+ssize_t Channel::ReceiveMessage (
+        Message  ** context,
+        void      * msgbuf,
+        size_t      msgbuf_len
         )
 {
-    struct Message * message;
+    Message * message;
     ssize_t num_copied;
 
     Once(&inited, init, NULL);
 
-    if (channel->send_blocked_head.Empty()) {
+    if (this->send_blocked_head.Empty()) {
         /* No message is waiting in the channel at the moment */
-        message = KMessageAlloc();
+        try {
+            message = new Message();
+        } catch (std::bad_alloc) {
+            return -ERROR_NO_MEM;
+        }
 
         message->receiver = THREAD_CURRENT();
-        message->receiver_msgbuf = msgbuf;
-        message->receiver_msgbuf_len = msgbuf_len;
+        message->receive_data.receiver_msgbuf = msgbuf;
+        message->receive_data.receiver_msgbuf_len = msgbuf_len;
 
         message->sender = NULL;
         message->connection = NULL;
 
         /* Enqueue as blocked on the channel */
-        channel->receive_blocked_head.Append(message);
+        this->receive_blocked_head.Append(message);
 
         Thread::BeginTransaction();
         Thread::MakeUnready(THREAD_CURRENT(), Thread::STATE_RECEIVE);
@@ -293,11 +302,11 @@ ssize_t KMessageReceive (
     }
     else {
         /* Some message is waiting in the channel already */
-        message = channel->send_blocked_head.PopFirst();
+        message = this->send_blocked_head.PopFirst();
 
         message->receiver = THREAD_CURRENT();
-        message->receiver_msgbuf = msgbuf;
-        message->receiver_msgbuf_len = msgbuf_len;
+        message->receive_data.receiver_msgbuf = msgbuf;
+        message->receive_data.receiver_msgbuf_len = msgbuf_len;
     }
 
     if (message->sender != NULL) {
@@ -309,8 +318,8 @@ ssize_t KMessageReceive (
                 message->send_data.sync.sender_msgbuf,
                 message->send_data.sync.sender_msgbuf_len,
                 message->receiver,
-                message->receiver_msgbuf,
-                message->receiver_msgbuf_len
+                message->receive_data.receiver_msgbuf,
+                message->receive_data.receiver_msgbuf_len
                 );
     }
     else {
@@ -329,19 +338,18 @@ ssize_t KMessageReceive (
                 &message->send_data.async.payload,
                 sizeof(message->send_data.async.payload),
                 message->receiver,
-                message->receiver_msgbuf,
-                message->receiver_msgbuf_len
+                message->receive_data.receiver_msgbuf,
+                message->receive_data.receiver_msgbuf_len
                 );
 
         /* There will be no reply, so free the Message struct now */
-        KMessageFree(message);
+        delete message;
     }
 
     return num_copied;
-} /* KMessageReceive() */
+} /* Channel::ReceiveMessage() */
 
-ssize_t KMessageReply (
-        struct Message * context,
+ssize_t Message::Reply (
         unsigned int status,
         const void * replybuf,
         size_t replybuf_len
@@ -351,10 +359,10 @@ ssize_t KMessageReply (
 
     Once(&inited, init, NULL);
 
-    assert(context->receiver == THREAD_CURRENT());
+    assert(this->receiver == THREAD_CURRENT());
 
-    context->receiver_replybuf = replybuf;
-    context->receiver_replybuf_len = replybuf_len;
+    this->receive_data.receiver_replybuf = replybuf;
+    this->receive_data.receiver_replybuf_len = replybuf_len;
 
     /*
     Releasing this thread to run again might make the receiver's reply
@@ -364,24 +372,24 @@ ssize_t KMessageReply (
     */
     if (status == ERROR_OK) {
         result = TransferPayload (
-                context->receiver,
-                context->receiver_replybuf,
-                context->receiver_replybuf_len,
-                context->sender,
-                context->send_data.sync.sender_replybuf,
-                context->send_data.sync.sender_replybuf_len
+                this->receiver,
+                this->receive_data.receiver_replybuf,
+                this->receive_data.receiver_replybuf_len,
+                this->sender,
+                this->send_data.sync.sender_replybuf,
+                this->send_data.sync.sender_replybuf_len
                 );
-        context->result = result;
+        this->result = result;
     } else {
-        context->result = -status;
+        this->result = -status;
     }
 
-    result = status == ERROR_OK ? context->result : ERROR_OK;
+    result = status == ERROR_OK ? this->result : ERROR_OK;
 
     Thread::BeginTransaction();
 
     /* Sender will get to run again whenever a scheduling decision happens */
-    Thread::MakeReady(context->sender);
+    Thread::MakeReady(this->sender);
 
     /* Abandon any temporary priority boost we had now that the sender is unblocked */
     THREAD_CURRENT()->SetEffectivePriority(THREAD_CURRENT()->assigned_priority);
@@ -395,7 +403,17 @@ ssize_t KMessageReply (
 
     /* Sender frees the message after fetching the return value from it */
     return result;
-} /* KMessageReply() */
+} /* Message::Reply() */
+
+Thread * Message::GetSender ()
+{
+    return this->sender;
+}
+
+Thread * Message::GetReceiver ()
+{
+    return this->receiver;
+}
 
 static ssize_t TransferPayload (
         Thread *        source_thread,
