@@ -168,6 +168,13 @@ public:
      */
     StackData   kernel_stack;
 
+    /**
+     * \brief   Owner (if any) of the process
+     *
+     * The Process referenced by this point is not owned by this
+     * thread. Teardown code should not attempt to deallocate
+     * \a process during reclamation of the Thread object.
+     */
     Process * process;
 
     /* For use in scheduling queues. */
@@ -197,6 +204,26 @@ public:
     static Thread * Create (
             Func body,
             void * param
+            );
+
+    /**
+     * \brief   Patch up the data structure of a statically allocated
+     *          thread.
+     *
+     * This enables after-the-fact decoration of the initial thread of control
+     * in the system (whose stack is not dynamically allocated) so that it can
+     * survive being put to sleep and inserted into runqueues.
+     *
+     * \param stack_base
+     *          Lowest addressable word in the thread's stack
+     * \param stack_ceiling
+     *          One word higher than the highest addressable word
+     *          in the thread's stack
+     */
+    static void DecorateStatic (
+            Thread * thread,
+            VmAddr_t stack_base,
+            VmAddr_t stack_ceiling
             );
 
     /**
@@ -304,13 +331,23 @@ private:
      * \brief   Hidden to prevent static or stack allocation. Use
      *          Create() instead.
      */
-    Thread ();
+    Thread (Page * stack_page);
 
     /**
      * \brief   Hidden to prevent copying. Use Join() from a different
      *          thread's execution to deallocate a thread.
      */
     Thread (const Thread & other);
+
+    /**
+     * \brief   Hidden to prevent external deallocation of threads
+     *
+     * Even though it's buried in private scope and Thread instances
+     * are never deallocated with the normal 'delete' operator, the
+     * destructor is still useful as a controlled way to automatically
+     * tear down member variables during thread reclamation.
+     */
+    ~Thread ();
 
     /**
      * \brief   Hidden to prevent assignment

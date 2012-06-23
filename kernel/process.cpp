@@ -390,6 +390,8 @@ void Process::UserProcessThreadBody (void * pProcessCreationContext)
 Process * Process::Create (const char executableName[])
 {
     struct process_creation_context context;
+    Thread * t;
+
     Semaphore baton(0);
 
     if (GetManager() == NULL) {
@@ -403,12 +405,17 @@ Process * Process::Create (const char executableName[])
     context.baton = &baton;
 
     /* Resulting process object will be stored into context->created */
-    Thread::Create(UserProcessThreadBody, &context);
+    t = Thread::Create(UserProcessThreadBody, &context);
 
     /* Forked thread will wake us back up when the process creation is done */
     baton.Down();
 
-    return context.created;
+    if (context.created != 0) {
+        return context.created;
+    } else {
+        t->Join();
+        return 0;
+    }
 }
 
 static Pid_t get_next_pid ()

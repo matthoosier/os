@@ -149,6 +149,22 @@ void Thread::Entry (Thread::Func func, void * param)
     EndTransaction();
 }
 
+Thread::Thread (Page * stack_page)
+{
+    memset(&this->k_reg[0], 0, sizeof(this->k_reg));
+
+    this->kernel_stack.ceiling = this;
+    this->kernel_stack.base = (void *)stack_page->base_address;
+    this->kernel_stack.page = stack_page;
+    this->process = THREAD_CURRENT()->process;
+    this->state = Thread::STATE_READY;
+    this->joiner = NULL;
+    this->assigned_priority = Thread::PRIORITY_NORMAL;
+    this->effective_priority = Thread::PRIORITY_NORMAL;
+
+    this->k_reg[REGISTER_INDEX_SP] = (uint32_t)this->kernel_stack.ceiling;
+}
+
 Thread * Thread::Create (Thread::Func body, void * param)
 {
     Page *          stack_page;
@@ -167,20 +183,7 @@ Thread * Thread::Create (Thread::Func body, void * param)
     */
     descriptor = THREAD_STRUCT_FROM_SP(stack_page->base_address);
 
-    memset(&descriptor->k_reg[0], 0, sizeof(descriptor->k_reg));
-
-    descriptor->kernel_stack.ceiling = descriptor;
-    descriptor->kernel_stack.base = (void *)stack_page->base_address;
-    descriptor->kernel_stack.page = stack_page;
-    descriptor->process = THREAD_CURRENT()->process;
-    new (&descriptor->queue_link) ListElement();
-    descriptor->state = Thread::STATE_READY;
-    descriptor->joiner = NULL;
-    descriptor->assigned_priority = Thread::PRIORITY_NORMAL;
-    descriptor->effective_priority = Thread::PRIORITY_NORMAL;
-
-    /* Initially only the program and stack counter matter. */
-    descriptor->k_reg[REGISTER_INDEX_SP] = (uint32_t)descriptor->kernel_stack.ceiling;
+    new (descriptor) Thread(stack_page);
 
     /* Set up the entrypoint function with argument values */
     descriptor->k_reg[REGISTER_INDEX_PC]    = (uint32_t)Entry;
@@ -200,6 +203,22 @@ Thread * Thread::Create (Thread::Func body, void * param)
     return descriptor;
 }
 
+void Thread::DecorateStatic (
+        Thread * thread,
+        VmAddr_t stack_base,
+        VmAddr_t stack_ceiling
+        )
+{
+    // Make sure the whole stack falls into one page
+    assert((stack_base & PAGE_MASK) == ((stack_ceiling - 1) & PAGE_MASK));
+
+    thread->kernel_stack.ceiling  = (void *)stack_ceiling;
+    thread->kernel_stack.base     = (void *)stack_base;
+    thread->kernel_stack.page     = NULL;
+    thread->process               = NULL;
+    new (&thread->queue_link) ListElement();
+}
+
 void Thread::Join ()
 {
     assert(THREAD_CURRENT() != this);
@@ -217,6 +236,17 @@ void Thread::Join ()
     if (this->kernel_stack.page != NULL) {
         Page::Free(this->kernel_stack.page);
     }
+
+    // Invoke the destructor to clean out member variables
+    // that themselves have destructors
+    this->~Thread();
+}
+
+Thread::~Thread ()
+{
+    // Nothing to do; the symbol just needs to exist to
+    // be invokable so that member variables can get their
+    // dtors run too.
 }
 
 void Thread::SetEffectivePriority (Thread::Priority priority)

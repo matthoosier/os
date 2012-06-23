@@ -163,11 +163,11 @@ void run_first_thread ()
     Record the important static bits about this thread. The rest will
     be filled in automatically the first time we context switch.
     */
-    first_thread->kernel_stack.ceiling  = init_stack_ceiling;
-    first_thread->kernel_stack.base     = &init_stack[0];
-    first_thread->kernel_stack.page     = NULL;
-    first_thread->process               = NULL;
-    first_thread->queue_link.DynamicInit();
+    Thread::DecorateStatic(
+            first_thread,
+            (VmAddr_t)&init_stack[0],
+            (VmAddr_t)init_stack_ceiling
+            );
 
     /* Device-independent */
     InterruptsConfigure();
