@@ -7,6 +7,8 @@
 #   include <assert.h>
 #endif
 
+#include <kernel/list.hpp>
+
 /**
  * \brief   Smart pointer class for very simple automatic
  *          deallocation of objects.
@@ -21,7 +23,7 @@ template <class T>
         {
         }
 
-        inline ScopedPtr<T> & operator = (const ScopedPtr<T> & other)
+        inline ScopedPtr<T> & operator= (const ScopedPtr<T> & other)
         {
             return *this;
         }
@@ -69,12 +71,12 @@ template <class T>
             return *this;
         }
 
-        inline T * operator * ()
+        inline T * operator* ()
         {
             return mPointee;
         }
 
-        inline T * operator -> ()
+        inline T * operator-> ()
         {
             return mPointee;
         }
@@ -85,8 +87,6 @@ template <class T>
         }
     };
 
-// Forward declaration to facilitate using this by reference in
-// RefPtrBase
 class RefCounted;
 
 /**
@@ -162,7 +162,7 @@ template <class T>
             Acquire(pointee);
         }
 
-        inline RefPtr (RefPtr<T> & other)
+        inline RefPtr (const RefPtr<T> & other)
             : mPointee(0)
         {
             Acquire(other.mPointee);
@@ -195,29 +195,140 @@ template <class T>
             return mPointee != 0;
         }
 
-        inline T * operator * ()
+        inline T * operator* ()
         {
             return mPointee;
         }
 
-        inline T * operator -> ()
+        inline T * operator-> ()
         {
+            assert(mPointee != 0);
             return mPointee;
         }
 
-        inline RefPtr<T> & operator = (RefPtr<T> & other)
+        inline RefPtr<T> & operator= (RefPtr<T> & other)
         {
-            if (&other == this)
-            {
-                return *this;
-            }
-            else
+            if (other.mPointee != mPointee)
             {
                 Release();
                 Acquire(other.mPointee);
             }
+
+            return *this;
+        }
+
+        inline RefPtr<T> & operator= (T * other)
+        {
+            if (other != mPointee)
+            {
+                Release();
+                Acquire(other);
+            }
+
+            return *this;
         }
     };
+
+class WeakPointee;
+
+/**
+ * \brief   Concrete non-template base class for WeakPtr<T> that
+ *          allows the destructor logic to be written without
+ *          need for the template type argument of RefPtr.
+ *
+ * Basically, this class exists to promote type erasure and prevent
+ * as much code duplication from template instantiations as possible.
+ */
+class WeakPtrBase
+{
+public:
+    inline WeakPtrBase (WeakPointee * pointee);
+    inline WeakPtrBase ();
+    inline ~WeakPtrBase ();
+
+protected:
+    inline void Assign (WeakPointee * pointee);
+    inline void Reset ();
+
+protected:
+    WeakPointee * mPointee;
+    ListElement  mLink;
+
+    friend class WeakPointee;
+};
+
+/**
+ * \brief   Smart-pointer class whose pointee is automatically
+ *          nulled out when the pointee is deallocated
+ *
+ * This class is particularly useful in situations where breaking
+ * up a reference cycle is necessary.
+ */
+template <class T>
+    class WeakPtr : public WeakPtrBase
+    {
+    public:
+        inline WeakPtr ()
+            : WeakPtrBase ()
+        {
+        }
+
+        inline WeakPtr (T * pointee)
+            : WeakPtrBase(pointee)
+        {
+        }
+
+        inline ~WeakPtr ()
+        {
+            Reset();
+        }
+
+        inline WeakPtr<T> & operator= (T * pointee)
+        {
+            Reset();
+
+            if (pointee) {
+                Assign(pointee);
+            }
+
+            return *this;
+        }
+
+        inline operator bool ()
+        {
+            return mPointee != 0;
+        }
+
+        inline T * operator* ()
+        {
+            return static_cast<T *>(mPointee);
+        }
+
+        inline T * operator-> ()
+        {
+            return static_cast<T *>(mPointee);
+        }
+    };
+
+class WeakPointee
+{
+friend class WeakPtrBase;
+
+public:
+    typedef List<WeakPtrBase, &WeakPtrBase::mLink> WeakPtrBaseList;
+
+private:
+    WeakPtrBaseList mWeakRefs;
+
+public:
+    inline virtual ~WeakPointee ()
+    {
+        for (WeakPtrBaseList::Iter i = mWeakRefs.Begin(); i; ++i) {
+            i->Reset();
+        }
+        assert(mWeakRefs.Empty());
+    }
+};
 
 /**
  * \brief   Base class to be inherited by any object which wishes
@@ -247,7 +358,7 @@ public:
     {
     }
 
-    inline ~RefCounted ()
+    virtual inline ~RefCounted ()
     {
     }
 };
@@ -260,6 +371,37 @@ inline unsigned int RefPtrBase::IncrementReference (RefCounted & countee)
 inline unsigned int RefPtrBase::DecrementReference (RefCounted & countee)
 {
     return countee.Decrement();
+}
+
+inline WeakPtrBase::WeakPtrBase ()
+    : mPointee(0)
+{
+}
+
+inline WeakPtrBase::WeakPtrBase (WeakPointee * pointee)
+{
+    Assign(pointee);
+}
+
+inline WeakPtrBase::~WeakPtrBase ()
+{
+    Reset();
+}
+
+inline void WeakPtrBase::Assign (WeakPointee * pointee)
+{
+    assert(pointee != 0);
+    mPointee = pointee;
+    mPointee->mWeakRefs.Append(this);
+}
+
+inline void WeakPtrBase::Reset ()
+{
+    if (mPointee)
+    {
+        List<WeakPtrBase, &WeakPtrBase::mLink>::Remove(this);
+        mPointee = 0;
+    }
 }
 
 #endif /* __SMART_PTR_HPP__ */
