@@ -10,6 +10,7 @@
 #include <sys/decls.h>
 
 #include <kernel/list.hpp>
+#include <kernel/smart-ptr.hpp>
 
 BEGIN_DECLS
 
@@ -113,7 +114,7 @@ private:
      * @brief   The connection through which the sender sent this
      *          message
      */
-    Connection * connection;
+    WeakPtr<Connection> connection;
 
     /**
      * @brief   The process sending this message
@@ -159,58 +160,9 @@ private:
 };
 
 /**
- * @brief   Server object on which MsgReceive() is performed
- */
-class Channel
-{
-public:
-    void * operator new (size_t) throw (std::bad_alloc);
-    void operator delete (void *) throw ();
-
-    Channel ();
-    ~Channel ();
-
-    /**
-     * @brief   Synchronously receive a message
-     *
-     * @return  if zero or greater, the number of bytes written into \a msgbuf.
-     *          If less than zero, then an error happened and the specific
-     *          \c Error_t value is found by negating the return value.
-     */
-    ssize_t ReceiveMessage (
-            Message  ** context,
-            void      * msgbuf,
-            size_t      msgbuf_len
-            );
-
-private:
-    /**
-     * @brief   All the senders who are queued waiting to send on
-     *          this channel
-     */
-    List<Message, &Message::queue_link> send_blocked_head;
-
-    /**
-     * @brief   All the receivers who are queued waiting to receive
-     *          on this channel
-     */
-    List<Message, &Message::queue_link> receive_blocked_head;
-
-public:
-    /**
-     * @brief   Intrusive link for inserting this channel object
-     *          into linked lists of channels.
-     */
-    ListElement link;
-
-    friend class Connection;
-    friend class Message;
-};
-
-/**
  * @brief   Client object on which MessageSend() is performed
  */
-class Connection
+class Connection : public WeakPointee
 {
 public:
     void * operator new (size_t) throw (std::bad_alloc);
@@ -252,9 +204,72 @@ public:
 
 private:
     /**
+     * @brief   All the senders who are queued waiting to send on
+     *          this connection
+     */
+    List<Message, &Message::queue_link> send_blocked_head;
+
+    /**
      * @brief   The server object to which this client is connected
      */
-    Channel * channel;
+    WeakPtr<Channel> channel;
+
+    friend class Channel;
+};
+
+/**
+ * @brief   Server object on which MsgReceive() is performed
+ */
+class Channel : public WeakPointee
+{
+public:
+    void * operator new (size_t) throw (std::bad_alloc);
+    void operator delete (void *) throw ();
+
+    Channel ();
+    ~Channel ();
+
+    /**
+     * @brief   Synchronously receive a message
+     *
+     * @return  if zero or greater, the number of bytes written into \a msgbuf.
+     *          If less than zero, then an error happened and the specific
+     *          \c Error_t value is found by negating the return value.
+     */
+    ssize_t ReceiveMessage (
+            Message  ** context,
+            void      * msgbuf,
+            size_t      msgbuf_len
+            );
+
+private:
+    /**
+     * @brief   All the receivers who are queued waiting to receive
+     *          on this channel
+     */
+    List<Message, &Message::queue_link> receive_blocked_head;
+
+    /**
+     * @brief   Client connections to the channel, who have a message
+     *          waiting
+     */
+    List<Connection, &Connection::link> waiting_clients;
+
+    /**
+     * @brief   Client connections to the channel, who do not have a
+     *          message waiting
+     */
+    List<Connection, &Connection::link> unwaiting_clients;
+
+public:
+    /**
+     * @brief   Intrusive link for inserting this channel object
+     *          into linked lists of channels.
+     */
+    ListElement link;
+
+    friend class Connection;
+    friend class Message;
 };
 
 #endif /* __MESSAGE_H__ */

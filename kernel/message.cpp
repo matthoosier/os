@@ -70,7 +70,8 @@ Channel::Channel ()
 
 Channel::~Channel ()
 {
-    assert(this->send_blocked_head.Empty());
+    assert(this->waiting_clients.Empty());
+    assert(this->unwaiting_clients.Empty());
     assert(this->receive_blocked_head.Empty());
     assert(this->link.Unlinked());
 }
@@ -104,10 +105,28 @@ void Connection::operator delete (void * mem) throw ()
 Connection::Connection (Channel * server)
     : channel(server)
 {
+    server->unwaiting_clients.Append(this);
 }
 
 Connection::~Connection ()
 {
+    if (this->send_blocked_head.Empty()) {
+        if (this->channel) {
+            this->channel->unwaiting_clients.Remove(this);
+        }
+    }
+    else {
+        if (this->channel) {
+            this->channel->waiting_clients.Remove(this);
+        }
+
+        while (!this->send_blocked_head.Empty()) {
+            Message * message = this->send_blocked_head.PopFirst();
+            delete message;
+        }
+    }
+
+    assert(this->send_blocked_head.Empty());
 }
 
 void * Message::operator new (size_t size) throw (std::bad_alloc)
@@ -137,10 +156,10 @@ void Message::operator delete (void * mem) throw ()
 }
 
 Message::Message ()
-    : connection (NULL)
+    : connection ()
     , sender (NULL)
     , receiver (NULL)
-    , result (0)
+    , result ()
 {
     memset(&this->send_data, 0, sizeof(this->send_data));
     memset(&this->receive_data, 0, sizeof(this->receive_data));
@@ -171,7 +190,11 @@ ssize_t Connection::SendMessageAsync (uintptr_t payload)
         message->receiver = NULL;
 
         /* Enqueue message for delivery whenever receiver asks for it */
-        this->channel->send_blocked_head.Append(message);
+        if (this->send_blocked_head.Empty()) {
+            this->channel->unwaiting_clients.Remove(this);
+            this->channel->waiting_clients.Append(this);
+        }
+        this->send_blocked_head.Append(message);
     }
     else {
         /* Receiver thread is ready to go */
@@ -223,7 +246,11 @@ ssize_t Connection::SendMessage (
         message->receiver = NULL;
 
         /* Enqueue as blocked on the channel */
-        this->channel->send_blocked_head.Append(message);
+        if (this->send_blocked_head.Empty()) {
+            this->channel->unwaiting_clients.Remove(this);
+            this->channel->waiting_clients.Append(this);
+        }
+        this->send_blocked_head.Append(message);
 
         Thread::BeginTransaction();
         Thread::MakeUnready(THREAD_CURRENT(), Thread::STATE_SEND);
@@ -272,12 +299,12 @@ ssize_t Channel::ReceiveMessage (
         size_t      msgbuf_len
         )
 {
-    Message * message;
-    ssize_t num_copied;
+    Message       * message;
+    ssize_t         num_copied;
 
     Once(&inited, init, NULL);
 
-    if (this->send_blocked_head.Empty()) {
+    if (this->waiting_clients.Empty()) {
         /* No message is waiting in the channel at the moment */
         try {
             message = new Message();
@@ -302,7 +329,14 @@ ssize_t Channel::ReceiveMessage (
     }
     else {
         /* Some message is waiting in the channel already */
-        message = this->send_blocked_head.PopFirst();
+        Connection * client = this->waiting_clients.First();
+        assert(!client->send_blocked_head.Empty());
+        message = client->send_blocked_head.PopFirst();
+
+        if (client->send_blocked_head.Empty()) {
+            this->waiting_clients.Remove(client);
+            this->unwaiting_clients.Append(client);
+        }
 
         message->receiver = THREAD_CURRENT();
         message->receive_data.receiver_msgbuf = msgbuf;

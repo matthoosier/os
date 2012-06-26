@@ -6,6 +6,7 @@
 
 #include <kernel/list.hpp>
 #include <kernel/process.hpp>
+#include <kernel/smart-ptr.hpp>
 
 #define ALIGNED_THREAD_STRUCT_SIZE                                  \
     /* Padded out to multiple of 8 to preserve %sp requirements */  \
@@ -83,7 +84,7 @@
  * }
  * \endcode
  */
-class Thread
+class Thread : public WeakPointee
 {
 public:
     /**
@@ -327,6 +328,12 @@ public:
     static void EndTransaction ();
 
 private:
+    /**
+     * \brief   Hidden to prevent static or stack allocation. Use
+     *          DecorateStatic() instead.
+     */
+    Thread (VmAddr_t stack_base, VmAddr_t stack_ceiling);
+
     /**
      * \brief   Hidden to prevent static or stack allocation. Use
      *          Create() instead.

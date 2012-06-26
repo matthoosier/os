@@ -149,6 +149,18 @@ void Thread::Entry (Thread::Func func, void * param)
     EndTransaction();
 }
 
+Thread::Thread (VmAddr_t stack_base, VmAddr_t stack_ceiling)
+{
+    // Make sure the whole stack falls into one page
+    assert((stack_base & PAGE_MASK) == ((stack_ceiling - 1) & PAGE_MASK));
+
+    this->kernel_stack.ceiling  = (void *)stack_ceiling;
+    this->kernel_stack.base     = (void *)stack_base;
+    this->kernel_stack.page     = NULL;
+    this->process               = NULL;
+    this->joiner                = NULL;
+}
+
 Thread::Thread (Page * stack_page)
 {
     memset(&this->k_reg[0], 0, sizeof(this->k_reg));
@@ -161,8 +173,6 @@ Thread::Thread (Page * stack_page)
     this->joiner = NULL;
     this->assigned_priority = Thread::PRIORITY_NORMAL;
     this->effective_priority = Thread::PRIORITY_NORMAL;
-
-    this->k_reg[REGISTER_INDEX_SP] = (uint32_t)this->kernel_stack.ceiling;
 }
 
 Thread * Thread::Create (Thread::Func body, void * param)
@@ -184,6 +194,9 @@ Thread * Thread::Create (Thread::Func body, void * param)
     descriptor = THREAD_STRUCT_FROM_SP(stack_page->base_address);
 
     new (descriptor) Thread(stack_page);
+
+    /* Set initial stack pointer */
+    descriptor->k_reg[REGISTER_INDEX_SP] = (uint32_t)descriptor->kernel_stack.ceiling;
 
     /* Set up the entrypoint function with argument values */
     descriptor->k_reg[REGISTER_INDEX_PC]    = (uint32_t)Entry;
@@ -209,14 +222,7 @@ void Thread::DecorateStatic (
         VmAddr_t stack_ceiling
         )
 {
-    // Make sure the whole stack falls into one page
-    assert((stack_base & PAGE_MASK) == ((stack_ceiling - 1) & PAGE_MASK));
-
-    thread->kernel_stack.ceiling  = (void *)stack_ceiling;
-    thread->kernel_stack.base     = (void *)stack_base;
-    thread->kernel_stack.page     = NULL;
-    thread->process               = NULL;
-    new (&thread->queue_link) ListElement();
+    new (thread) Thread(stack_base, stack_ceiling);
 }
 
 void Thread::Join ()

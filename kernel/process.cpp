@@ -118,35 +118,54 @@ Process::Process ()
     : pagetable(0)
     , entry(0)
     , thread(NULL)
+    , next_chid(FIRST_CHANNEL_ID)
+    , next_coid(FIRST_CONNECTION_ID)
+    , next_msgid(1)
 {
     SpinlockInit(&this->lock);
 
     this->id_to_channel_map    = new IdToChannelMap_t(IdToChannelMap_t::SignedIntCompareFunc);
     this->id_to_connection_map = new IdToConnectionMap_t(IdToConnectionMap_t::SignedIntCompareFunc);
     this->id_to_message_map    = new IdToMessageMap_t(IdToMessageMap_t::SignedIntCompareFunc);
+}
 
-    this->next_chid = FIRST_CHANNEL_ID;
-    this->next_coid = FIRST_CONNECTION_ID;
-    this->next_msgid = 1;
+static void ForeachMessage (
+        RawTreeMap::Key_t key,
+        RawTreeMap::Value_t value,
+        void * ignored
+        )
+{
+    Message * message = static_cast<Message *>(value);
+    delete message;
+}
+
+static void ForeachConnection (
+        RawTreeMap::Key_t key,
+        RawTreeMap::Value_t value,
+        void * ignored
+        )
+{
+    Connection * connection = static_cast<Connection *>(value);
+    delete connection;
 }
 
 Process::~Process ()
 {
+    /*
+    Free all connections owned by process. Internally, the destructor for
+    the connection object will free any messages that have been queued
+    for sending but aren't yet received by a server.
+    */
+    this->id_to_connection_map->Foreach (ForeachConnection, NULL);
+
     /* Free all channels owned by process */
     while (!this->channels_head.Empty()) {
         Channel * channel = this->channels_head.PopFirst();
         delete channel;
     }
 
-    /* Free all connections owned by process */
-    while (!this->connections_head.Empty()) {
-        Connection * connection = this->connections_head.PopFirst();
-        delete connection;
-    }
-
-    /* XXX: Free the message (if any) the process has sent but not yet been replied */
-
-    /* XXX: Free all messages that the process has received but not yet responded to */
+    /* Free all messages that the process has received but not yet responded to */
+    this->id_to_message_map->Foreach (ForeachMessage, NULL);
     
     /* Deallocate virtual memory of the process */
     while (!this->segments_head.Empty()) {
@@ -644,7 +663,6 @@ Connection_t Process::RegisterConnection (Connection * c)
         return -ERROR_NO_MEM;
     }
 
-    this->connections_head.Append(c);
     return id;
 }
 
@@ -656,7 +674,6 @@ int Process::UnregisterConnection (Connection_t id)
         return -ERROR_INVALID;
     }
 
-    this->connections_head.Remove(c);
     return ERROR_OK;
 }
 

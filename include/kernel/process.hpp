@@ -296,11 +296,6 @@ private:
     ScopedPtr<IdToConnectionMap_t> id_to_connection_map;
 
     /**
-     * \brief   All the Connections currently owned by this process
-     */
-    List<Connection, &Connection::link> connections_head;
-
-    /**
      * \brief   Value of the next handle that will be assigned
      *          to a Connection structure owned by this process
      */
