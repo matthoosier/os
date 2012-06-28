@@ -122,7 +122,15 @@ Connection::~Connection ()
 
         while (!this->send_blocked_head.Empty()) {
             Message * message = this->send_blocked_head.PopFirst();
-            delete message;
+
+            if (message->sender) {
+                // Unblock sender; it'll deallocate the message when it returns
+                // out of SendMessage()
+                message->Reply(ERROR_NO_SYS, NULL, 0);
+            } else {
+                // Async message; no reply needed. Just directly deallocate.
+                delete message;
+            }
         }
     }
 
@@ -392,6 +400,19 @@ ssize_t Message::Reply (
     size_t result;
 
     Once(&inited, init, NULL);
+
+    /*
+    Make sure that client process hasn't been torn down already. If it has,
+    just forget about the reply and deallocate the message object immediately.
+
+    We can determine whether the client process is dead by inspecting whether
+    the weak-pointer 'connection' has been nulled out. That happens
+    automatically when the object deconstructs itself.
+    */
+    if (!this->connection) {
+        delete this;
+        return -ERROR_INVALID;
+    }
 
     assert(this->receiver == THREAD_CURRENT());
 

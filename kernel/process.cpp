@@ -136,7 +136,13 @@ static void ForeachMessage (
         )
 {
     Message * message = static_cast<Message *>(value);
-    delete message;
+
+    // Only synchronous messages end up registered in the id_to_message_map.
+    //
+    // So, each of these has a client send-blocked on it. Just reply back
+    // with a failure code. The client will be responsible for deallocating
+    // the message instance.
+    message->Reply(ERROR_NO_SYS, NULL, 0);
 }
 
 static void ForeachConnection (
