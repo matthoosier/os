@@ -232,7 +232,7 @@ def apply_asmoffsets(taskgen):
     taskgen.includes.append(header.parent)
 
     # Force all our #include-using ASM tasks to run after this
-    asmclass = Task.Task.classes['asm']
+    asmclass = Task.classes['asm']
     for asmtask in [t for t in taskgen.compiled_tasks if isinstance(t, asmclass)]:
         taskgen.bld.add_manual_dependency(asmtask.outputs[0], header)
         asmtask.set_run_after(grep_task)
