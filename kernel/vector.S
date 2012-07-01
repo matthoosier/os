@@ -278,10 +278,14 @@ irq_handler__do_boot_user$:
      * the task was interrupted.
      *
      * r0: still holds address of the interrupted task's kernel thread
-     * r2: holds the value of interrupted task's SP_svc less the space
-     *     required to hold the user-space saved registers we just stored
-     *     on the task's kernel stack.
      */
+
+    /* Re-fetch interrupted tasks's SP_svc */
+    mrs r1, cpsr
+    cps #svc
+    mov r2, sp
+    msr cpsr, r1
+
     str r2, [r0, K_R13]         /* Outgoing task's kernel SP            */
     ldr r2, =swi_handler__restart_after_irq$
     str r2, [r0, K_R15]         /* Outgoing task's kernel PC            */
