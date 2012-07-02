@@ -304,7 +304,7 @@ irq_handler__do_boot_kernel$:
 
 #if 0
     push {r0-r3}
-    ldr r0, =DEBUG_KERNEL_INTERRUPTED_MESSAGE
+    ldr r0, =.__kernel_interrupted_msg
 
     ldr r1, [sp, #((14 + 4) * 4)]       /* r1 := interrupted PC     */
 
@@ -617,3 +617,13 @@ restart_interrupted_kernel_thread$:
     jumping to it.
     */
     ldmfd sp!, {pc}^
+
+
+/**
+ * String data used by printk() calls above.
+ */
+    .section .rodata
+.__kernel_interrupted_msg:
+    .ascii "Interrupted Kernel Thread\n"
+    .ascii "\tPC was 0x%08x\n"
+    .asciz "\tSP was 0x%08x\n"

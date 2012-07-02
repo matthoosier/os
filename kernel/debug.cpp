@@ -29,13 +29,6 @@ void Debug::PrintMessage (const char  message[])
     gDriver->PrintMessage(message);
 }
 
-const char DEBUG_KERNEL_INTERRUPTED_MESSAGE[] =
-        "Interrupting Kernel thread\n"
-        "\tPC was 0x%08x\n"
-        "\tSP was 0x%08x\n";
-
-const char DEBUG_USER_INTERRUPTED_MESSAGE[] = "Interrupting User process\n";
-
 void printk (const char * format, ...)
 {
     static char buf[128];

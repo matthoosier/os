@@ -5,9 +5,6 @@
 
 BEGIN_DECLS
 
-extern const char DEBUG_KERNEL_INTERRUPTED_MESSAGE[];
-extern const char DEBUG_USER_INTERRUPTED_MESSAGE[];
-
 /**
  * \brief   Write a printf() style formatted string to debugging output
  *
