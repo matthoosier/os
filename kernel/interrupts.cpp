@@ -90,7 +90,7 @@ static void init_handlers (void * ignored)
             "msr cpsr, v1               \n\t"
             :
             : [irq_sp] "r" (&irq_stack[0] + sizeof(irq_stack))
-            , [irq_mode_bits] "i" (ARM_IRQ_MODE_BITS)
+            , [irq_mode_bits] "i" (ARM_PSR_MODE_IRQ_BITS)
             : "memory", "v1"
         );
     #else

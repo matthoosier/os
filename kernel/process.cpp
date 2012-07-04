@@ -374,7 +374,7 @@ void Process::UserProcessThreadBody (void * pProcessCreationContext)
             "mov %[spsr], %[usr_mode_bits]  \n\t"
             "msr spsr, %[spsr]              \n\t"
             : [spsr] "=r" (spsr)
-            : [usr_mode_bits] "i" (ARM_USR_MODE_BITS)
+            : [usr_mode_bits] "i" (ARM_PSR_MODE_USR_BITS)
         );
 
         /* Jump to user mode (SPSR becomes the user-mode CPSR */

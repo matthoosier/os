@@ -1,5 +1,3 @@
-#include "arm-defs.inc"
-
     .align 4
     .global _start
 

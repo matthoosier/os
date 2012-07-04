@@ -33,7 +33,7 @@ static inline bool InterruptsDisabled ()
         : "memory"
     );
 
-    return (cpsr & SETBIT(ARM_CPSR_I_BIT)) || (cpsr & SETBIT(ARM_CPSR_F_BIT));
+    return (cpsr & SETBIT(ARM_PSR_I_BIT)) != 0;
 }
 
 __attribute__((optimize(2)))
@@ -49,11 +49,11 @@ static inline IrqSave_t InterruptsDisable ()
         "msr cpsr, %[cpsr]              \n\t"
         : [cpsr] "=r" (cpsr)
         , [prev_cpsr] "=r" (prev_state.cpsr_interrupt_flags)
-        : [bits] "i" (SETBIT(ARM_CPSR_I_BIT) | SETBIT(ARM_CPSR_F_BIT))
+        : [bits] "i" (SETBIT(ARM_PSR_I_BIT))
         : "cc"
     );
 
-    prev_state.cpsr_interrupt_flags &= SETBIT(ARM_CPSR_I_BIT) | SETBIT(ARM_CPSR_F_BIT);
+    prev_state.cpsr_interrupt_flags &= SETBIT(ARM_PSR_I_BIT);
 
     return prev_state;
 }
@@ -79,11 +79,11 @@ static inline IrqSave_t InterruptsEnable ()
         "msr cpsr, %[cpsr]              \n\t"
         : [cpsr] "=r" (cpsr)
         , [prev_cpsr] "=r" (prev_state.cpsr_interrupt_flags)
-        : [bits] "i" (SETBIT(ARM_CPSR_I_BIT) | SETBIT(ARM_CPSR_F_BIT))
+        : [bits] "i" SETBIT(ARM_PSR_I_BIT)
         : "cc"
     );
 
-    prev_state.cpsr_interrupt_flags &= SETBIT(ARM_CPSR_I_BIT) | SETBIT(ARM_CPSR_F_BIT);
+    prev_state.cpsr_interrupt_flags &= SETBIT(ARM_PSR_I_BIT);
 
     return prev_state;
 }
@@ -98,7 +98,7 @@ static inline void InterruptsRestore (IrqSave_t saved_state)
         : [cpsr] "=r" (cpsr)
     );
 
-    cpsr &= ~(SETBIT(ARM_CPSR_I_BIT) | SETBIT(ARM_CPSR_F_BIT));
+    cpsr &= ~SETBIT(ARM_PSR_I_BIT);
     cpsr |= saved_state.cpsr_interrupt_flags;
 
     asm volatile (

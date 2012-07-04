@@ -204,7 +204,7 @@ Thread * Thread::Create (Thread::Func body, void * param)
     descriptor->k_reg[REGISTER_INDEX_ARG1]  = (uint32_t)param;
 
     /* Thread is initially running in kernel mode */
-    descriptor->k_reg[REGISTER_INDEX_PSR] = ARM_SVC_MODE_BITS;
+    descriptor->k_reg[REGISTER_INDEX_PSR] = ARM_PSR_MODE_SVC_BITS;
 
     /* Yield immediately to new thread so that it gets initialized */
     BeginTransaction();

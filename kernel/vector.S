@@ -1,5 +1,4 @@
 #include <asm-offsets.h>
-#include "arm-defs.inc"
 
     .section .text.vector
 
@@ -76,7 +75,7 @@ swi_handler:
 
     /* Re-enable regular interrupts (the SWI instruction disabled them) */
     mrs r8, cpsr
-    bic r8, r8, #cpsr_i_bit
+    bic r8, r8, ARM_PSR_I_VALUE
     msr cpsr, r8
 
     /* Do actual work here... */
@@ -91,7 +90,7 @@ swi_handler__exit$:
 
     /* Disable interrupts to keep context change atomic */
     mrs r8, cpsr
-    orr r8, r8, #cpsr_i_bit
+    orr r8, r8, ARM_PSR_I_VALUE
     msr cpsr, r8
 
     /* Make room on stack to reconstruct user registers from Thread::u_reg */
@@ -185,7 +184,7 @@ irq_handler:
 
     /* Fetch interrupted task's kernel stack pointer */
     mrs r1, cpsr
-    cps #svc
+    cps ARM_PSR_MODE_SVC_BITS
     mov r0, sp
     msr cpsr, r1
 
@@ -200,12 +199,13 @@ irq_handler:
      * Figure out execution mode processor was in before IRQ arrived.
      */
     ldr r1, [sp, #52]               /* r1 := spsr                           */
-    bic r1, r1, #0xffffffe0         /* r1 := spsr & 0b11111                 */
+    mvn r3, ARM_PSR_MODE_MASK       /* r3 := ~ARM_PSR_MODE_MASK             */
+    bic r1, r1, r3                  /* r1 := spsr & ARM_PSR_MODE_MASK       */
 
-    teq r1, #usr
+    teq r1, ARM_PSR_MODE_USR_BITS
     beq irq_handler__do_boot_user$
 
-    teq r1, #svc
+    teq r1, ARM_PSR_MODE_SVC_BITS
     beq irq_handler__do_boot_kernel$
 
     b irq_handler__normal_exit$
@@ -257,7 +257,7 @@ irq_handler__do_boot_user$:
 
     /* SPSR */
     ldr r3, [sp, #(13 * 4)]     /* Load from staged SPSR on IRQ stack   */
-    orr r3, r3, #cpsr_i_bit     /* Synthesized syscall should start out */
+    orr r3, r3, ARM_PSR_I_VALUE /* Synthesized syscall should start out */
                                 /* with interrupts disabled so that     */
                                 /* it's protected from preemption until */
                                 /* it finishes the handshake by calling */
@@ -282,7 +282,7 @@ irq_handler__do_boot_user$:
 
     /* Re-fetch interrupted tasks's SP_svc */
     mrs r1, cpsr
-    cps #svc
+    cps ARM_PSR_MODE_SVC_BITS
     mov r2, sp
     msr cpsr, r1
 
@@ -309,7 +309,7 @@ irq_handler__do_boot_kernel$:
     ldr r1, [sp, #((14 + 4) * 4)]       /* r1 := interrupted PC     */
 
     mrs r3, cpsr                        /* r2 := interrupted SP     */
-    cps #svc
+    cps ARM_PSR_MODE_SVC_BITS
     mov r2, sp
     msr cpsr, r3
 
@@ -335,7 +335,7 @@ irq_handler__do_boot_kernel$:
 
     /* SPSR */
     ldr r3, [sp, #(13 * 4)]     /* Load from staged SPSR on IRQ stack   */
-    orr r3, r3, #cpsr_i_bit     /* Interrupted task should retain       */
+    orr r3, r3, ARM_PSR_I_VALUE /* Interrupted task should retain       */
                                 /* preemption protection when it's      */
                                 /* restored next time.                  */
     str r3, [r0, K_CPSR]        /* Store to kernel thread structure     */
@@ -346,14 +346,14 @@ irq_handler__do_boot_kernel$:
 
     /* R14 */
     mrs r4, cpsr
-    cps #svc
+    cps ARM_PSR_MODE_SVC_BITS
     mov r3, r14
     msr cpsr, r4                /* Load from banked register            */
     str r3, [r0, K_R14]         /* Store to kernel thread structure     */
 
     /* R13 */
     mrs r4, cpsr
-    cps #svc
+    cps ARM_PSR_MODE_SVC_BITS
     mov r3, r13
     msr cpsr, r4                /* Load from banked register            */
     str r3, [r0, K_R13]         /* Store to kernel thread structure     */
@@ -450,14 +450,14 @@ irq_handler__do_load_next_task$:
     /* R14 */
     ldr r3, [r0, K_R14]         /* Load from kernel thread structure    */
     mrs r4, cpsr
-    cps #svc
+    cps ARM_PSR_MODE_SVC_BITS
     mov r14, r3                 /* Store in banked register             */
     msr cpsr, r4
 
     /* R13 */
     ldr r3, [r0, K_R13]         /* Load from kernel thread structure    */
     mrs r4, cpsr
-    cps #svc
+    cps ARM_PSR_MODE_SVC_BITS
     mov r13, r3                 /* Store in banked register             */
     msr cpsr, r4
 
@@ -605,8 +605,7 @@ restart_interrupted_kernel_thread$:
     So we have to save a copy of it.
     */
     mrs r4, cpsr
-    bic r4, r4, #cpsr_i_bit
-    bic r4, r4, #cpsr_f_bit
+    bic r4, r4, ARM_PSR_I_VALUE
 
     bl ThreadEndTransactionFromRestart
     msr spsr, r4
