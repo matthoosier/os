@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <stdbool.h>
 
 #include <kernel/thread.hpp>
 
@@ -64,4 +65,9 @@ void AsmOffsetsMain ()
     DEFINE(ARM_PSR_MODE_MASK, ARM_PSR_MODE_MASK);
     DEFINE(ARM_PSR_MODE_SVC_BITS, ARM_PSR_MODE_SVC_BITS);
     DEFINE(ARM_PSR_MODE_USR_BITS, ARM_PSR_MODE_USR_BITS);
+    DEFINE(ARM_PSR_MODE_IRQ_BITS, ARM_PSR_MODE_IRQ_BITS);
+
+    DEFINE(FALSE, false);
+    DEFINE(TRUE, true);
+    DEFINE(NULL, NULL);
 }
