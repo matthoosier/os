@@ -1,9 +1,12 @@
+from waflib import Configure
 from waflib import Task
 from waflib.Build import BuildContext
 from waflib.TaskGen import after_method, before_method, feature
 
 top = '.'
 out = 'build'
+
+Configure.autoconfig = True
 
 CROSS   = 'cross'
 NATIVE  = 'native'
