@@ -221,17 +221,43 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
     /* Record our name */
     strncpy(p->comm, executableName, sizeof(p->comm));
 
-    // Get pagetable for the new process.
-    try {
-        p->pagetable = new TranslationTable();
-    } catch (std::bad_alloc a) {
-        assert(false);
-        goto free_process;
+    /* Allocate, assign, and record Pid */
+    p->pid = get_next_pid();
+    PidMapInsert(p->pid, p);
+
+    /*
+    Keep setting the 'process' field on the object indivisible
+    with the allocation of the pagetable
+    */
+    for (IrqSave_t flags = InterruptsDisable(); ; ) {
+
+        bool bail = false;
+
+        /* Okay. Save reference to this process object into the current thread */
+        p->thread = THREAD_CURRENT();
+        THREAD_CURRENT()->process = p;
+
+        // Get pagetable for the new process.
+        try {
+            p->pagetable = new TranslationTable();
+        } catch (std::bad_alloc a) {
+            assert(false);
+            bail = true;
+            InterruptsRestore(flags);
+            goto free_process;
+        }
+
+        if (!bail) {
+            tt = *p->pagetable;
+            TranslationTable::SetUser(tt);
+            InterruptsRestore(flags);
+        } else {
+            InterruptsRestore(flags);
+            goto free_process;
+        }
+
+        break;
     }
-
-    tt = *p->pagetable;
-
-    TranslationTable::SetUser(tt);
 
     p->entry = hdr->e_entry;
 
@@ -305,14 +331,6 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
             p->segments_head.Append(segment);
         }
     }
-
-    /* Allocate, assign, and record Pid */
-    p->pid = get_next_pid();
-    PidMapInsert(p->pid, p);
-
-    /* Okay. Save reference to this process object into the current thread */
-    p->thread = THREAD_CURRENT();
-    THREAD_CURRENT()->process = p;
 
     /* Establish the connection to the Process Manager's single channel. */
     procmgr = Lookup(PROCMGR_PID);
