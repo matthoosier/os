@@ -1,3 +1,4 @@
+# vim: set syntax=python:
 from waflib import Configure
 from waflib import Task
 from waflib.Build import BuildContext
