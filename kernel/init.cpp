@@ -178,6 +178,7 @@ void run_first_thread ()
     Process::Create("syscall-client");
     Process::Create("uio");
     Process::Create("pl011");
+    Process::Create("crasher");
 
     run_idle_loop();
 }

@@ -16,7 +16,5 @@ int main () {
     MessageSend(echoCon, send, sizeof(send), reply, sizeof(reply));
 
     /* Terminate */
-    Exit();
-
     return 0;
 }

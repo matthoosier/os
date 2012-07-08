@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <sys/process.h>
 
 void _start (void) __attribute__((naked));
 void sling (void);
@@ -15,6 +16,7 @@ void sling (void) {
     int main (int argc, char * argv[], char * envp[]);
 
     main(argc, argv, envp);
+    Exit();
 }
 
 void _start (void) {

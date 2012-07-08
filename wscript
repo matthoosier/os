@@ -17,6 +17,7 @@ kernel_sources = [
     'kernel/early-mmu.c',
     'kernel/debug.cpp',
     'kernel/debug-pl011.cpp',
+    'kernel/exception.cpp',
     'kernel/init.cpp',
     'kernel/interrupts.cpp',
     'kernel/interrupts-pl190.cpp',
@@ -44,6 +45,7 @@ kernel_sources = [
 
     'kernel/atomic.S',
     'kernel/early-entry.S',
+    'kernel/exception-entry.S',
     'kernel/high-entry.S',
     'kernel/vector.S',
 ]
@@ -61,6 +63,7 @@ user_progs = [
     ('syscall-client',  [ 'syscall-client.c' ], 0x20000),
     ('uio',             [ 'uio.c' ],            0x30000),
     ('pl011',           [ 'pl011.c' ],          0x40000),
+    ('crasher',         [ 'crasher.c' ],        0x50000),
 ]
 
 def options(opt):

@@ -42,6 +42,9 @@ static Process * PidMapLookup (Pid_t key);
 static Process * PidMapInsert (Pid_t key, Process * process);
 static Process * PidMapRemove (Pid_t key);
 
+/** Terminates a process and removes registrations related to it */
+static void TerminateProcess (Process * p);
+
 static void init_caches (void * ignored)
 {
     ObjectCacheInit(&process_cache, sizeof(Process));
@@ -532,6 +535,11 @@ Pid_t Process::GetId ()
     return this->pid;
 }
 
+Thread * Process::GetThread ()
+{
+    return this->thread;
+}
+
 void Process::ManagerThreadBody (void * pProcessCreationContext)
 {
     struct process_creation_context * caller_context;
@@ -750,10 +758,34 @@ TranslationTable * ProcessGetTranslationTable (Process * p)
     return p->GetTranslationTable();
 }
 
+static void TerminateProcess (Process * process)
+{
+    Thread * t = process->GetThread();
+
+    /* Get rid of mapping */
+    assert(PidMapLookup(process->GetId()) == process);
+
+    PidMapRemove(process->GetId());
+
+    /* Reclaim all userspace resources */
+    delete process;
+    process = NULL;
+
+    t->process = NULL;
+
+    /* Force sender's kernel thread to appear done */
+    Thread::BeginTransaction();
+    Thread::MakeUnready(t, Thread::STATE_FINISHED);
+    Thread::EndTransaction();
+
+    /* Reap sender's kernel thread */
+    t->Join();
+}
+
 /**
  * Handler for PROC_MGR_MESSAGE_EXIT.
  */
-void HandleExit (
+static void HandleExitMessage (
         Message * message,
         const struct ProcMgrMessage * buf
         )
@@ -763,25 +795,37 @@ void HandleExit (
     /* Syscalls are always invoked by processes */
     assert(sender->process != NULL);
 
-    /* Get rid of mapping */
-    assert(PidMapLookup(sender->process->GetId()) == sender->process);
-
-    PidMapRemove(sender->process->GetId());
-
-    /* Reclaim all userspace resources */
-    delete sender->process;
-    sender->process = NULL;
-
-    /* Force sender's kernel thread to appear done */
-    Thread::BeginTransaction();
-    Thread::MakeUnready(sender, Thread::STATE_FINISHED);
-    Thread::EndTransaction();
-
-    /* Reap sender's kernel thread */
-    sender->Join();
+    TerminateProcess(sender->process);
 
     /* No MessageReply(), so manually free the Message */
     delete message;
 }
 
-PROC_MGR_OPERATION(PROC_MGR_MESSAGE_EXIT, HandleExit)
+/**
+ * Handler for PROC_MGR_MESSAGE_SIGNAL
+ */
+static void HandleSignalMessage (
+        Message * message,
+        const struct ProcMgrMessage * buf
+        )
+{
+    Thread * sender = message->GetSender();
+    Process * senderProcess = sender->process;
+    Process * signalee = Process::Lookup(buf->payload.signal.signalee_pid);
+
+    if (signalee) {
+        TerminateProcess(signalee);
+
+        if (senderProcess == signalee) {
+            // Nobody around to return message to
+            delete message;
+        } else {
+            message->Reply(ERROR_OK, NULL, 0);
+        }
+    } else {
+        message->Reply(ERROR_INVALID, NULL, 0);
+    }
+}
+
+PROC_MGR_OPERATION(PROC_MGR_MESSAGE_EXIT, HandleExitMessage)
+PROC_MGR_OPERATION(PROC_MGR_MESSAGE_SIGNAL, HandleSignalMessage)

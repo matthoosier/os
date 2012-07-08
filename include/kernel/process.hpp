@@ -193,6 +193,11 @@ public:
      */
     ~Process ();
 
+    /**
+     * \brief   Get the thread executing inside this process
+     */
+    Thread * GetThread ();
+
 private:
     /**
      * \brief   Hidden to prevent the general public from making

@@ -37,6 +37,12 @@ static uint8_t irq_stack[PAGE_SIZE]
     __attribute__((aligned(PAGE_SIZE)));
 
 /**
+ * Stack for abort-handler context to execute on.
+ */
+static uint8_t abt_stack[PAGE_SIZE]
+    __attribute__((aligned(PAGE_SIZE)));
+
+/**
  * Dedicated kernel handlers for IRQs. Elements in this list are
  * the 'link' field of the UserInterruptHandlerRecord structure.
  */
@@ -86,11 +92,17 @@ static void init_handlers (void * ignored)
             "cps %[irq_mode_bits]       \n\t"
             "mov sp, %[irq_sp]          \n\t"
 
+            /* Switch to ABT mode and install stack pointer */
+            "cps %[abt_mode_bits]       \n\t"
+            "mov sp, %[abt_sp]          \n\t"
+
             /* Restore previous execution mode              */
             "msr cpsr, v1               \n\t"
             :
             : [irq_sp] "r" (&irq_stack[0] + sizeof(irq_stack))
             , [irq_mode_bits] "i" (ARM_PSR_MODE_IRQ_BITS)
+            , [abt_sp] "r" (&abt_stack[0] + sizeof(abt_stack))
+            , [abt_mode_bits] "i" (ARM_PSR_MODE_ABT_BITS)
             : "memory", "v1"
         );
     #else

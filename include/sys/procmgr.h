@@ -14,6 +14,7 @@ BEGIN_DECLS
 enum ProcMgrMessageType
 {
     PROC_MGR_MESSAGE_EXIT = 0,
+    PROC_MGR_MESSAGE_SIGNAL,
     PROC_MGR_MESSAGE_GETPID,
     PROC_MGR_MESSAGE_INTERRUPT_ATTACH,
     PROC_MGR_MESSAGE_INTERRUPT_DETACH,
@@ -37,6 +38,10 @@ struct ProcMgrMessage
 
         struct {
         } exit;
+
+        struct {
+            int signalee_pid;
+        } signal;
 
         struct {
         } getpid;
@@ -72,6 +77,9 @@ struct ProcMgrReply
 
         struct {
         } exit;
+
+        struct {
+        } signal;
 
         struct {
             int pid;
