@@ -88,7 +88,7 @@ def configure(conf):
 
     conf.setenv(CROSS)
 
-    conf.find_program('arm-none-eabi-gcc', var='AS')
+    conf.find_program('arm-none-eabi-as', var='AS')
     conf.find_program('arm-none-eabi-ar', var='AR')
     conf.find_program('arm-none-eabi-gcc', var='CC')
     conf.find_program('arm-none-eabi-g++', var='CXX')
@@ -104,11 +104,6 @@ def configure(conf):
     conf.load('gcc')
     conf.load('gxx')
     conf.load('gas')
-
-    # Because we're using 'gcc' rather than 'gas' as the entrypoint
-    # program to the assembler, we need to tell GCC to stop after
-    # building the object code (don't link).
-    conf.env.AS_TGT_F = ['-c', '-o']
 
     # Override defaults from Waf's GCC support
     conf.env.SHLIB_MARKER = ''
@@ -261,6 +256,17 @@ class asmoffsets(Task.Task):
 
         self.outputs[0].write('\n'.join(outlines))
         return 0
+
+# Force main 'asm' to be loaded so that we can be sure that our
+# custom hook for .S files get installed after asm's
+from waflib.Tools import asm
+from waflib.TaskGen import extension
+@extension('.S')
+def asm_hook(taskgen, node):
+    preproc = node.parent.find_or_declare('%s.%d.i' % (node.name, taskgen.idx))
+    t = taskgen.create_task('c', node, preproc)
+    t.env['CC_TGT_F'] = ['-E', '-o']
+    return taskgen.create_compiled_task('asm', preproc)
 
 def doc(bld):
     bld(features = 'doxygen')
