@@ -33,6 +33,11 @@ static inline int AtomicSubAndFetch (
     return __sync_sub_and_fetch(ptr, amount);
 }
 
+static inline void AtomicCompilerMemoryBarrier (void)
+{
+    asm volatile("" : : : "memory");
+}
+
 END_DECLS
 
 #endif /* __ATOMIC_H__ */

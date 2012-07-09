@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include <sys/arch.h>
+#include <sys/atomic.h>
 #include <sys/elf.h>
 #include <sys/error.h>
 #include <sys/procmgr.h>
@@ -228,39 +229,31 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
     p->pid = get_next_pid();
     PidMapInsert(p->pid, p);
 
-    /*
-    Keep setting the 'process' field on the object indivisible
-    with the allocation of the pagetable
-    */
-    for (IrqSave_t flags = InterruptsDisable(); ; ) {
+    /* Okay. Save reference to this process object into the current thread */
+    p->thread = THREAD_CURRENT();
+    THREAD_CURRENT()->process = p;
 
-        bool bail = false;
-
-        /* Okay. Save reference to this process object into the current thread */
-        p->thread = THREAD_CURRENT();
-        THREAD_CURRENT()->process = p;
-
-        // Get pagetable for the new process.
-        try {
-            p->pagetable = new TranslationTable();
-        } catch (std::bad_alloc a) {
-            assert(false);
-            bail = true;
-            InterruptsRestore(flags);
-            goto free_process;
-        }
-
-        if (!bail) {
-            tt = *p->pagetable;
-            TranslationTable::SetUser(tt);
-            InterruptsRestore(flags);
-        } else {
-            InterruptsRestore(flags);
-            goto free_process;
-        }
-
-        break;
+    // Get pagetable for the new process.
+    try {
+        p->pagetable = new TranslationTable();
+    } catch (std::bad_alloc a) {
+        assert(false);
+        THREAD_CURRENT()->process = NULL;
+        goto free_process;
     }
+
+    tt = *p->pagetable;
+
+    /*
+    Make sure that pagetable installation is flushed out to memory before
+    making any use of it. This will make sure that an inconveniently timed
+    preemption won't see the Process object in a moment when the fields
+    modified above haven't been spilled back yet.
+    */
+    AtomicCompilerMemoryBarrier();
+
+    // Okay, now it's safe to use the translation table.
+    TranslationTable::SetUser(tt);
 
     p->entry = hdr->e_entry;
 
