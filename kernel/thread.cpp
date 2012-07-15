@@ -37,9 +37,9 @@ void Thread::BeginTransaction ()
     ThreadBeginTransaction();
 }
 
-void Thread::BeginTransactionDuringIrq ()
+void Thread::BeginTransactionDuringException ()
 {
-    ThreadBeginTransactionDuringIrq();
+    ThreadBeginTransactionDuringException();
 }
 
 void Thread::EndTransaction ()
@@ -351,13 +351,13 @@ void ThreadBeginTransaction ()
     SpinlockLock(&sched_spinlock);
 }
 
-void ThreadBeginTransactionDuringIrq ()
+void ThreadBeginTransactionDuringException ()
 {
     assert(InterruptsDisabled());
     SpinlockLock(&sched_spinlock);
 }
 
-void ThreadBeginTransactionEndingIrq ()
+void ThreadBeginTransactionEndingException ()
 {
     assert(InterruptsDisabled());
     SpinlockLockNoIrqSave(&sched_spinlock);

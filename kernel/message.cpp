@@ -215,7 +215,7 @@ ssize_t Connection::SendMessageAsync (uintptr_t payload)
         message->send_data.async.payload = payload;
 
         /* Allow receiver to wake up */
-        Thread::BeginTransactionDuringIrq();
+        Thread::BeginTransactionDuringException();
         Thread::MakeReady(message->receiver);
         Thread::SetNeedResched();
         Thread::EndTransaction();

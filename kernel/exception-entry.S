@@ -504,7 +504,7 @@ irq_handler__do_boot_user$:
 
     /* Acquire scheduler lock */
     push {r0-r3,ip,lr}
-    bl ThreadBeginTransactionEndingIrq
+    bl ThreadBeginTransactionEndingException
     pop {r0-r3,ip,lr}
 
     /* Copy the registers from the stack to the PCB */
@@ -585,7 +585,7 @@ irq_handler__do_boot_kernel$:
 
     /* Acquire scheduler lock */
     push {r0-r3}
-    bl ThreadBeginTransactionEndingIrq
+    bl ThreadBeginTransactionEndingException
     pop {r0-r3}
 
     /* Copy the registers from the stack to the TCB */

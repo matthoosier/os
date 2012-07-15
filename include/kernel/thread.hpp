@@ -317,7 +317,7 @@ public:
      * This version of BeginTransaction() is safe to use when interrupt
      * handling code needs to manipulate runqueues.
      */
-    static void BeginTransactionDuringIrq ();
+    static void BeginTransactionDuringException ();
 
     /**
      * \brief   Finish a scheduling transaction
@@ -429,12 +429,12 @@ extern Thread *     ThreadDequeueReady              (void);
 extern void         ThreadBeginTransaction          (void);
 
 /**
- * \brief   C version of BeginTransactionDuringIrq() for use from assembly code
+ * \brief   C version of BeginTransactionDuringException() for use from assembly code
  *
  * \memberof Thread
  * \private
  */
-extern void         ThreadBeginTransactionDuringIrq (void);
+extern void         ThreadBeginTransactionDuringException (void);
 
 /**
  * \brief   Analagous to BeginTransaction() for use in interrupt handling
@@ -447,7 +447,7 @@ extern void         ThreadBeginTransactionDuringIrq (void);
  * \memberof Thread
  * \private
  */
-extern void         ThreadBeginTransactionEndingIrq (void);
+extern void         ThreadBeginTransactionEndingException (void);
 
 /**
  * \brief   C version of EndTransaction() for use from assembly code
