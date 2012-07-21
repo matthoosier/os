@@ -164,9 +164,13 @@ static ssize_t DoMessageReply (
     int ret;
 
     m = THREAD_CURRENT()->process->LookupMessage(msgid);
-    THREAD_CURRENT()->process->UnregisterMessage(msgid);
 
-    ret = m->Reply(status, replybuf, replybuf_len);
+    if (m) {
+        THREAD_CURRENT()->process->UnregisterMessage(msgid);
+        ret = m->Reply(status, replybuf, replybuf_len);
+    } else {
+        ret = -ERROR_INVALID;
+    }
 
     return ret;
 }
