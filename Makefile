@@ -8,7 +8,7 @@ QEMU_SERIAL = $(QEMU_SERIAL_CONSOLE)
 
 debug:
 	./waf
-	$(CROSS_COMPILE)-gdb build/image --eval="target remote :1234"
+	$(CROSS_COMPILE)-gdb -x .gdbinit.arm build/image --eval="target remote :1234"
 
 run:
 	./waf
