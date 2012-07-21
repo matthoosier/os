@@ -146,7 +146,8 @@ void Thread::Entry (Thread::Func func, void * param)
     MakeUnready(THREAD_CURRENT(), STATE_FINISHED);
     RunNextThread();
 
-    EndTransaction();
+    // Unreached
+    assert(false);
 }
 
 Thread::Thread (VmAddr_t stack_base, VmAddr_t stack_ceiling)
