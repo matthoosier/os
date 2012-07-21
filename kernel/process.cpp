@@ -579,7 +579,7 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
     p->next_chid++;
 
     /* Start periodic timer to use for pre-emption */
-    Timer::StartPeriodic(1000);
+    Timer::StartPeriodic(5);
   
     /* Release the spawner now that we have the resulting Process object */
     caller_context->baton->Up();
