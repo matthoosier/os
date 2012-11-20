@@ -59,11 +59,11 @@ libc_sources = [
 ]
 
 user_progs = [
-    ('echo',            [ 'echo.c' ],           0x10000),
-    ('syscall-client',  [ 'syscall-client.c' ], 0x20000),
-    ('uio',             [ 'uio.c' ],            0x30000),
-    ('pl011',           [ 'pl011.c' ],          0x40000),
-    ('crasher',         [ 'crasher.c' ],        0x50000),
+    ('echo',            ['echo.c'],             0x10000),
+    ('syscall-client',  ['syscall-client.c'],   0x20000),
+    ('uio',             ['uio.c'],              0x30000),
+    ('pl011',           ['pl011.c'],            0x40000),
+    ('crasher',         ['crasher.c'],          0x50000),
 ]
 
 def options(opt):
@@ -98,8 +98,8 @@ def configure(conf):
     conf.find_program('arm-none-eabi-g++', var='CXX')
     conf.find_program('arm-none-eabi-ld', var='LD')
 
-    cflags = [ '-march=armv6', '-g', '-Wall', '-Werror' ]
-    asflags = [ '-march=armv6', '-g' ]
+    cflags = ['-march=armv6', '-g', '-Wall', '-Werror']
+    asflags = ['-march=armv6', '-g']
 
     conf.env.append_unique('CFLAGS', cflags)
     conf.env.append_unique('CXXFLAGS', cflags)
@@ -123,81 +123,95 @@ def build(bld):
     # Unprivileged user programs
     #
 
-    progs = []
+    bld.add_group()
 
-    libc = bld.stlib(
-        source      =   libc_sources,
-        target      =   'my_c',
-        includes    =   [ 'include' ],
-        env         =   bld.all_envs[CROSS].derive(),
-    )
+    bld.stlib(source    =   libc_sources,
+              target    =   'my_c',
+              includes  =   ['include'],
+              env       =   bld.all_envs[CROSS].derive())
 
     for (p, src_list, link_base_addr) in user_progs:
-        p_tgen = bld.program(
-            source      =   src_list,
-            target      =   p,
-            includes    =   [ 'include' ],
-            linkflags   =   [ '-nostartfiles', '-Wl,-Ttext-segment,0x%x' % link_base_addr ],
-            use         =   'my_c',
-            env         =   bld.all_envs[CROSS].derive(),
-        )
-        p_tgen.post()
-        progs += [ p_tgen ]
+        bld.program(source      = src_list,
+                    target      = p,
+                    includes    = ['include'],
+                    linkflags   = ['-nostartfiles', '-Wl,-Ttext-segment,0x%x' % link_base_addr],
+                    use         = 'my_c',
+                    env         = bld.all_envs[CROSS].derive())
 
     #
     # Tool to compile IFS
     #
 
-    fs_builder = bld.program(
-        source      =   'fs-builder.cc',
-        target      =   'fs-builder',
-        env         =   bld.all_envs[NATIVE].derive(),
-    )
-
-    fs_builder.post()
-    fs_builder_bin = fs_builder.link_task.outputs[0]
+    bld.program(source  = 'fs-builder.cc',
+                target  = 'fs-builder',
+                env     = bld.all_envs[NATIVE].derive())
 
     #
     # Generate source code of IFS
     #
 
-    bld.env.FS_BUILDER = fs_builder_bin.abspath()
+    bld.add_group()
 
-    ramfs_image_c = bld(
-            rule    =   '${FS_BUILDER} -o ${TGT} -n RamFsImage ' + ' '.join([ ('"%s"' % p.link_task.outputs[0].bldpath()) for p in progs ]),
-            target  =   'ramfs_image.c',
-            source  =   [ fs_builder_bin ] + [ p.link_task.outputs[0].bldpath() for p in progs ],
-    )
-    ramfs_image_c.post()
-
-    # Assume that this custom taskgen only has one task
-    if len(ramfs_image_c.tasks) != 1:
-        bld.fatal("Can't deal with RamFsBuilder rule that makes more than 1 task")
-
-    # ... and that it has only one output
-    if len(ramfs_image_c.tasks[0].outputs) != 1:
-        bld.fatal("Can't deal with RamFsBuilder rule that makes more than 1 output")
+    bld(target      = 'ramfs_image.c',
+        features    = ['fs-builder'],
+        progs       = [up[0] for up in user_progs])
 
 
     #
     # Main kernel image
     #
 
-    image = bld.program(
-        source      =   kernel_sources + [ ramfs_image_c.tasks[0].outputs[0] ],
-        target      =   'image',
-        includes    =   [ 'include' ],
+    bld.add_group()
 
-        defines     =   [ '__KERNEL__' ],
+    image = bld.program(source          = kernel_sources,
+                        target          = 'image',
+                        includes        = ['include'],
 
-        linkflags   =   [ '-nostartfiles' ],
+                        defines         = ['__KERNEL__'],
 
-        env         =   bld.all_envs[CROSS].derive(),
+                        linkflags       = ['-nostartfiles'],
 
-        features    =   [ 'asmoffsets', 'ldscript' ],
-        asmoffsets  =   'asm-offsets.c',
-        ldscript    =   'kernel.ldscript',
-    )
+                        env             = bld.all_envs[CROSS].derive(),
+
+                        features        = ['asmoffsets', 'ramfs_source', 'ldscript'],
+                        asmoffsets      = 'asm-offsets.c',
+                        ramfs_source    = 'ramfs_image.c',
+                        ldscript        = 'kernel.ldscript')
+
+"""
+Look up the linked executable for each of the taskgens
+named in taskgen.progs, and generate a RAM filesystem
+containing all of them.
+"""
+@feature('fs-builder')
+def discover_fs_builder_inputs(taskgen):
+    fsbuilder_link_task = taskgen.bld.get_tgen_by_name('fs-builder').link_task
+    prognodes = [taskgen.bld.get_tgen_by_name(p).link_task.outputs[0] for p in taskgen.progs]
+    target = taskgen.path.find_or_declare(taskgen.target)
+
+    # Create task, set up its environment
+    task = taskgen.create_task('fs_builder', prognodes, target)
+    task.env.FS_BUILDER = fsbuilder_link_task.outputs[0].abspath()
+
+    # Patch up dependencies
+    task.set_run_after(fsbuilder_link_task)
+    taskgen.bld.add_manual_dependency(target, fsbuilder_link_task.outputs[0])
+
+    # Save reference to the task
+    taskgen.fs_builder_task = task
+
+class fs_builder(Task.Task):
+    run_str = '${FS_BUILDER} -o ${TGT} -n RamFsImage ${SRC}'
+
+"""
+Append the source emitted by a ram filesystem builder, to the inputs
+of a regular C/C++ compiled program
+"""
+@feature('ramfs_source')
+@before_method('process_source')
+def add_ramfs_sources(taskgen):
+    built_source = taskgen.bld.get_tgen_by_name(taskgen.ramfs_source).fs_builder_task.outputs[0]
+    taskgen.source.append(built_source)
 
 """
 Add a given linker script to the LINKFLAGS and update dependencies so that
@@ -209,7 +223,7 @@ the binary will re-link if the script changes.
 def apply_ldscript(taskgen):
     script = taskgen.path.find_or_declare(taskgen.ldscript)
     taskgen.bld.add_manual_dependency(taskgen.link_task.outputs[0], script)
-    taskgen.linkflags += [ '-Wl,-T,%s' % script.bldpath() ]
+    taskgen.linkflags += ['-Wl,-T,%s' % script.bldpath()]
 
 """
 After process_source(), so that the compiled_tasks[] will be populated already.
