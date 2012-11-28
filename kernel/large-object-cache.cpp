@@ -33,13 +33,15 @@ static void static_init ()
 
 static void constructor (struct ObjectCache * cache)
 {
-    cache->bufctl_to_slab_map = new ObjectCache::BufctlToSlabMap_t(ObjectCache::BufctlToSlabMap_t::AddressCompareFunc);
+    cache->bufctl_to_slab_map = 0;
 }
 
 static void destructor (struct ObjectCache * cache)
 {
-    delete cache->bufctl_to_slab_map;
-    cache->bufctl_to_slab_map = 0;
+    if (cache->bufctl_to_slab_map) {
+        delete cache->bufctl_to_slab_map;
+        cache->bufctl_to_slab_map = 0;
+    }
 }
 
 static struct Slab * large_objects_try_allocate_slab (struct ObjectCache * cache)
@@ -48,6 +50,12 @@ static struct Slab * large_objects_try_allocate_slab (struct ObjectCache * cache
     struct Slab *   new_slab;
     unsigned int    objs_in_slab;
     unsigned int    i;
+
+    /* Lazily allocate the auxiliary map used to record which slab owns a particular object */
+    if (!cache->bufctl_to_slab_map) {
+        cache->bufctl_to_slab_map = new ObjectCache::BufctlToSlabMap_t(ObjectCache::BufctlToSlabMap_t::AddressCompareFunc);
+        assert(cache->bufctl_to_slab_map != 0);
+    }
 
     new_page = Page::Alloc();
 
@@ -109,6 +117,7 @@ static void large_objects_free_slab (struct ObjectCache * cache, struct Slab * s
             
             struct Slab * removed;
 
+            assert(cache->bufctl_to_slab_map != 0);
             removed = cache->bufctl_to_slab_map->Remove(*cursor);
             assert(removed != NULL);
         }
@@ -128,6 +137,7 @@ static struct Slab * large_objects_slab_from_bufctl (
         void * bufctl_addr
         )
 {
+    assert(cache->bufctl_to_slab_map != 0);
     return cache->bufctl_to_slab_map->Lookup(bufctl_addr);
 }
 
