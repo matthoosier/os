@@ -10,9 +10,31 @@
 #include <kernel/once.h>
 #include <kernel/vm.hpp>
 
-typedef struct
+//! Info to track one window into the heap viewed as a series
+//! of consecutive chunks of memory, each at some power of two
+//! multiplied by PAGE_SIZE.
+struct BuddylistLevel
 {
-    List<Page, &Page::list_link> freelist_head;
+    typedef List<Page, &Page::list_link> FreelistType;
+
+    /*!
+     * Tracks the set of available PAGE_SIZE*2^k chunks
+     * of memory.
+     */
+    FreelistType * freelist_head;
+
+    /*!
+     * Storage pointed at by freelist_head
+     *
+     * We do this rather than just allocate freelist_head
+     * directly in the payload of BuddylistLevel to prevent
+     * its ctor from being automatically run during C++
+     * startup code. That would cause undefined ordering
+     * between the VM subsystem and the various slab allocators'
+     * (which are commonly declared as static global objects)
+     * ctors.
+     */
+    char storage[sizeof(*freelist_head)] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
 
     /* Each bitmap is an array of (num_pages / (2 << i)) flags */
     struct
@@ -21,12 +43,12 @@ typedef struct
         uint8_t *       elements;
     } bitmap;
 
-} buddylist_level;
+};
 
 /* The largest chunksize (in PAGE_SIZE * 2^k) that we'll track, plus 1 */
 #define NUM_BUDDYLIST_LEVELS 3
 
-static buddylist_level buddylists[NUM_BUDDYLIST_LEVELS];
+static BuddylistLevel buddylists[NUM_BUDDYLIST_LEVELS];
 
 static unsigned int     num_pages;
 static Page *           page_structs;
@@ -62,6 +84,11 @@ static void vm_init (void * ignored)
 {
     unsigned int page_structs_array_size;
     unsigned int i;
+
+    for (i = 0; i < NUM_BUDDYLIST_LEVELS; i++) {
+        buddylists[i].freelist_head = reinterpret_cast<BuddylistLevel::FreelistType *>(&buddylists[i].storage);
+        new (buddylists[i].freelist_head) BuddylistLevel::FreelistType();
+    }
 
     size_t page_count = PAGE_COUNT_FROM_SIZE(HEAP_SIZE);
 
@@ -113,7 +140,7 @@ static void vm_init (void * ignored)
 
         new (&page_structs[i].list_link) ListElement();
 
-        buddylists[buddy_level].freelist_head.Append(&page_structs[i]);
+        buddylists[buddy_level].freelist_head->Append(&page_structs[i]);
     }
 }
 
@@ -131,7 +158,7 @@ Page * vm_pages_alloc_internal (
     }
 
     /* If no block of the requested size is available, split a larger one */
-    if (buddylists[order].freelist_head.Empty()) {
+    if (buddylists[order].freelist_head->Empty()) {
         Page * block_to_split;
         Page * second_half_struct;
         VmAddr_t  second_half_address;
@@ -172,8 +199,8 @@ Page * vm_pages_alloc_internal (
         They'll be found immediately below in the code that extracts
         the block at the head of the list.
         */
-        buddylists[order].freelist_head.Append(block_to_split);
-        buddylists[order].freelist_head.Append(second_half_struct);
+        buddylists[order].freelist_head->Append(block_to_split);
+        buddylists[order].freelist_head->Append(second_half_struct);
     }
 
     /*
@@ -181,7 +208,7 @@ Page * vm_pages_alloc_internal (
      *
      * This will always find an entry on the first iteration.
      */
-    result = buddylists[order].freelist_head.PopFirst();
+    result = buddylists[order].freelist_head->PopFirst();
 
     /* Mark page as busy in whichever level's bitmap is appropriate. */
     if (mark_busy_in_bitmap) {
@@ -235,7 +262,7 @@ static void try_merge_block (Page * block, unsigned int order)
         List<Page, &Page::list_link>::Remove(partner);
 
         /* Insert lower of the two blocks into next blocksize's freelist. */
-        buddylists[order + 1].freelist_head.Append(merged_block);
+        buddylists[order + 1].freelist_head->Append(merged_block);
 
         /* Now try to merge at the next level. */
         try_merge_block(merged_block, order + 1);
@@ -269,7 +296,7 @@ void Page::Free (Page * page)
 
             /* Found it. Return to freelist and clear bitmap. Then done. */
             new (&page->list_link) ListElement();
-            buddylists[order].freelist_head.Prepend(page);
+            buddylists[order].freelist_head->Prepend(page);
             BitmapClear(buddylists[order].bitmap.elements, idx);
             try_merge_block(page, order);
             goto done;

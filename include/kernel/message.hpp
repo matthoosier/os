@@ -9,7 +9,9 @@
 
 #include <sys/decls.h>
 
+#include <kernel/assert.h>
 #include <kernel/list.hpp>
+#include <kernel/slaballocator.hpp>
 #include <kernel/smart-ptr.hpp>
 
 BEGIN_DECLS
@@ -79,8 +81,16 @@ public:
     };
 
 public:
-    void * operator new (size_t) throw (std::bad_alloc);
-    void operator delete (void *) throw ();
+    void * operator new (size_t size) throw (std::bad_alloc)
+    {
+        assert(size == sizeof(Message));
+        return sSlab.AllocateWithThrow();
+    }
+
+    void operator delete (void * mem) throw ()
+    {
+        sSlab.Free(mem);
+    }
 
     Message ();
     ~Message ();
@@ -110,6 +120,11 @@ public:
             );
 
 private:
+    /**
+     * @brief   Allocates memory for instances of Message
+     */
+    static SyncSlabAllocator<Message> sSlab;
+
     /**
      * @brief   The connection through which the sender sent this
      *          message
@@ -165,8 +180,16 @@ private:
 class Connection : public WeakPointee
 {
 public:
-    void * operator new (size_t) throw (std::bad_alloc);
-    void operator delete (void *) throw ();
+    void * operator new (size_t size) throw (std::bad_alloc)
+    {
+        assert(size == sizeof(Connection));
+        return sSlab.AllocateWithThrow();
+    }
+
+    void operator delete (void * mem) throw ()
+    {
+        sSlab.Free(mem);
+    }
 
     Connection (Channel * channel);
     ~Connection ();
@@ -204,6 +227,11 @@ public:
 
 private:
     /**
+     * @brief   Allocates instances of Connection
+     */
+    static SyncSlabAllocator<Connection> sSlab;
+
+    /**
      * @brief   All the senders who are queued waiting to send on
      *          this connection
      */
@@ -223,8 +251,16 @@ private:
 class Channel : public WeakPointee
 {
 public:
-    void * operator new (size_t) throw (std::bad_alloc);
-    void operator delete (void *) throw ();
+    void * operator new (size_t size) throw (std::bad_alloc)
+    {
+        assert(size == sizeof(Channel));
+        return sSlab.AllocateWithThrow();
+    }
+
+    void operator delete (void * mem) throw ()
+    {
+        sSlab.Free(mem);
+    }
 
     Channel ();
     ~Channel ();
@@ -243,6 +279,11 @@ public:
             );
 
 private:
+    /**
+     * @brief   Allocates instances of Channel
+     */
+    static SyncSlabAllocator<Channel> sSlab;
+
     /**
      * @brief   All the receivers who are queued waiting to receive
      *          on this channel

@@ -8,8 +8,6 @@
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
-#include <kernel/object-cache.hpp>
-#include <kernel/once.h>
 #include <kernel/process.hpp>
 #include <kernel/procmgr.hpp>
 #include <kernel/ramfs.h>
@@ -27,49 +25,13 @@ struct process_creation_context
     Semaphore   * baton;
 };
 
-/** Allocates instances of Process */
-static struct ObjectCache   process_cache;
-
-/** Allocates instances of 'Segment' */
-static struct ObjectCache   segment_cache;
-
-static Once_t               caches_init_control = ONCE_INIT;
-
 /** Allocates monotonically increasing process identifiers */
 static Pid_t get_next_pid (void);
-
-/** Fetches Pid_t -> (Process *) mappings */
-static Process * PidMapLookup (Pid_t key);
-static Process * PidMapInsert (Pid_t key, Process * process);
-static Process * PidMapRemove (Pid_t key);
 
 /** Terminates a process and removes registrations related to it */
 static void TerminateProcess (Process * p);
 
-static void init_caches (void * ignored)
-{
-    ObjectCacheInit(&process_cache, sizeof(Process));
-    ObjectCacheInit(&segment_cache, sizeof(Segment));
-}
-
-void * Segment::operator new (size_t size) throw (std::bad_alloc)
-{
-    void * ret;
-
-    Once(&caches_init_control, init_caches, NULL);
-    ret = ObjectCacheAlloc(&segment_cache);
-
-    if (!ret) {
-        throw std::bad_alloc();
-    }
-
-    return ret;
-}
-
-void Segment::operator delete (void * mem) throw ()
-{
-    ObjectCacheFree(&segment_cache, mem);
-}
+SyncSlabAllocator<Segment> Segment::sSlab;
 
 Segment::Segment (Process & p)
     : base(0)
@@ -99,24 +61,7 @@ Segment::~Segment ()
     }
 }
 
-void * Process::operator new (size_t size) throw (std::bad_alloc)
-{
-    void * ret;
-
-    Once(&caches_init_control, init_caches, NULL);
-    ret = ObjectCacheAlloc(&process_cache);
-
-    if (!ret) {
-        throw std::bad_alloc();
-    }
-
-    return ret;
-}
-
-void Process::operator delete (void * mem) throw ()
-{
-    ObjectCacheFree(&process_cache, mem);
-}
+SyncSlabAllocator<Process> Process::sSlab;
 
 Process::Process ()
     : pagetable(0)
@@ -227,7 +172,7 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
 
     /* Allocate, assign, and record Pid */
     p->pid = get_next_pid();
-    PidMapInsert(p->pid, p);
+    Process::Register(p->pid, p);
 
     /* Okay. Save reference to this process object into the current thread */
     p->thread = THREAD_CURRENT();
@@ -464,63 +409,43 @@ static Pid_t get_next_pid ()
     return counter++;
 }
 
-static Spinlock_t pid_map_lock = SPINLOCK_INIT;
+Spinlock_t Process::sPidMapSpinlock = SPINLOCK_INIT;
 
-typedef TreeMap<Pid_t, Process *> PidMap_t;
+Process::PidMap_t Process::sPidMap(
+        Process::PidMap_t::SignedIntCompareFunc
+        );
 
-static void alloc_pid_map (void * ppPidMap)
-{
-    PidMap_t ** ptrPtrPidMap = (PidMap_t **)ppPidMap;
-
-    *ptrPtrPidMap = new PidMap_t(PidMap_t::SignedIntCompareFunc);
-    assert(*ptrPtrPidMap != NULL);
-}
-
-static PidMap_t * get_pid_map ()
-{
-    static PidMap_t   * pid_map;
-    static Once_t       pid_map_once = ONCE_INIT;
-
-    Once(&pid_map_once, alloc_pid_map, &pid_map);
-    return pid_map;
-}
-
-static Process * PidMapLookup (Pid_t key)
+Process * Process::Register (Pid_t key, Process * process)
 {
     Process * ret;
 
-    SpinlockLock(&pid_map_lock);
-    ret = get_pid_map()->Lookup(key);
-    SpinlockUnlock(&pid_map_lock);
+    SpinlockLock(&sPidMapSpinlock);
+    ret = sPidMap.Insert(key, process);
+    SpinlockUnlock(&sPidMapSpinlock);
 
     return ret;
 }
 
-static Process * PidMapInsert (Pid_t key, Process * process)
+Process * Process::Remove (Pid_t key)
 {
     Process * ret;
 
-    SpinlockLock(&pid_map_lock);
-    ret = get_pid_map()->Insert(key, process);
-    SpinlockUnlock(&pid_map_lock);
-
-    return ret;
-}
-
-static Process * PidMapRemove (Pid_t key)
-{
-    Process * ret;
-
-    SpinlockLock(&pid_map_lock);
-    ret = get_pid_map()->Remove(key);
-    SpinlockUnlock(&pid_map_lock);
+    SpinlockLock(&sPidMapSpinlock);
+    ret = sPidMap.Remove(key);
+    SpinlockUnlock(&sPidMapSpinlock);
 
     return ret;
 }
 
 Process * Process::Lookup (Pid_t pid)
 {
-    return PidMapLookup(pid);
+    Process * ret;
+
+    SpinlockLock(&sPidMapSpinlock);
+    ret = sPidMap.Lookup(pid);
+    SpinlockUnlock(&sPidMapSpinlock);
+
+    return ret;
 }
 
 Pid_t Process::GetId ()
@@ -566,8 +491,8 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
 
     /* Allocate, assign, and record Pid */
     p->pid = PROCMGR_PID;
-    PidMapInsert(p->pid, p);
-    assert(PidMapLookup(p->pid) == p);
+    Process::Register(p->pid, p);
+    assert(Process::Lookup(p->pid) == p);
 
     /* Okay. Save reference to this process object into the current thread */
     p->thread = THREAD_CURRENT();
@@ -756,9 +681,9 @@ static void TerminateProcess (Process * process)
     Thread * t = process->GetThread();
 
     /* Get rid of mapping */
-    assert(PidMapLookup(process->GetId()) == process);
+    assert(Process::Lookup(process->GetId()) == process);
 
-    PidMapRemove(process->GetId());
+    Process::Remove(process->GetId());
 
     /* Reclaim all userspace resources */
     delete process;

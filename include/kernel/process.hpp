@@ -7,9 +7,11 @@
 #include <sys/error.h>
 #include <sys/spinlock.h>
 
+#include <kernel/assert.h>
 #include <kernel/list.hpp>
 #include <kernel/message.hpp>
 #include <kernel/mmu.hpp>
+#include <kernel/slaballocator.hpp>
 #include <kernel/smart-ptr.hpp>
 #include <kernel/tree-map.hpp>
 #include <kernel/vm.hpp>
@@ -38,12 +40,19 @@ public:
     /**
      * \brief   Instances are allocated from a slab
      */
-    void * operator new (size_t) throw (std::bad_alloc);
+    void * operator new (size_t size) throw (std::bad_alloc)
+    {
+        assert(size == sizeof(Segment));
+        return sSlab.AllocateWithThrow();
+    }
 
     /**
      * \brief   Instances are allocated from a slab
      */
-    void operator delete (void *) throw ();
+    void operator delete (void * mem) throw ()
+    {
+        sSlab.Free(mem);
+    }
 
     /**
      * \brief   Initialize a new Segment instance
@@ -56,6 +65,11 @@ public:
     ~Segment ();
 
 private:
+    /**
+     * \brief   Allocates instances of Segment
+     */
+    static SyncSlabAllocator<Segment> sSlab;
+
     /**
      * \brief   Hidden to prevent allocating arrays
      */
@@ -122,6 +136,8 @@ public:
     typedef TreeMap<Connection_t, Connection *> IdToConnectionMap_t;
     typedef TreeMap<int, Message *>             IdToMessageMap_t;
 
+    typedef TreeMap<Pid_t, Process *>           PidMap_t;
+
 public:
     /**
      * \brief   Fetches the value of the 'pagetable' field on a process object.
@@ -150,9 +166,23 @@ public:
     static Process * Create (const char executableName[]);
 
     /**
+     * \brief   Register a new process in the reverse mapping
+     *
+     * \return  Any previous process that was known by that PID
+     */
+    static Process * Register(Pid_t pid, Process * process);
+
+    /**
      * \brief   Fetch the process whose identifier is \a pid
      */
     static Process * Lookup (Pid_t pid);
+
+    /**
+     * \brief   Remove a process from the reverse mapping
+     *
+     * \return  The process that was found mapped to key
+     */
+    static Process * Remove (Pid_t pid);
 
     /**
      * \brief   Fetch the identifier of this process
@@ -181,12 +211,19 @@ public:
     /**
      * \brief   Instances are allocated from a slab
      */
-    void * operator new (size_t) throw (std::bad_alloc);
+    void * operator new (size_t size) throw (std::bad_alloc)
+    {
+        assert(size == sizeof(Process));
+        return sSlab.AllocateWithThrow();
+    }
 
     /**
      * \brief   Instances are allocated from a slab
      */
-    void operator delete (void *) throw ();
+    void operator delete (void * mem) throw ()
+    {
+        return sSlab.Free(mem);
+    }
 
     /**
      * \brief   Tear down a process instance
@@ -237,6 +274,22 @@ private:
     static void ManagerThreadBody (void *);
 
 private:
+    /**
+     * \brief   Allocates instances of Process
+     */
+    static SyncSlabAllocator<Process> sSlab;
+
+    /**
+     * \brief   Allows reverse lookup of integer PIDs to
+     *          processes
+     */
+    static PidMap_t sPidMap;
+
+    /**
+     * \brief   Protects access to sPidMap
+     */
+    static Spinlock_t sPidMapSpinlock;
+
     /**
      * \brief   Synchronization for this Process instance
      */

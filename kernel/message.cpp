@@ -1,26 +1,17 @@
 #include <string.h>
 
 #include <sys/error.h>
-#include <sys/spinlock.h>
 
 #include <kernel/assert.h>
 #include <kernel/list.hpp>
 #include <kernel/message.hpp>
 #include <kernel/mmu.hpp>
-#include <kernel/object-cache.hpp>
-#include <kernel/once.h>
+#include <kernel/slaballocator.hpp>
 #include <kernel/thread.hpp>
 
-static Once_t inited = ONCE_INIT;
-
-static struct ObjectCache   channel_cache;
-static Spinlock_t           channel_cache_lock = SPINLOCK_INIT;
-
-static struct ObjectCache   connection_cache;
-static Spinlock_t           connection_cache_lock = SPINLOCK_INIT;
-
-static struct ObjectCache   message_cache;
-static Spinlock_t           message_cache_lock = SPINLOCK_INIT;
+SyncSlabAllocator<Channel> Channel::sSlab;
+SyncSlabAllocator<Connection> Connection::sSlab;
+SyncSlabAllocator<Message> Message::sSlab;
 
 static ssize_t TransferPayload (
         Thread *        source_thread,
@@ -30,39 +21,6 @@ static ssize_t TransferPayload (
         void *          dest_buf,
         size_t          dest_len
         );
-
-static void init (void * ignored)
-{
-    ObjectCacheInit(&channel_cache, sizeof(Channel));
-    ObjectCacheInit(&connection_cache, sizeof(Connection));
-    ObjectCacheInit(&message_cache, sizeof(Message));
-}
-
-void * Channel::operator new (size_t size) throw (std::bad_alloc)
-{
-    void * ret;
-
-    Once(&inited, init, NULL);
-
-    SpinlockLock(&channel_cache_lock);
-    ret = ObjectCacheAlloc(&channel_cache);
-    SpinlockUnlock(&channel_cache_lock);
-
-    if (!ret) {
-        throw std::bad_alloc();
-    }
-
-    return ret;
-}
-
-void Channel::operator delete (void * mem) throw ()
-{
-    Once(&inited, init, NULL);
-
-    SpinlockLock(&channel_cache_lock);
-    ObjectCacheFree(&channel_cache, mem);
-    SpinlockUnlock(&channel_cache_lock);
-}
 
 Channel::Channel ()
 {
@@ -74,32 +32,6 @@ Channel::~Channel ()
     assert(this->unwaiting_clients.Empty());
     assert(this->receive_blocked_head.Empty());
     assert(this->link.Unlinked());
-}
-
-void * Connection::operator new (size_t size) throw (std::bad_alloc)
-{
-    void * ret;
-
-    Once(&inited, init, NULL);
-
-    SpinlockLock(&connection_cache_lock);
-    ret = ObjectCacheAlloc(&connection_cache);
-    SpinlockUnlock(&connection_cache_lock);
-
-    if (!ret) {
-        throw std::bad_alloc();
-    }
-
-    return ret;
-}
-
-void Connection::operator delete (void * mem) throw ()
-{
-    Once(&inited, init, NULL);
-
-    SpinlockLock(&connection_cache_lock);
-    ObjectCacheFree(&connection_cache, mem);
-    SpinlockUnlock(&connection_cache_lock);
 }
 
 Connection::Connection (Channel * server)
@@ -137,32 +69,6 @@ Connection::~Connection ()
     assert(this->send_blocked_head.Empty());
 }
 
-void * Message::operator new (size_t size) throw (std::bad_alloc)
-{
-    void * ret;
-
-    Once(&inited, init, NULL);
-
-    SpinlockLock(&message_cache_lock);
-    ret = ObjectCacheAlloc(&message_cache);
-    SpinlockUnlock(&message_cache_lock);
-
-    if (!ret) {
-        throw std::bad_alloc();
-    }
-
-    return ret;
-}
-
-void Message::operator delete (void * mem) throw ()
-{
-    Once(&inited, init, NULL);
-
-    SpinlockLock(&message_cache_lock);
-    ObjectCacheFree(&message_cache, mem);
-    SpinlockUnlock(&message_cache_lock);
-}
-
 Message::Message ()
     : connection ()
     , sender (NULL)
@@ -180,8 +86,6 @@ Message::~Message ()
 ssize_t Connection::SendMessageAsync (uintptr_t payload)
 {
     Message * message;
-
-    Once(&inited, init, NULL);
 
     if (this->channel->receive_blocked_head.Empty()) {
         /* No receiver thread is waiting on the channel at the moment */
@@ -233,8 +137,6 @@ ssize_t Connection::SendMessage (
 {
     Message * message;
     ssize_t result;
-
-    Once(&inited, init, NULL);
 
     if (this->channel->receive_blocked_head.Empty()) {
         /* No receiver thread is waiting on the channel at the moment */
@@ -309,8 +211,6 @@ ssize_t Channel::ReceiveMessage (
 {
     Message       * message;
     ssize_t         num_copied;
-
-    Once(&inited, init, NULL);
 
     if (this->waiting_clients.Empty()) {
         /* No message is waiting in the channel at the moment */
@@ -398,8 +298,6 @@ ssize_t Message::Reply (
         )
 {
     size_t result;
-
-    Once(&inited, init, NULL);
 
     /*
     Make sure that client process hasn't been torn down already. If it has,

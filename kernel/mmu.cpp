@@ -12,8 +12,7 @@
 #include <kernel/assert.h>
 #include <kernel/minmax.hpp>
 #include <kernel/mmu.hpp>
-#include <kernel/object-cache.hpp>
-#include <kernel/once.h>
+#include <kernel/slaballocator.hpp>
 #include <kernel/tree-map.hpp>
 #include <kernel/vm.hpp>
 
@@ -225,63 +224,17 @@ void MmuFlushTlb (void)
     );
 }
 
-/* Allocates translation_table's */
-static struct ObjectCache   translation_table_cache;
-static Spinlock_t           translation_table_cache_lock = SPINLOCK_INIT;
-
 /* Allocates secondlevel_table's */
-static struct ObjectCache   secondlevel_table_cache;
-static Spinlock_t           secondlevel_table_cache_lock = SPINLOCK_INIT;
+SyncSlabAllocator<SecondlevelTable> SecondlevelTable::sSlab;
 
 /* Allocates secondlevel_ptes's */
-static struct ObjectCache   secondlevel_ptes_cache;
-static Spinlock_t           secondlevel_ptes_cache_lock = SPINLOCK_INIT;
-
-static Once_t mmu_init_control = ONCE_INIT;
-
-static void mmu_static_init (void * ignored)
-{
-    ObjectCacheInit(&translation_table_cache, sizeof(TranslationTable));
-    ObjectCacheInit(&secondlevel_table_cache, sizeof(SecondlevelTable));
-    ObjectCacheInit(&secondlevel_ptes_cache, sizeof(struct SecondlevelPtes));
-}
-
-void * SecondlevelTable::operator new (size_t size) throw (std::bad_alloc)
-{
-    void * ret;
-
-    Once(&mmu_init_control, mmu_static_init, NULL);
-
-    SpinlockLock(&secondlevel_table_cache_lock);
-    ret = ObjectCacheAlloc(&secondlevel_table_cache);
-    SpinlockUnlock(&secondlevel_table_cache_lock);
-
-    if (ret != NULL) {
-        return ret;
-    } else {
-        throw std::bad_alloc();
-    }
-}
-
-void SecondlevelTable::operator delete (void * mem) throw ()
-{
-    SpinlockLock(&secondlevel_table_cache_lock);
-    ObjectCacheFree(&secondlevel_table_cache, mem);
-    SpinlockUnlock(&secondlevel_table_cache_lock);
-}
+SyncSlabAllocator<SecondlevelPtes> SecondlevelPtes::sSlab;
 
 SecondlevelTable::SecondlevelTable () throw (std::bad_alloc)
 {
     unsigned int i;
 
-    SpinlockLock(&secondlevel_ptes_cache_lock);
-    this->ptes = (struct SecondlevelPtes *)ObjectCacheAlloc(&secondlevel_ptes_cache);
-    SpinlockUnlock(&secondlevel_ptes_cache_lock);
-
-    if (!this->ptes)
-    {
-        throw std::bad_alloc();
-    }
+    this->ptes = SecondlevelPtes::sSlab.AllocateWithThrow();
 
     assert(N_ELEMENTS(this->ptes->ptes) == 256);
 
@@ -298,34 +251,10 @@ SecondlevelTable::~SecondlevelTable () throw ()
         List<SecondlevelTable, &SecondlevelTable::link>::Remove(this);
     }
 
-    SpinlockLock(&secondlevel_ptes_cache_lock);
-    ObjectCacheFree(&secondlevel_ptes_cache, this->ptes);
-    SpinlockUnlock(&secondlevel_ptes_cache_lock);
+    SecondlevelPtes::sSlab.Free(this->ptes);
 }
 
-void * TranslationTable::operator new (size_t size) throw (std::bad_alloc)
-{
-    void * ret;
-
-    Once(&mmu_init_control, mmu_static_init, NULL);
-
-    SpinlockLock(&translation_table_cache_lock);
-    ret = ObjectCacheAlloc(&translation_table_cache);
-    SpinlockUnlock(&translation_table_cache_lock);
-
-    if (ret != NULL) {
-        return ret;
-    } else {
-        throw std::bad_alloc();
-    }
-}
-
-void TranslationTable::operator delete (void * mem) throw ()
-{
-    SpinlockLock(&translation_table_cache_lock);
-    ObjectCacheFree(&translation_table_cache, mem);
-    SpinlockUnlock(&translation_table_cache_lock);
-}
+SyncSlabAllocator<TranslationTable> TranslationTable::sSlab;
 
 TranslationTable::TranslationTable () throw (std::bad_alloc)
 {

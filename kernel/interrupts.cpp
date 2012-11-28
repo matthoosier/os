@@ -13,9 +13,9 @@
 #include <kernel/interrupts.hpp>
 #include <kernel/message.hpp>
 #include <kernel/mmu.hpp>
-#include <kernel/object-cache.hpp>
 #include <kernel/once.h>
 #include <kernel/process.hpp>
+#include <kernel/slaballocator.hpp>
 
 static InterruptController * gController = 0;
 
@@ -271,24 +271,11 @@ void InterruptMaskIrq (int n)
     gController->MaskIrq(n);
 }
 
-static struct ObjectCache   user_interrupt_handler_cache;
-static Spinlock_t           user_interrupt_handler_cache_lock = SPINLOCK_INIT;
-static Once_t               user_interrupt_handler_cache_once = ONCE_INIT;
-
-static void user_interrupt_handler_cache_init (void * ignored)
-{
-    ObjectCacheInit(&user_interrupt_handler_cache, sizeof(struct UserInterruptHandlerRecord));
-}
+static SyncSlabAllocator<UserInterruptHandlerRecord> user_interrupt_handler_slab;
 
 struct UserInterruptHandlerRecord * UserInterruptHandlerRecordAlloc ()
 {
-    struct UserInterruptHandlerRecord * ret;
-
-    Once(&user_interrupt_handler_cache_once, user_interrupt_handler_cache_init, NULL);
-
-    SpinlockLock(&user_interrupt_handler_cache_lock);
-    ret = (struct UserInterruptHandlerRecord *)ObjectCacheAlloc(&user_interrupt_handler_cache);
-    SpinlockUnlock(&user_interrupt_handler_cache_lock);
+    struct UserInterruptHandlerRecord * ret = user_interrupt_handler_slab.Allocate();
 
     if (ret) {
         memset(ret, 0, sizeof(*ret));
@@ -300,9 +287,5 @@ struct UserInterruptHandlerRecord * UserInterruptHandlerRecordAlloc ()
 
 void UserInterruptHandlerRecordFree (struct UserInterruptHandlerRecord * record)
 {
-    Once(&user_interrupt_handler_cache_once, user_interrupt_handler_cache_init, NULL);
-
-    SpinlockLock(&user_interrupt_handler_cache_lock);
-    ObjectCacheFree(&user_interrupt_handler_cache, record);
-    SpinlockUnlock(&user_interrupt_handler_cache_lock);
+    user_interrupt_handler_slab.Free(record);
 }

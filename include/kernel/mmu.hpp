@@ -8,8 +8,10 @@
 
 #include <sys/decls.h>
 
+#include <kernel/assert.h>
 #include <kernel/list.hpp>
 #include <kernel/mmu-defs.h>
+#include <kernel/slaballocator.hpp>
 #include <kernel/smart-ptr.hpp>
 #include <kernel/tree-map.hpp>
 #include <kernel/vm.hpp>
@@ -32,8 +34,16 @@ public:
 
 public:
 
-    void *  operator new (size_t) throw (std::bad_alloc);
-    void    operator delete (void *) throw ();
+    void * operator new (size_t size) throw (std::bad_alloc)
+    {
+        assert(size == sizeof(TranslationTable));
+        return sSlab.AllocateWithThrow();
+    }
+
+    void operator delete (void * mem) throw ()
+    {
+        sSlab.Free(mem);
+    }
 
     TranslationTable () throw (std::bad_alloc);
     ~TranslationTable ();
@@ -116,13 +126,24 @@ public:
      * address space, that is not mapped.
      */
     VmAddr_t first_unmapped_page;
+
+private:
+    static SyncSlabAllocator<TranslationTable> sSlab;
 };
 
 class SecondlevelTable
 {
 public:
-    void *  operator new (size_t) throw (std::bad_alloc);
-    void    operator delete (void *) throw ();
+    void * operator new (size_t size) throw (std::bad_alloc)
+    {
+        assert(size == sizeof(SecondlevelTable));
+        return sSlab.AllocateWithThrow();
+    }
+
+    void operator delete (void * mem) throw ()
+    {
+        sSlab.Free(mem);
+    }
 
     SecondlevelTable () throw (std::bad_alloc);
     ~SecondlevelTable () throw ();
@@ -142,17 +163,26 @@ public:
     ListElement link;
 
     unsigned int num_mapped_pages;
+
+private:
+    static SyncSlabAllocator<SecondlevelTable> sSlab;
 };
 
 struct SecondlevelPtes
 {
-    /*
-    Each element describes one 4KB page.
+public:
+    friend class SecondlevelTable;
 
-    256 of these for each 1MB section mapping.
-    First element out of each 256 must be 1KB-aligned
-    */
+    /*!
+     * Each element describes one 4KB page.
+     *
+     * 256 of these for each 1MB section mapping.
+     * First element out of each 256 must be 1KB-aligned
+     */
     pt_secondlevel_t ptes[256];
+
+private:
+    static SyncSlabAllocator<SecondlevelPtes> sSlab;
 };
 
 BEGIN_DECLS
