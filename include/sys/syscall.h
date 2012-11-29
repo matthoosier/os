@@ -5,15 +5,21 @@
 
 BEGIN_DECLS
 
-#define SYS_BASE        0x100
-#define SYS_CHANNEL_CREATE  (SYS_BASE + 0)
-#define SYS_CHANNEL_DESTROY (SYS_BASE + 1)
-#define SYS_CONNECT         (SYS_BASE + 2)
-#define SYS_DISCONNECT      (SYS_BASE + 3)
-#define SYS_MSGSEND         (SYS_BASE + 4)
-#define SYS_MSGRECV         (SYS_BASE + 5)
-#define SYS_MSGREPLY        (SYS_BASE + 6)
-#define SYS_NUM_ECHO        (SYS_BASE + 7)
+enum
+{
+    SYS_BASE = 0x100,
+
+    SYS_CHANNEL_CREATE = SYS_BASE,
+    SYS_CHANNEL_DESTROY,
+    SYS_CONNECT,
+    SYS_DISCONNECT,
+    SYS_MSGSEND,
+    SYS_MSGRECV,
+    SYS_MSGREPLY,
+    SYS_MSGGETLEN,
+    SYS_MSGREAD,
+    SYS_NUM_ECHO,
+};
 
 /* Prototypes for userspace syscall stubs */
 extern int syscall0 (unsigned int number);

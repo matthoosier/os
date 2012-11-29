@@ -35,6 +35,14 @@ int MessageReceive (
         size_t msgbuf_len
         );
 
+int MessageGetLength (int rcvid);
+
+int MessageRead (
+        int msgid,
+        size_t src_offset,
+        void * dest,
+        size_t len);
+
 int MessageReply (
         int msgid,
         unsigned int status,

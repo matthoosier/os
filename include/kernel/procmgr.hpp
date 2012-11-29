@@ -17,10 +17,7 @@ BEGIN_DECLS
         ProcMgrRegisterMessageHandler(_type, _func);                        \
     }
 
-typedef void (*ProcMgrOperationFunc) (
-        Message * message,
-        const struct ProcMgrMessage * buf
-        );
+typedef void (*ProcMgrOperationFunc) (Message * message);
 
 void ProcMgrRegisterMessageHandler (
         enum ProcMgrMessageType type,

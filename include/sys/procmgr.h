@@ -11,6 +11,12 @@
 
 BEGIN_DECLS
 
+#define PROC_MGR_MSG_LEN(payload_name)                              \
+    (                                                               \
+    offsetof(struct ProcMgrMessage, payload.payload_name)           \
+    + sizeof(((struct ProcMgrMessage *)NULL)->payload.payload_name) \
+    )
+
 enum ProcMgrMessageType
 {
     PROC_MGR_MESSAGE_EXIT = 0,

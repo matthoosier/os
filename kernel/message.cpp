@@ -55,7 +55,7 @@ Connection::~Connection ()
         while (!this->send_blocked_head.Empty()) {
             Message * message = this->send_blocked_head.PopFirst();
 
-            if (message->sender) {
+            if (message->mSender) {
                 // Unblock sender; it'll deallocate the message when it returns
                 // out of SendMessage()
                 message->Reply(ERROR_NO_SYS, NULL, 0);
@@ -70,13 +70,13 @@ Connection::~Connection ()
 }
 
 Message::Message ()
-    : connection ()
-    , sender (NULL)
-    , receiver (NULL)
-    , result ()
+    : mConnection ()
+    , mSender (NULL)
+    , mReceiver (NULL)
+    , mResult ()
 {
-    memset(&this->send_data, 0, sizeof(this->send_data));
-    memset(&this->receive_data, 0, sizeof(this->receive_data));
+    memset(&mSendData, 0, sizeof(mSendData));
+    memset(&mReceiveData, 0, sizeof(mReceiveData));
 }
 
 Message::~Message ()
@@ -95,11 +95,11 @@ ssize_t Connection::SendMessageAsync (uintptr_t payload)
             return -ERROR_NO_MEM;
         }
 
-        message->connection = this;
-        message->sender = NULL;
-        message->send_data.async.payload = payload;
+        message->mConnection = this;
+        message->mSender = NULL;
+        message->mSendData.async.payload = payload;
 
-        message->receiver = NULL;
+        message->mReceiver = NULL;
 
         /* Enqueue message for delivery whenever receiver asks for it */
         if (this->send_blocked_head.Empty()) {
@@ -112,15 +112,15 @@ ssize_t Connection::SendMessageAsync (uintptr_t payload)
         /* Receiver thread is ready to go */
         message = this->channel->receive_blocked_head.PopFirst();
 
-        assert(message->receiver != NULL);
+        assert(message->mReceiver != NULL);
 
-        message->connection = this;
-        message->sender = NULL;
-        message->send_data.async.payload = payload;
+        message->mConnection = this;
+        message->mSender = NULL;
+        message->mSendData.async.payload = payload;
 
         /* Allow receiver to wake up */
         Thread::BeginTransactionDuringException();
-        Thread::MakeReady(message->receiver);
+        Thread::MakeReady(message->mReceiver);
         Thread::SetNeedResched();
         Thread::EndTransaction();
     }
@@ -146,14 +146,14 @@ ssize_t Connection::SendMessage (
             return -ERROR_NO_MEM;
         }
 
-        message->connection = this;
-        message->sender = THREAD_CURRENT();
-        message->send_data.sync.sender_msgbuf = msgbuf;
-        message->send_data.sync.sender_msgbuf_len = msgbuf_len;
-        message->send_data.sync.sender_replybuf = replybuf;
-        message->send_data.sync.sender_replybuf_len = replybuf_len;
+        message->mConnection = this;
+        message->mSender = THREAD_CURRENT();
+        message->mSendData.sync.sender_msgbuf = msgbuf;
+        message->mSendData.sync.sender_msgbuf_len = msgbuf_len;
+        message->mSendData.sync.sender_replybuf = replybuf;
+        message->mSendData.sync.sender_replybuf_len = replybuf_len;
 
-        message->receiver = NULL;
+        message->mReceiver = NULL;
 
         /* Enqueue as blocked on the channel */
         if (this->send_blocked_head.Empty()) {
@@ -171,21 +171,21 @@ ssize_t Connection::SendMessage (
         /* Receiver thread is ready to go */
         message = this->channel->receive_blocked_head.PopFirst();
 
-        assert(message->receiver != NULL);
+        assert(message->mReceiver != NULL);
 
-        message->connection = this;
-        message->sender = THREAD_CURRENT();
-        message->send_data.sync.sender_msgbuf = msgbuf;
-        message->send_data.sync.sender_msgbuf_len = msgbuf_len;
-        message->send_data.sync.sender_replybuf = replybuf;
-        message->send_data.sync.sender_replybuf_len = replybuf_len;
+        message->mConnection = this;
+        message->mSender = THREAD_CURRENT();
+        message->mSendData.sync.sender_msgbuf = msgbuf;
+        message->mSendData.sync.sender_msgbuf_len = msgbuf_len;
+        message->mSendData.sync.sender_replybuf = replybuf;
+        message->mSendData.sync.sender_replybuf_len = replybuf_len;
 
         /* Temporarily gift our priority to the message-handling thread */
-        message->receiver->SetEffectivePriority(THREAD_CURRENT()->effective_priority);
+        message->mReceiver->SetEffectivePriority(THREAD_CURRENT()->effective_priority);
 
         /* Now allow handler to run */
         Thread::BeginTransaction();
-        Thread::MakeReady(message->receiver);
+        Thread::MakeReady(message->mReceiver);
         Thread::MakeUnready(THREAD_CURRENT(), Thread::STATE_REPLY);
         Thread::RunNextThread();
         Thread::EndTransaction();
@@ -197,7 +197,7 @@ ssize_t Connection::SendMessage (
     the return value along.
     */
 
-    result = message->result;
+    result = message->mResult;
     delete message;
 
     return result;
@@ -220,12 +220,12 @@ ssize_t Channel::ReceiveMessage (
             return -ERROR_NO_MEM;
         }
 
-        message->receiver = THREAD_CURRENT();
-        message->receive_data.receiver_msgbuf = msgbuf;
-        message->receive_data.receiver_msgbuf_len = msgbuf_len;
+        message->mReceiver = THREAD_CURRENT();
+        message->mReceiveData.receiver_msgbuf = msgbuf;
+        message->mReceiveData.receiver_msgbuf_len = msgbuf_len;
 
-        message->sender = NULL;
-        message->connection = NULL;
+        message->mSender = NULL;
+        message->mConnection = NULL;
 
         /* Enqueue as blocked on the channel */
         this->receive_blocked_head.Append(message);
@@ -246,22 +246,22 @@ ssize_t Channel::ReceiveMessage (
             this->unwaiting_clients.Append(client);
         }
 
-        message->receiver = THREAD_CURRENT();
-        message->receive_data.receiver_msgbuf = msgbuf;
-        message->receive_data.receiver_msgbuf_len = msgbuf_len;
+        message->mReceiver = THREAD_CURRENT();
+        message->mReceiveData.receiver_msgbuf = msgbuf;
+        message->mReceiveData.receiver_msgbuf_len = msgbuf_len;
     }
 
-    if (message->sender != NULL) {
+    if (message->mSender != NULL) {
         /* Synchronous message */
         *context = message;
 
         num_copied = TransferPayload(
-                message->sender,
-                message->send_data.sync.sender_msgbuf,
-                message->send_data.sync.sender_msgbuf_len,
-                message->receiver,
-                message->receive_data.receiver_msgbuf,
-                message->receive_data.receiver_msgbuf_len
+                message->mSender,
+                message->mSendData.sync.sender_msgbuf,
+                message->mSendData.sync.sender_msgbuf_len,
+                message->mReceiver,
+                message->mReceiveData.receiver_msgbuf,
+                message->mReceiveData.receiver_msgbuf_len
                 );
     }
     else {
@@ -277,11 +277,11 @@ ssize_t Channel::ReceiveMessage (
 
         num_copied = TransferPayload(
                 sender_pagetable_thread,
-                &message->send_data.async.payload,
-                sizeof(message->send_data.async.payload),
-                message->receiver,
-                message->receive_data.receiver_msgbuf,
-                message->receive_data.receiver_msgbuf_len
+                &message->mSendData.async.payload,
+                sizeof(message->mSendData.async.payload),
+                message->mReceiver,
+                message->mReceiveData.receiver_msgbuf,
+                message->mReceiveData.receiver_msgbuf_len
                 );
 
         /* There will be no reply, so free the Message struct now */
@@ -290,6 +290,50 @@ ssize_t Channel::ReceiveMessage (
 
     return num_copied;
 } /* Channel::ReceiveMessage() */
+
+size_t Message::GetLength ()
+{
+    if (mSender != NULL) {
+        return mSendData.sync.sender_msgbuf_len;
+    } else {
+        return sizeof(mSendData.async.payload);
+    }
+}
+
+ssize_t Message::Read (
+        size_t src_offset,
+        void * dest,
+        size_t len
+        )
+{
+    if (mSender != NULL) {
+
+        if (src_offset > mSendData.sync.sender_msgbuf_len || len < 0) {
+            return 0;
+        }
+
+        return TransferPayload(
+                mSender,
+                (uint8_t *)mSendData.sync.sender_msgbuf + src_offset,
+                mSendData.sync.sender_msgbuf_len - src_offset,
+                THREAD_CURRENT(),
+                dest,
+                len);
+    } else {
+
+        if (src_offset > sizeof(mSendData.async.payload) || len < 0) {
+            return 0;
+        }
+
+        return TransferPayload(
+                THREAD_CURRENT(),   // Dummy sender; won't matter
+                (uint8_t *)&mSendData.async.payload + src_offset,
+                sizeof(mSendData.async.payload) - src_offset,
+                THREAD_CURRENT(),
+                dest,
+                len);
+    }
+}
 
 ssize_t Message::Reply (
         unsigned int status,
@@ -307,15 +351,15 @@ ssize_t Message::Reply (
     the weak-pointer 'connection' has been nulled out. That happens
     automatically when the object deconstructs itself.
     */
-    if (!this->connection) {
+    if (!mConnection) {
         delete this;
         return -ERROR_INVALID;
     }
 
-    assert(this->receiver == THREAD_CURRENT());
+    assert(mReceiver == THREAD_CURRENT());
 
-    this->receive_data.receiver_replybuf = replybuf;
-    this->receive_data.receiver_replybuf_len = replybuf_len;
+    mReceiveData.receiver_replybuf = replybuf;
+    mReceiveData.receiver_replybuf_len = replybuf_len;
 
     /*
     Releasing this thread to run again might make the receiver's reply
@@ -325,24 +369,24 @@ ssize_t Message::Reply (
     */
     if (status == ERROR_OK) {
         result = TransferPayload (
-                this->receiver,
-                this->receive_data.receiver_replybuf,
-                this->receive_data.receiver_replybuf_len,
-                this->sender,
-                this->send_data.sync.sender_replybuf,
-                this->send_data.sync.sender_replybuf_len
+                mReceiver,
+                mReceiveData.receiver_replybuf,
+                mReceiveData.receiver_replybuf_len,
+                mSender,
+                mSendData.sync.sender_replybuf,
+                mSendData.sync.sender_replybuf_len
                 );
-        this->result = result;
+        mResult = result;
     } else {
-        this->result = -status;
+        mResult = -status;
     }
 
-    result = status == ERROR_OK ? this->result : ERROR_OK;
+    result = status == ERROR_OK ? mResult : ERROR_OK;
 
     Thread::BeginTransaction();
 
     /* Sender will get to run again whenever a scheduling decision happens */
-    Thread::MakeReady(this->sender);
+    Thread::MakeReady(mSender);
 
     /* Abandon any temporary priority boost we had now that the sender is unblocked */
     THREAD_CURRENT()->SetEffectivePriority(THREAD_CURRENT()->assigned_priority);
@@ -360,12 +404,12 @@ ssize_t Message::Reply (
 
 Thread * Message::GetSender ()
 {
-    return this->sender;
+    return mSender;
 }
 
 Thread * Message::GetReceiver ()
 {
-    return this->receiver;
+    return mReceiver;
 }
 
 static ssize_t TransferPayload (

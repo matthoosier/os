@@ -7,14 +7,20 @@
 #include <kernel/procmgr.hpp>
 #include <kernel/thread.hpp>
 
-static void HandleInterruptAttach (
-        Message * message,
-        const struct ProcMgrMessage * buf
-        )
+static void HandleInterruptAttach (Message * message)
 {
+    struct ProcMgrMessage msg;
     struct ProcMgrReply reply;
     struct UserInterruptHandlerRecord * rec;
     Thread * sender;
+
+    ssize_t msg_len = PROC_MGR_MSG_LEN(interrupt_attach);
+    ssize_t len = message->Read(0, &msg, msg_len);
+
+    if (msg_len != len) {
+        message->Reply(ERROR_INVALID, NULL, 0);
+        return;
+    }
 
     memset(&reply, 0, sizeof(reply));
 
@@ -25,10 +31,10 @@ static void HandleInterruptAttach (
     } else {
         sender = message->GetSender();
 
-        rec->handler_info.irq_number = buf->payload.interrupt_attach.irq_number;
+        rec->handler_info.irq_number = msg.payload.interrupt_attach.irq_number;
         rec->handler_info.pid = sender->process->GetId();
-        rec->handler_info.coid = buf->payload.interrupt_attach.connection_id;
-        rec->handler_info.param = (uintptr_t)buf->payload.interrupt_attach.param;
+        rec->handler_info.coid = msg.payload.interrupt_attach.connection_id;
+        rec->handler_info.param = (uintptr_t)msg.payload.interrupt_attach.param;
 
         InterruptAttachUserHandler(rec);
 
@@ -42,32 +48,35 @@ static void HandleInterruptAttach (
 
 PROC_MGR_OPERATION(PROC_MGR_MESSAGE_INTERRUPT_ATTACH, HandleInterruptAttach)
 
-static void HandleInterruptComplete (
-        Message * message,
-        const struct ProcMgrMessage * buf
-        )
+static void HandleInterruptComplete (Message * message)
 {
+    struct ProcMgrMessage msg;
     struct UserInterruptHandlerRecord * rec;
 
-    rec = (struct UserInterruptHandlerRecord *)buf->payload.interrupt_complete.handler;
+    ssize_t msg_len = PROC_MGR_MSG_LEN(interrupt_complete);
+    ssize_t len = message->Read(0, &msg, msg_len);
+
+    if (msg_len != len) {
+        message->Reply(ERROR_INVALID, NULL, 0);
+        return;
+    }
+
+    rec = (struct UserInterruptHandlerRecord *)msg.payload.interrupt_complete.handler;
 
     if (rec) {
-        message->Reply(InterruptCompleteUserHandler(rec), buf, 0);
+        message->Reply(InterruptCompleteUserHandler(rec), NULL, 0);
     }
     else {
-        message->Reply(ERROR_INVALID, buf, 0);
+        message->Reply(ERROR_INVALID, NULL, 0);
     }
 }
 
 PROC_MGR_OPERATION(PROC_MGR_MESSAGE_INTERRUPT_COMPLETE, HandleInterruptComplete)
 
-static void HandleInterruptDetach (
-        Message * message,
-        const struct ProcMgrMessage * buf
-        )
+static void HandleInterruptDetach (Message * message)
 {
     /* TODO */
-    message->Reply(ERROR_NO_SYS, buf, 0);
+    message->Reply(ERROR_NO_SYS, NULL, 0);
 }
 
 PROC_MGR_OPERATION(PROC_MGR_MESSAGE_INTERRUPT_DETACH, HandleInterruptDetach)

@@ -119,6 +119,10 @@ public:
             size_t replybuf_len
             );
 
+    size_t GetLength ();
+
+    ssize_t Read (size_t src_offset, void * dest, size_t len);
+
 private:
     /**
      * @brief   Allocates memory for instances of Message
@@ -129,19 +133,19 @@ private:
      * @brief   The connection through which the sender sent this
      *          message
      */
-    WeakPtr<Connection> connection;
+    WeakPtr<Connection> mConnection;
 
     /**
      * @brief   The process sending this message
      *
      * NULL if the message is asynchronous
      */
-    Thread * sender;
+    Thread * mSender;
 
     /**
      * @brief   The process to whom the message is being sent
      */
-    Thread * receiver;
+    Thread * mReceiver;
 
     /**
      * @brief   All the metadata about the buffer addresses/sizes
@@ -151,24 +155,24 @@ private:
      * interpretation of the \c union is valid for this message
      * object.
      */
-    SenderBufferInfo send_data;
+    SenderBufferInfo mSendData;
 
     /**
      * @brief   All the metadata about the buffer addresses/sizes
      *          in the receiver's virtual memory
      */
-    ReceiverBufferInfo receive_data;
+    ReceiverBufferInfo mReceiveData;
 
     /**
      * @brief   Overall success status reported back to the sender
      */
-    ssize_t result;
+    ssize_t mResult;
 
     /**
      * @brief   Intrusive link for inserting this message object
      *          into linked lists of messages
      */
-    ListElement queue_link;
+    ListElement mQueueLink;
 
     friend class Channel;
     friend class Connection;
@@ -235,7 +239,7 @@ private:
      * @brief   All the senders who are queued waiting to send on
      *          this connection
      */
-    List<Message, &Message::queue_link> send_blocked_head;
+    List<Message, &Message::mQueueLink> send_blocked_head;
 
     /**
      * @brief   The server object to which this client is connected
@@ -288,7 +292,7 @@ private:
      * @brief   All the receivers who are queued waiting to receive
      *          on this channel
      */
-    List<Message, &Message::queue_link> receive_blocked_head;
+    List<Message, &Message::mQueueLink> receive_blocked_head;
 
     /**
      * @brief   Client connections to the channel, who have a message

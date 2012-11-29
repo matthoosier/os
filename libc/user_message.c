@@ -43,6 +43,20 @@ int MessageReceive (
     return syscall4(SYS_MSGRECV, chid, (int)rcvid, (int)msgbuf, msgbuf_len);
 }
 
+int MessageGetLength (int rcvid)
+{
+    return syscall1(SYS_MSGGETLEN, rcvid);
+}
+
+int MessageRead (
+        int rcvid,
+        size_t src_offset,
+        void * dest,
+        size_t len)
+{
+    return syscall4(SYS_MSGREAD, rcvid, (int)src_offset, (int)dest, (int)len);
+}
+
 int MessageReply (
         int rcvid,
         unsigned int status,

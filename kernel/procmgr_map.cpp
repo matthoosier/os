@@ -39,23 +39,29 @@ public:
 
 SyncSlabAllocator<MappedPage> MappedPage::sSlab;
 
-static void HandleMapPhys (
-        Message * message,
-        const struct ProcMgrMessage * buf
-        )
+static void HandleMapPhys (Message * message)
 {
+    struct ProcMgrMessage   msg;
     struct ProcMgrReply reply;
     PhysAddr_t          phys;
-    size_t              len;
+    size_t              len_to_map;
     VmAddr_t            virt;
     bool                mapped;
     unsigned int        i;
 
-    phys = buf->payload.map_phys.physaddr;
-    len = buf->payload.map_phys.len;
+    ssize_t msg_len = PROC_MGR_MSG_LEN(map_phys);
+    ssize_t actual_len = message->Read(0, &msg, msg_len);
 
-    if ((phys % PAGE_SIZE != 0) || (len < 0)) {
-        message->Reply(ERROR_INVALID, buf, 0);
+    if (actual_len != msg_len) {
+        message->Reply(ERROR_INVALID, NULL, 0);
+        return;
+    }
+
+    phys = msg.payload.map_phys.physaddr;
+    len_to_map = msg.payload.map_phys.len;
+
+    if ((phys % PAGE_SIZE != 0) || (len_to_map < 0)) {
+        message->Reply(ERROR_INVALID, NULL, 0);
     }
     else {
 
@@ -64,7 +70,7 @@ static void HandleMapPhys (
         MappedPage * page = 0;
         Thread * sender = message->GetSender();
 
-        for (i = 0; i < len; i += PAGE_SIZE) {
+        for (i = 0; i < len_to_map; i += PAGE_SIZE) {
 
             try {
                 page = new MappedPage();

@@ -510,14 +510,18 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
     caller_context->baton->Up();
 
     while (true) {
-        ssize_t len = channel->ReceiveMessage(&m, &buf, sizeof(buf));
+        ssize_t hdr_len = offsetof(struct ProcMgrMessage, type) + sizeof(buf.type);
+        ssize_t len = channel->ReceiveMessage(
+                &m,
+                &buf,
+                hdr_len);
 
-        if (len == sizeof(buf)) {
+        if (len == hdr_len) {
 
             ProcMgrOperationFunc handler = ProcMgrGetMessageHandler(buf.type);
 
             if (handler != NULL ) {
-                handler(m, &buf);
+                handler(m);
             } else {
                 m->Reply(ERROR_NO_SYS, &buf, 0);
             }
@@ -703,10 +707,7 @@ static void TerminateProcess (Process * process)
 /**
  * Handler for PROC_MGR_MESSAGE_EXIT.
  */
-static void HandleExitMessage (
-        Message * message,
-        const struct ProcMgrMessage * buf
-        )
+static void HandleExitMessage (Message * message)
 {
     Thread * sender = message->GetSender();
 
@@ -722,26 +723,33 @@ static void HandleExitMessage (
 /**
  * Handler for PROC_MGR_MESSAGE_SIGNAL
  */
-static void HandleSignalMessage (
-        Message * message,
-        const struct ProcMgrMessage * buf
-        )
+static void HandleSignalMessage (Message * message)
 {
-    Thread * sender = message->GetSender();
-    Process * senderProcess = sender->process;
-    Process * signalee = Process::Lookup(buf->payload.signal.signalee_pid);
+    struct ProcMgrMessage buf;
 
-    if (signalee) {
-        TerminateProcess(signalee);
+    ssize_t msg_len = PROC_MGR_MSG_LEN(signal);
+    ssize_t actual_len = message->Read(0, &buf, msg_len);
 
-        if (senderProcess == signalee) {
-            // Nobody around to return message to
-            delete message;
-        } else {
-            message->Reply(ERROR_OK, NULL, 0);
-        }
-    } else {
+    if (actual_len != msg_len) {
         message->Reply(ERROR_INVALID, NULL, 0);
+    }
+    else {
+        Thread * sender = message->GetSender();
+        Process * senderProcess = sender->process;
+        Process * signalee = Process::Lookup(buf.payload.signal.signalee_pid);
+
+        if (signalee) {
+            TerminateProcess(signalee);
+
+            if (senderProcess == signalee) {
+                // Nobody around to return message to
+                delete message;
+            } else {
+                message->Reply(ERROR_OK, NULL, 0);
+            }
+        } else {
+            message->Reply(ERROR_INVALID, NULL, 0);
+        }
     }
 }
 

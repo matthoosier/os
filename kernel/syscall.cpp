@@ -153,6 +153,33 @@ static ssize_t DoMessageReceive (
     return ret;
 }
 
+static size_t DoMessageGetLength (uintptr_t msgid)
+{
+    Message * m = THREAD_CURRENT()->process->LookupMessage(msgid);
+
+    if (m) {
+        return m->GetLength();
+    } else {
+        return -ERROR_INVALID;
+    }
+}
+
+static ssize_t DoMessageRead (
+        uintptr_t msgid,
+        size_t src_offset,
+        void * dest,
+        size_t len
+        )
+{
+    Message * m = THREAD_CURRENT()->process->LookupMessage(msgid);
+
+    if (m) {
+        return m->Read(src_offset, dest, len);
+    } else {
+        return -ERROR_INVALID;
+    }
+}
+
 static ssize_t DoMessageReply (
         uintptr_t msgid,
         unsigned int status,
@@ -223,6 +250,19 @@ void do_syscall (Thread * current)
                     (uintptr_t *)p_regs[1],
                     (void *)p_regs[2],
                     p_regs[3]
+                    );
+            break;
+
+        case SYS_MSGGETLEN:
+            p_regs[0] = DoMessageGetLength(p_regs[0]);
+            break;
+
+        case SYS_MSGREAD:
+            p_regs[0] = DoMessageRead(
+                    (uintptr_t)p_regs[0],
+                    (size_t)p_regs[1],
+                    (void *)p_regs[2],
+                    (size_t)p_regs[3]
                     );
             break;
 
