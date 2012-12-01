@@ -202,11 +202,6 @@ static ssize_t DoMessageReply (
     return ret;
 }
 
-static int DoEcho (int arg)
-{
-    return arg;
-}
-
 BEGIN_DECLS
 void do_syscall (Thread * current);
 END_DECLS
@@ -273,10 +268,6 @@ void do_syscall (Thread * current)
                     (void *)p_regs[2],
                     p_regs[3]
                     );
-            break;
-
-        case SYS_NUM_ECHO:
-            p_regs[0] = DoEcho(p_regs[0]);
             break;
 
         default:

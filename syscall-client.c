@@ -4,11 +4,6 @@
 #include <sys/process.h>
 
 int main () {
-    /* Test out basic syscall mechanism */
-    int result;
-    result = syscall1(SYS_NUM_ECHO, 37);
-    result = result;
-
     /* Send message to echo server */
     const char send[] = "Artoo";
     char reply[sizeof(send)];

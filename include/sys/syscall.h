@@ -18,7 +18,6 @@ enum
     SYS_MSGREPLY,
     SYS_MSGGETLEN,
     SYS_MSGREAD,
-    SYS_NUM_ECHO,
 };
 
 /* Prototypes for userspace syscall stubs */
