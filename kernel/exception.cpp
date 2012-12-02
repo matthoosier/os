@@ -16,7 +16,10 @@ void ScheduleSelfAbort ()
 
     message.type = PROC_MGR_MESSAGE_SIGNAL;
     message.payload.signal.signalee_pid = THREAD_CURRENT()->process->GetId();
-    connection->SendMessage(&message, sizeof(message), NULL, 0);
+
+    IoBuffer chunk(&message, sizeof(message));
+    IoBuffer reply(NULL, 0);
+    connection->SendMessage(&chunk, 1, &reply, 0);
 
     assert(false);
 }

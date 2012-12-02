@@ -4,9 +4,36 @@
 #include <sys/syscall.h>
 #include <sys/procmgr.h>
 
+#include <kernel/kmalloc.h>
 #include <kernel/message.hpp>
+#include <kernel/mmu.hpp>
 #include <kernel/process.hpp>
 #include <kernel/thread.hpp>
+
+static bool CopyIoVecToIoBuffer (TranslationTable * user_pagetable,
+                                 struct iovec const * user_iovec,
+                                 TranslationTable * kernel_pagetable,
+                                 IoBuffer * kernel_iobuf)
+{
+    struct iovec k_iovec;
+
+    ssize_t n = TranslationTable::CopyWithAddressSpaces(
+            user_pagetable,
+            user_iovec,
+            sizeof(*user_iovec),
+            kernel_pagetable,
+            &k_iovec,
+            sizeof(k_iovec)
+            );
+
+    if (n != sizeof(k_iovec)) {
+        return false;
+    }
+
+    *kernel_iobuf = IoBuffer(k_iovec.iov_base, k_iovec.iov_len);
+
+    return true;
+}
 
 static Channel_t DoChannelCreate ()
 {
@@ -100,22 +127,78 @@ static int DoDisconnect (Connection_t coid)
 
 static ssize_t DoMessageSend (
         Connection_t coid,
-        const void * msgbuf,
+        void * msgbuf,
         size_t msgbuf_len,
         void * replybuf,
         size_t replybuf_len
         )
 {
-    Connection * c;
-    int ret;
-
-    c = THREAD_CURRENT()->process->LookupConnection(coid);
+    Connection * c = THREAD_CURRENT()->process->LookupConnection(coid);
 
     if (!c) {
         return -ERROR_INVALID;
     }
 
-    ret = c->SendMessage(msgbuf, msgbuf_len, replybuf, replybuf_len);
+    return c->SendMessage(IoBuffer(msgbuf, msgbuf_len), IoBuffer(replybuf, replybuf_len));
+}
+
+static ssize_t DoMessageSendV (
+        Connection_t coid,
+        struct iovec const * user_msgv,
+        size_t msgv_count,
+        struct iovec const * user_replyv,
+        size_t replyv_count
+        )
+{
+    int ret;
+
+    TranslationTable * user_tt;
+    TranslationTable * kernel_tt;
+
+    Connection * c = THREAD_CURRENT()->process->LookupConnection(coid);
+
+    if (!c) {
+        return -ERROR_INVALID;
+    }
+
+    size_t k_msgv_sz = sizeof(IoBuffer) * msgv_count;
+    size_t k_replyv_sz = sizeof(IoBuffer) * replyv_count;
+
+    IoBuffer * k_msgv = (IoBuffer *)kmalloc(k_msgv_sz);
+    IoBuffer * k_replyv = (IoBuffer *)kmalloc(k_replyv_sz);
+
+    if (!k_msgv || !k_replyv) {
+        ret = -ERROR_NO_MEM;
+        goto free_bufs;
+    }
+
+    user_tt = TranslationTable::GetUser();
+    kernel_tt = TranslationTable::GetKernel();
+
+    for (size_t i = 0; i < msgv_count; ++i) {
+        if (!CopyIoVecToIoBuffer(user_tt, &user_msgv[i],
+                                 kernel_tt, &k_msgv[i]))
+        {
+            ret = -ERROR_INVALID;
+            goto free_bufs;
+        }
+    }
+
+    for (size_t i = 0; i < replyv_count; ++i) {
+        if (!CopyIoVecToIoBuffer(user_tt, &user_replyv[i],
+                                 kernel_tt, &k_replyv[i]))
+        {
+            ret = -ERROR_INVALID;
+            goto free_bufs;
+        }
+    }
+
+    ret = c->SendMessage(k_msgv, msgv_count,
+                         k_replyv, replyv_count);
+
+free_bufs:
+    if (k_msgv)     kfree(k_msgv, k_msgv_sz);
+    if (k_replyv)   kfree(k_msgv, k_replyv_sz);
 
     return ret;
 }
@@ -127,17 +210,15 @@ static ssize_t DoMessageReceive (
         size_t msgbuf_len
         )
 {
-    Channel * c;
     Message * m;
-    int ret;
 
-    c = THREAD_CURRENT()->process->LookupChannel(chid);
+    Channel * c = THREAD_CURRENT()->process->LookupChannel(chid);
 
     if (!c) {
         return -ERROR_INVALID;
     }
 
-    ret = c->ReceiveMessage(&m, msgbuf, msgbuf_len);
+    int ret = c->ReceiveMessage(&m, msgbuf, msgbuf_len);
 
     if (ret < 0) {
         *msgid = -1;
@@ -148,6 +229,63 @@ static ssize_t DoMessageReceive (
         else {
             *msgid = THREAD_CURRENT()->process->RegisterMessage(m);
         }
+    }
+
+    return ret;
+}
+
+static ssize_t DoMessageReceiveV (
+        Channel_t chid,
+        uintptr_t * msgid,
+        struct iovec const * user_msgv,
+        size_t msgv_count
+        )
+{
+    int ret;
+    Message * m;
+    Channel * c = THREAD_CURRENT()->process->LookupChannel(chid);
+
+    TranslationTable * user_tt = TranslationTable::GetUser();
+    TranslationTable * kernel_tt = TranslationTable::GetKernel();
+
+    if (!c) {
+        return -ERROR_INVALID;
+    }
+
+    size_t k_msgv_sz = sizeof(IoBuffer) * msgv_count;
+    IoBuffer * k_msgv = (IoBuffer *)kmalloc(k_msgv_sz);
+
+    if (!k_msgv) {
+        ret = -ERROR_NO_MEM;
+        goto free_buffers;
+    }
+
+    for (size_t i = 0; i < msgv_count; ++i) {
+        if (!CopyIoVecToIoBuffer(user_tt, &user_msgv[i],
+                                 kernel_tt, &k_msgv[i]))
+        {
+            ret = -ERROR_INVALID;
+            goto free_buffers;
+        }
+    }
+
+    ret = c->ReceiveMessage(&m, k_msgv, msgv_count);
+
+    if (ret < 0) {
+        *msgid = -1;
+    } else {
+        if (m == NULL) {
+            *msgid = 0;
+        }
+        else {
+            *msgid = THREAD_CURRENT()->process->RegisterMessage(m);
+        }
+    }
+
+free_buffers:
+
+    if (k_msgv) {
+        kfree(k_msgv, k_msgv_sz);
     }
 
     return ret;
@@ -180,6 +318,57 @@ static ssize_t DoMessageRead (
     }
 }
 
+static ssize_t DoMessageReadV (
+        uintptr_t msgid,
+        size_t src_offset,
+        struct iovec const * user_destv,
+        size_t destv_count
+        )
+{
+    int ret;
+    TranslationTable * user_tt;
+    TranslationTable * kernel_tt;
+    size_t k_destv_sz;
+    IoBuffer * k_destv = NULL;
+
+    Message * m = THREAD_CURRENT()->process->LookupMessage(msgid);
+
+    if (!m) {
+        ret = -ERROR_INVALID;
+        goto free_buffers;
+    }
+
+    k_destv_sz = sizeof(IoBuffer) * destv_count;
+    k_destv = (IoBuffer *)kmalloc(k_destv_sz);
+
+    if (!k_destv) {
+        ret = -ERROR_NO_MEM;
+        goto free_buffers;
+    }
+
+    user_tt = TranslationTable::GetUser();
+    kernel_tt = TranslationTable::GetKernel();
+
+    for (size_t i = 0; i < destv_count; ++i) {
+        if (!CopyIoVecToIoBuffer(user_tt, &user_destv[i],
+                                 kernel_tt, &k_destv[i]))
+        {
+            ret = -ERROR_INVALID;
+            goto free_buffers;
+        }
+    }
+
+    ret = m->Read(src_offset, k_destv, destv_count);
+
+free_buffers:
+
+    if (k_destv) {
+        kfree(k_destv, k_destv_sz);
+    }
+
+    return ret;
+}
+
 static ssize_t DoMessageReply (
         uintptr_t msgid,
         unsigned int status,
@@ -187,16 +376,64 @@ static ssize_t DoMessageReply (
         size_t replybuf_len
         )
 {
-    Message * m;
+    Message * m = THREAD_CURRENT()->process->LookupMessage(msgid);
+
+    if (!m) {
+        return -ERROR_INVALID;
+    }
+
+    THREAD_CURRENT()->process->UnregisterMessage(msgid);
+    return m->Reply(status, replybuf, replybuf_len);
+}
+
+static ssize_t DoMessageReplyV (
+        uintptr_t msgid,
+        unsigned int status,
+        struct iovec const * user_replyv,
+        size_t replyv_count
+        )
+{
     int ret;
+    Message * m;
+    IoBuffer * k_replyv = NULL;
+    size_t k_replyv_sz;
+    TranslationTable * user_tt;
+    TranslationTable * kernel_tt;
 
     m = THREAD_CURRENT()->process->LookupMessage(msgid);
 
-    if (m) {
-        THREAD_CURRENT()->process->UnregisterMessage(msgid);
-        ret = m->Reply(status, replybuf, replybuf_len);
-    } else {
+    if (!m) {
         ret = -ERROR_INVALID;
+        goto free_buffers;
+    }
+
+    k_replyv_sz = sizeof(IoBuffer) * replyv_count;
+    k_replyv = (IoBuffer *)kmalloc(k_replyv_sz);
+
+    if (!k_replyv) {
+        ret = -ERROR_NO_MEM;
+        goto free_buffers;
+    }
+
+    user_tt = TranslationTable::GetUser();
+    kernel_tt = TranslationTable::GetKernel();
+
+    for (size_t i = 0; i < replyv_count; ++i) {
+        if (!CopyIoVecToIoBuffer (user_tt, &user_replyv[i],
+                                  kernel_tt, &k_replyv[i]))
+        {
+            ret = -ERROR_INVALID;
+            goto free_buffers;
+        }
+    }
+
+    THREAD_CURRENT()->process->UnregisterMessage(msgid);
+    ret = m->Reply(status, k_replyv, replyv_count);
+
+free_buffers:
+
+    if (k_replyv) {
+        kfree(k_replyv, k_replyv_sz);
     }
 
     return ret;
@@ -231,22 +468,40 @@ void do_syscall (Thread * current)
 
         case SYS_MSGSEND:
             p_regs[0] = DoMessageSend(
-                    p_regs[0],
-                    (const void *)p_regs[1],
-                    p_regs[2],
+                    (Connection_t)p_regs[0],
+                    (void *)p_regs[1],
+                    (size_t)p_regs[2],
                     (void *)p_regs[3],
-                    p_regs[4]
+                    (size_t)p_regs[4]
+                    );
+            break;
+
+        case SYS_MSGSENDV:
+            p_regs[0] = DoMessageSendV(
+                    (Connection_t)p_regs[0],
+                    (struct iovec const *)p_regs[1],
+                    (size_t)p_regs[2],
+                    (struct iovec const *)p_regs[3],
+                    (size_t)p_regs[4]
                     );
             break;
 
         case SYS_MSGRECV:
             p_regs[0] = DoMessageReceive(
-                    p_regs[0],
+                    (Channel_t)p_regs[0],
                     (uintptr_t *)p_regs[1],
                     (void *)p_regs[2],
-                    p_regs[3]
+                    (size_t)p_regs[3]
                     );
             break;
+
+        case SYS_MSGRECVV:
+            p_regs[0] = DoMessageReceiveV(
+                    (Channel_t)p_regs[0],
+                    (uintptr_t *)p_regs[1],
+                    (struct iovec const *)p_regs[2],
+                    (size_t)p_regs[3]
+                    );
 
         case SYS_MSGGETLEN:
             p_regs[0] = DoMessageGetLength(p_regs[0]);
@@ -261,12 +516,30 @@ void do_syscall (Thread * current)
                     );
             break;
 
+        case SYS_MSGREADV:
+            p_regs[0] = DoMessageReadV(
+                    (uintptr_t)p_regs[0],
+                    (size_t)p_regs[1],
+                    (struct iovec const *)p_regs[2],
+                    (size_t)p_regs[3]
+                    );
+            break;
+
         case SYS_MSGREPLY:
             p_regs[0] = DoMessageReply(
-                    p_regs[0],
+                    (uintptr_t)p_regs[0],
                     p_regs[1],
                     (void *)p_regs[2],
-                    p_regs[3]
+                    (size_t)p_regs[3]
+                    );
+            break;
+
+        case SYS_MSGREPLYV:
+            p_regs[0] = DoMessageReplyV(
+                    (uintptr_t)p_regs[0],
+                    p_regs[1],
+                    (struct iovec const *)p_regs[2],
+                    (size_t)p_regs[3]
                     );
             break;
 

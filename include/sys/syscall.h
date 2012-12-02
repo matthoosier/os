@@ -14,10 +14,14 @@ enum
     SYS_CONNECT,
     SYS_DISCONNECT,
     SYS_MSGSEND,
+    SYS_MSGSENDV,
     SYS_MSGRECV,
+    SYS_MSGRECVV,
     SYS_MSGREPLY,
+    SYS_MSGREPLYV,
     SYS_MSGGETLEN,
     SYS_MSGREAD,
+    SYS_MSGREADV,
 };
 
 /* Prototypes for userspace syscall stubs */

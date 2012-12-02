@@ -2,9 +2,11 @@
 
 #include <sys/error.h>
 
+#include <kernel/array.h>
 #include <kernel/assert.h>
 #include <kernel/list.hpp>
 #include <kernel/message.hpp>
+#include <kernel/minmax.hpp>
 #include <kernel/mmu.hpp>
 #include <kernel/slaballocator.hpp>
 #include <kernel/thread.hpp>
@@ -12,6 +14,20 @@
 SyncSlabAllocator<Channel> Channel::sSlab;
 SyncSlabAllocator<Connection> Connection::sSlab;
 SyncSlabAllocator<Message> Message::sSlab;
+
+static bool FindChunkOffset (IoVector const & iov,
+                             size_t skip_bytes_count,
+                             size_t & found_chunk_idx,
+                             size_t & found_chunk_skip_bytes);
+
+static ssize_t TransferPayloadV (
+        Thread *         source_thread,
+        IoVector const & source_iov,
+        size_t           source_skip_bytes,
+        Thread *         dest_thread,
+        IoVector const & dest_iov,
+        size_t           dest_skip_bytes
+        );
 
 static ssize_t TransferPayload (
         Thread *        source_thread,
@@ -58,7 +74,7 @@ Connection::~Connection ()
             if (message->mSender) {
                 // Unblock sender; it'll deallocate the message when it returns
                 // out of SendMessage()
-                message->Reply(ERROR_NO_SYS, NULL, 0);
+                message->Reply(ERROR_NO_SYS, &IoBuffer::GetEmpty(), 1);
             } else {
                 // Async message; no reply needed. Just directly deallocate.
                 delete message;
@@ -129,10 +145,10 @@ ssize_t Connection::SendMessageAsync (uintptr_t payload)
 }
 
 ssize_t Connection::SendMessage (
-        const void    * msgbuf,
-        size_t          msgbuf_len,
-        void          * replybuf,
-        size_t          replybuf_len
+        IoBuffer const msgv[],
+        size_t         msgv_count,
+        IoBuffer const replyv[],
+        size_t         replyv_count
         )
 {
     Message * message;
@@ -148,10 +164,10 @@ ssize_t Connection::SendMessage (
 
         message->mConnection = this;
         message->mSender = THREAD_CURRENT();
-        message->mSendData.sync.sender_msgbuf = msgbuf;
-        message->mSendData.sync.sender_msgbuf_len = msgbuf_len;
-        message->mSendData.sync.sender_replybuf = replybuf;
-        message->mSendData.sync.sender_replybuf_len = replybuf_len;
+        message->mSendData.sync.msgv = msgv;
+        message->mSendData.sync.msgv_count = msgv_count;
+        message->mSendData.sync.replyv = replyv;
+        message->mSendData.sync.replyv_count = replyv_count;
 
         message->mReceiver = NULL;
 
@@ -175,10 +191,10 @@ ssize_t Connection::SendMessage (
 
         message->mConnection = this;
         message->mSender = THREAD_CURRENT();
-        message->mSendData.sync.sender_msgbuf = msgbuf;
-        message->mSendData.sync.sender_msgbuf_len = msgbuf_len;
-        message->mSendData.sync.sender_replybuf = replybuf;
-        message->mSendData.sync.sender_replybuf_len = replybuf_len;
+        message->mSendData.sync.msgv = msgv;
+        message->mSendData.sync.msgv_count = msgv_count;
+        message->mSendData.sync.replyv = replyv;
+        message->mSendData.sync.replyv_count = replyv_count;
 
         /* Temporarily gift our priority to the message-handling thread */
         message->mReceiver->SetEffectivePriority(THREAD_CURRENT()->effective_priority);
@@ -205,8 +221,8 @@ ssize_t Connection::SendMessage (
 
 ssize_t Channel::ReceiveMessage (
         Message  ** context,
-        void      * msgbuf,
-        size_t      msgbuf_len
+        IoBuffer const msgv[],
+        size_t msgv_count
         )
 {
     Message       * message;
@@ -221,8 +237,8 @@ ssize_t Channel::ReceiveMessage (
         }
 
         message->mReceiver = THREAD_CURRENT();
-        message->mReceiveData.receiver_msgbuf = msgbuf;
-        message->mReceiveData.receiver_msgbuf_len = msgbuf_len;
+        message->mReceiveData.msgv = msgv;
+        message->mReceiveData.msgv_count = msgv_count;
 
         message->mSender = NULL;
         message->mConnection = NULL;
@@ -247,41 +263,46 @@ ssize_t Channel::ReceiveMessage (
         }
 
         message->mReceiver = THREAD_CURRENT();
-        message->mReceiveData.receiver_msgbuf = msgbuf;
-        message->mReceiveData.receiver_msgbuf_len = msgbuf_len;
+        message->mReceiveData.msgv = msgv;
+        message->mReceiveData.msgv_count = msgv_count;
     }
 
     if (message->mSender != NULL) {
         /* Synchronous message */
         *context = message;
 
-        num_copied = TransferPayload(
+        num_copied = TransferPayloadV(
                 message->mSender,
-                message->mSendData.sync.sender_msgbuf,
-                message->mSendData.sync.sender_msgbuf_len,
+                IoVector(message->mSendData.sync.msgv,
+                         message->mSendData.sync.msgv_count),
+                0,
                 message->mReceiver,
-                message->mReceiveData.receiver_msgbuf,
-                message->mReceiveData.receiver_msgbuf_len
+                IoVector(message->mReceiveData.msgv,
+                         message->mReceiveData.msgv_count),
+                0
                 );
     }
     else {
         /* Asynchronous message */
         *context = NULL;
 
+        IoBuffer payload_chunk(message->mSendData.async.payload);
+
         /*
         Slight hack. Just need to nominate some thread (the current one
-        will do) whose pagetable can be used for the upcoming TransferPayload()
+        will do) whose pagetable can be used for the upcoming TransferPayloadV()
         call.
         */
         Thread * sender_pagetable_thread = THREAD_CURRENT();
 
-        num_copied = TransferPayload(
+        num_copied = TransferPayloadV(
                 sender_pagetable_thread,
-                &message->mSendData.async.payload,
-                sizeof(message->mSendData.async.payload),
+                IoVector(&payload_chunk, 1),
+                0,
                 message->mReceiver,
-                message->mReceiveData.receiver_msgbuf,
-                message->mReceiveData.receiver_msgbuf_len
+                IoVector(message->mReceiveData.msgv,
+                         message->mReceiveData.msgv_count),
+                0
                 );
 
         /* There will be no reply, so free the Message struct now */
@@ -294,51 +315,53 @@ ssize_t Channel::ReceiveMessage (
 size_t Message::GetLength ()
 {
     if (mSender != NULL) {
-        return mSendData.sync.sender_msgbuf_len;
+        return IoVector(mSendData.sync.msgv,
+                        mSendData.sync.msgv_count).Length();
     } else {
         return sizeof(mSendData.async.payload);
     }
 }
 
-ssize_t Message::Read (
-        size_t src_offset,
-        void * dest,
-        size_t len
-        )
+ssize_t Message::Read (size_t src_offset,
+                       IoBuffer const destv[],
+                       size_t destv_count)
 {
     if (mSender != NULL) {
 
-        if (src_offset > mSendData.sync.sender_msgbuf_len || len < 0) {
+        IoVector srcVector(mSendData.sync.msgv,
+                           mSendData.sync.msgv_count);
+
+        IoVector dstVector(destv, destv_count);
+
+        if (src_offset >= srcVector.Length() || dstVector.Length() < 0) {
             return 0;
         }
 
-        return TransferPayload(
-                mSender,
-                (uint8_t *)mSendData.sync.sender_msgbuf + src_offset,
-                mSendData.sync.sender_msgbuf_len - src_offset,
-                THREAD_CURRENT(),
-                dest,
-                len);
+        return TransferPayloadV(mSender, srcVector, src_offset,
+                                THREAD_CURRENT(), dstVector, 0);
     } else {
 
-        if (src_offset > sizeof(mSendData.async.payload) || len < 0) {
+        if (src_offset > sizeof(mSendData.async.payload)) {
             return 0;
         }
 
-        return TransferPayload(
+        IoBuffer chunk((uint8_t *)&mSendData.async.payload + src_offset,
+                    sizeof(mSendData.async.payload) - src_offset);
+
+        return TransferPayloadV(
                 THREAD_CURRENT(),   // Dummy sender; won't matter
-                (uint8_t *)&mSendData.async.payload + src_offset,
-                sizeof(mSendData.async.payload) - src_offset,
+                IoVector(&chunk, 1),
+                0,
                 THREAD_CURRENT(),
-                dest,
-                len);
+                IoVector(destv, destv_count),
+                0);
     }
 }
 
 ssize_t Message::Reply (
         unsigned int status,
-        const void * replybuf,
-        size_t replybuf_len
+        IoBuffer const replyv[],
+        size_t replyv_count
         )
 {
     size_t result;
@@ -358,8 +381,8 @@ ssize_t Message::Reply (
 
     assert(mReceiver == THREAD_CURRENT());
 
-    mReceiveData.receiver_replybuf = replybuf;
-    mReceiveData.receiver_replybuf_len = replybuf_len;
+    mReceiveData.replyv = replyv;
+    mReceiveData.replyv_count = replyv_count;
 
     /*
     Releasing this thread to run again might make the receiver's reply
@@ -368,13 +391,15 @@ ssize_t Message::Reply (
     space's replybuf.
     */
     if (status == ERROR_OK) {
-        result = TransferPayload (
+        result = TransferPayloadV (
                 mReceiver,
-                mReceiveData.receiver_replybuf,
-                mReceiveData.receiver_replybuf_len,
+                IoVector(mReceiveData.replyv,
+                         mReceiveData.replyv_count),
+                0,
                 mSender,
-                mSendData.sync.sender_replybuf,
-                mSendData.sync.sender_replybuf_len
+                IoVector(mSendData.sync.replyv,
+                         mSendData.sync.replyv_count),
+                0
                 );
         mResult = result;
     } else {
@@ -410,6 +435,91 @@ Thread * Message::GetSender ()
 Thread * Message::GetReceiver ()
 {
     return mReceiver;
+}
+
+__attribute__((used))
+static bool FindChunkOffset (IoVector const & iov,
+                             size_t skip_bytes_count,
+                             size_t & found_chunk_idx,
+                             size_t & found_chunk_skip_bytes)
+{
+    IoBuffer const * bufs = iov.GetBuffers();
+    size_t skipped_bytes = 0;
+
+    for (size_t idx = 0; idx < iov.GetCount(); ++idx)
+    {
+        if (skip_bytes_count < skipped_bytes + bufs[idx].mLength) {
+            found_chunk_idx = idx;
+            found_chunk_skip_bytes = skip_bytes_count - skipped_bytes;
+            return true;
+        }
+
+        skipped_bytes += bufs[idx].mLength;
+    }
+
+    return false;
+}
+
+static ssize_t TransferPayloadV (
+        Thread *         source_thread,
+        IoVector const & source_iov,
+        size_t           source_skip_bytes,
+        Thread *         dest_thread,
+        IoVector const & dest_iov,
+        size_t           dest_skip_bytes
+        )
+{
+    size_t remaining = MIN(source_iov.Length() - source_skip_bytes,
+                           dest_iov.Length() - dest_skip_bytes);
+    size_t transferred = 0;
+
+    while (remaining > 0) {
+        size_t src_chunk_idx;
+        size_t src_chunk_skip;
+
+        size_t dst_chunk_idx;
+        size_t dst_chunk_skip;
+
+        bool found_src = FindChunkOffset(source_iov,
+                                         transferred + source_skip_bytes,
+                                         src_chunk_idx,
+                                         src_chunk_skip);
+
+        bool found_dst = FindChunkOffset(dest_iov,
+                                         transferred + dest_skip_bytes,
+                                         dst_chunk_idx,
+                                         dst_chunk_skip);
+
+        if (found_src && found_dst) {
+
+            IoBuffer const * src_chunk = &source_iov.GetBuffers()[src_chunk_idx];
+            IoBuffer const * dst_chunk = &dest_iov.GetBuffers()[dst_chunk_idx];
+
+            size_t n = MIN(MIN(remaining,
+                               src_chunk->mLength - src_chunk_skip),
+                           MIN(remaining,
+                               dst_chunk->mLength - dst_chunk_skip));
+
+            size_t actual = TransferPayload(source_thread,
+                                            src_chunk->mData + src_chunk_skip,
+                                            n,
+                                            dest_thread,
+                                            dst_chunk->mData + dst_chunk_skip,
+                                            n);
+
+            remaining -= actual;
+            transferred += actual;
+
+            if (actual < n) {
+                break;
+            }
+        }
+        else {
+            break;
+        }
+    }
+
+    return transferred;
 }
 
 static ssize_t TransferPayload (

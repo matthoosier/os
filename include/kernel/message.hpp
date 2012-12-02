@@ -10,6 +10,7 @@
 #include <sys/decls.h>
 
 #include <kernel/assert.h>
+#include <kernel/io.hpp>
 #include <kernel/list.hpp>
 #include <kernel/slaballocator.hpp>
 #include <kernel/smart-ptr.hpp>
@@ -52,11 +53,11 @@ public:
      */
     struct ReceiverBufferInfo
     {
-        void * receiver_msgbuf;
-        size_t receiver_msgbuf_len;
+        IoBuffer const * msgv;
+        size_t msgv_count;
 
-        const void * receiver_replybuf;
-        size_t receiver_replybuf_len;
+        IoBuffer const * replyv;
+        size_t replyv_count;
     };
 
     /**
@@ -67,11 +68,11 @@ public:
     {
         struct
         {
-            const void * sender_msgbuf;
-            size_t sender_msgbuf_len;
+            IoBuffer const * msgv;
+            size_t msgv_count;
 
-            void * sender_replybuf;
-            size_t sender_replybuf_len;
+            IoBuffer const * replyv;
+            size_t replyv_count;
         }  sync;
 
         struct
@@ -113,15 +114,42 @@ public:
      *          If less than zero, then an error happened and the specific
      *          \c Error_t value is found by negating the return value.
      */
-    ssize_t Reply (
-            unsigned int status,
-            const void * replybuf,
-            size_t replybuf_len
-            );
+    ssize_t Reply (unsigned int status,
+                   IoBuffer const replyv[],
+                   size_t replyv_count);
+
+
+    inline ssize_t Reply (unsigned int status,
+                          IoBuffer const & reply)
+    {
+        return Reply(status, &reply, 1);
+    }
+
+    inline ssize_t Reply (unsigned int status,
+                          void * reply_buf,
+                          size_t reply_buf_len)
+    {
+        return Reply(status, IoBuffer(reply_buf, reply_buf_len));
+    }
+
+    ssize_t Read (size_t src_offset,
+                  IoBuffer const destv[],
+                  size_t destv_count);
+
+    inline ssize_t Read (size_t src_offset,
+                         IoBuffer const & dest)
+    {
+        return Read(src_offset, &dest, 1);
+    }
+
+    inline ssize_t Read (size_t src_offset,
+                         void * dest_buf,
+                         size_t dest_buf_len)
+    {
+        return Read(src_offset, IoBuffer(dest_buf, dest_buf_len));
+    }
 
     size_t GetLength ();
-
-    ssize_t Read (size_t src_offset, void * dest, size_t len);
 
 private:
     /**
@@ -206,12 +234,23 @@ public:
      *          the specific \c Error_t value is found by negating the
      *          return value.
      */
-    ssize_t SendMessage (
-            const void    * msgbuf,
-            size_t          msgbuf_len,
-            void          * replybuf,
-            size_t          replybuf_len
-            );
+    ssize_t SendMessage (IoBuffer const msgv[],
+                         size_t msgv_count,
+                         IoBuffer const replyv[],
+                         size_t replyv_count);
+
+    inline ssize_t SendMessage (IoBuffer const & msg,
+                                IoBuffer const & reply)
+    {
+        return SendMessage(&msg, 1, &reply, 1);
+    }
+
+    inline ssize_t SendMessage (void * msg_buf, size_t msg_buf_len,
+                                void * reply_buf, size_t reply_buf_len)
+    {
+        return SendMessage(IoBuffer(msg_buf, msg_buf_len),
+                           IoBuffer(reply_buf, reply_buf_len));
+    }
 
     /**
      * @brief   Asynchronously send a bounded-size message
@@ -276,11 +315,22 @@ public:
      *          If less than zero, then an error happened and the specific
      *          \c Error_t value is found by negating the return value.
      */
-    ssize_t ReceiveMessage (
-            Message  ** context,
-            void      * msgbuf,
-            size_t      msgbuf_len
-            );
+    ssize_t ReceiveMessage (Message ** context,
+                            IoBuffer const msgv[],
+                            size_t msgv_count);
+
+    inline ssize_t ReceiveMessage (Message ** context,
+                                   IoBuffer const & msg)
+    {
+        return ReceiveMessage(context, &msg, 1);
+    }
+
+    ssize_t ReceiveMessage (Message ** context,
+                            void * msg_buf,
+                            size_t msg_buf_len)
+    {
+        return ReceiveMessage(context, IoBuffer(msg_buf, msg_buf_len));
+    }
 
 private:
     /**

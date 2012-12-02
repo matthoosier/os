@@ -53,7 +53,7 @@ static void HandleMapPhys (Message * message)
     ssize_t actual_len = message->Read(0, &msg, msg_len);
 
     if (actual_len != msg_len) {
-        message->Reply(ERROR_INVALID, NULL, 0);
+        message->Reply(ERROR_INVALID, IoBuffer::GetEmpty());
         return;
     }
 
@@ -61,7 +61,7 @@ static void HandleMapPhys (Message * message)
     len_to_map = msg.payload.map_phys.len;
 
     if ((phys % PAGE_SIZE != 0) || (len_to_map < 0)) {
-        message->Reply(ERROR_INVALID, NULL, 0);
+        message->Reply(ERROR_INVALID, IoBuffer::GetEmpty());
     }
     else {
 

@@ -91,7 +91,7 @@ static void ForeachMessage (
     // So, each of these has a client send-blocked on it. Just reply back
     // with a failure code. The client will be responsible for deallocating
     // the message instance.
-    message->Reply(ERROR_NO_SYS, NULL, 0);
+    message->Reply(ERROR_NO_SYS, IoBuffer::GetEmpty());
 }
 
 static void ForeachConnection (
@@ -511,10 +511,7 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
 
     while (true) {
         ssize_t hdr_len = offsetof(struct ProcMgrMessage, type) + sizeof(buf.type);
-        ssize_t len = channel->ReceiveMessage(
-                &m,
-                &buf,
-                hdr_len);
+        ssize_t len = channel->ReceiveMessage(&m, &buf, hdr_len);
 
         if (len == hdr_len) {
 
@@ -731,7 +728,7 @@ static void HandleSignalMessage (Message * message)
     ssize_t actual_len = message->Read(0, &buf, msg_len);
 
     if (actual_len != msg_len) {
-        message->Reply(ERROR_INVALID, NULL, 0);
+        message->Reply(ERROR_INVALID, IoBuffer::GetEmpty());
     }
     else {
         Thread * sender = message->GetSender();
@@ -745,10 +742,10 @@ static void HandleSignalMessage (Message * message)
                 // Nobody around to return message to
                 delete message;
             } else {
-                message->Reply(ERROR_OK, NULL, 0);
+                message->Reply(ERROR_OK, IoBuffer::GetEmpty());
             }
         } else {
-            message->Reply(ERROR_INVALID, NULL, 0);
+            message->Reply(ERROR_INVALID, IoBuffer::GetEmpty());
         }
     }
 }
