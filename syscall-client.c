@@ -15,7 +15,7 @@ int main () {
     /* Send message to echo server */
     char msg[] = "Artoo";
     char reply[sizeof(msg)];
-    int echoCon = Connect(2, FIRST_CHANNEL_ID);
+    int echoCon = Connect(3, FIRST_CHANNEL_ID);
 
     /*
     Just for fun, fragment up the message to exercise the

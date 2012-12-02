@@ -22,6 +22,7 @@ enum ProcMgrMessageType
     PROC_MGR_MESSAGE_EXIT = 0,
     PROC_MGR_MESSAGE_SIGNAL,
     PROC_MGR_MESSAGE_GETPID,
+    PROC_MGR_MESSAGE_SPAWN,
     PROC_MGR_MESSAGE_INTERRUPT_ATTACH,
     PROC_MGR_MESSAGE_INTERRUPT_DETACH,
     PROC_MGR_MESSAGE_INTERRUPT_COMPLETE,
@@ -51,6 +52,11 @@ struct ProcMgrMessage
 
         struct {
         } getpid;
+
+        struct {
+            size_t path_len;
+            char path[0];
+        } spawn;
 
         struct {
             int connection_id;
@@ -90,6 +96,10 @@ struct ProcMgrReply
         struct {
             int pid;
         } getpid;
+
+        struct {
+            int pid;
+        } spawn;
 
         struct {
             InterruptHandler_t handler;

@@ -7,6 +7,7 @@ BEGIN_DECLS
 
 int GetPid (void);
 void Exit (void);
+int Spawn (char const path[]);
 
 END_DECLS
 

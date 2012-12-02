@@ -32,6 +32,7 @@ kernel_sources = [
     'kernel/procmgr_getpid.cpp',
     'kernel/procmgr_interrupts.cpp',
     'kernel/procmgr_map.cpp',
+    'kernel/procmgr_spawn.cpp',
     'kernel/ramfs.cpp',
     'kernel/semaphore.cpp',
     'kernel/small-object-cache.cpp',
@@ -64,6 +65,7 @@ user_progs = [
     ('uio',             ['uio.c'],              0x30000),
     ('pl011',           ['pl011.c'],            0x40000),
     ('crasher',         ['crasher.c'],          0x50000),
+    ('init',            ['init.c'],             0x60000),
 ]
 
 def options(opt):

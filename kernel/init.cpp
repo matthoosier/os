@@ -174,11 +174,7 @@ void run_first_thread ()
     InterruptsEnable();
 
     Process::StartManager();
-    Process::Create("echo");
-    Process::Create("syscall-client");
-    Process::Create("uio");
-    Process::Create("pl011");
-    Process::Create("crasher");
+    Process::Create("init");
 
     run_idle_loop();
 }
