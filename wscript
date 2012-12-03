@@ -175,7 +175,7 @@ def build(bld):
 
                         env             = bld.all_envs[CROSS].derive(),
 
-                        features        = ['asmoffsets', 'ramfs_source', 'ldscript'],
+                        features        = ['asmoffsets', 'ramfs_source', 'ldscript', 'linkermap'],
                         asmoffsets      = 'asm-offsets.c',
                         ramfs_source    = 'ramfs_image.c',
                         ldscript        = 'kernel.ldscript')
@@ -226,6 +226,17 @@ def apply_ldscript(taskgen):
     script = taskgen.path.find_or_declare(taskgen.ldscript)
     taskgen.bld.add_manual_dependency(taskgen.link_task.outputs[0], script)
     taskgen.linkflags += ['-Wl,-T,%s' % script.bldpath()]
+
+"""
+Tack on linker flags to cause a linker map to be generated
+"""
+@feature('linkermap')
+@after_method('apply_link')
+@before_method('propagate_uselib_vars')
+def apply_linkermap(taskgen):
+    mapfile = taskgen.link_task.outputs[0].change_ext('.map')
+    taskgen.link_task.outputs.append(mapfile)
+    taskgen.linkflags += ['-Wl,-Map,%s' % mapfile.bldpath()]
 
 """
 After process_source(), so that the compiled_tasks[] will be populated already.
