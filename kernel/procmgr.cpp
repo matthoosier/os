@@ -1,3 +1,4 @@
+#include <kernel/array.h>
 #include <kernel/assert.h>
 #include <kernel/procmgr.hpp>
 
@@ -15,5 +16,10 @@ void ProcMgrRegisterMessageHandler (
 
 ProcMgrOperationFunc ProcMgrGetMessageHandler (enum ProcMgrMessageType type)
 {
-    return handler_funcs[type];
+    if (type >= 0 && type < N_ELEMENTS(handler_funcs)) {
+        return handler_funcs[type];
+    }
+    else {
+        return NULL;
+    }
 }
