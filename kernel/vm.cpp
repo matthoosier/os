@@ -144,14 +144,12 @@ static void vm_init (void * ignored)
     }
 }
 
-Page * vm_pages_alloc_internal (
+Page * Page::AllocInternal (
         unsigned int order,
         bool mark_busy_in_bitmap
         )
 {
     Page * result;
-
-    Once(&init_control, vm_init, NULL);
 
     if (order >= NUM_BUDDYLIST_LEVELS) {
         return NULL;
@@ -164,7 +162,7 @@ Page * vm_pages_alloc_internal (
         VmAddr_t  second_half_address;
 
         /* Recursive call */
-        block_to_split = vm_pages_alloc_internal(order + 1, false);
+        block_to_split = AllocInternal(order + 1, false);
 
         if (!block_to_split) {
             return NULL;
@@ -225,8 +223,10 @@ Page * Page::Alloc (unsigned int order)
 {
     Page * ret;
 
+    Once(&init_control, vm_init, NULL);
+
     SpinlockLock(&lock);
-    ret = vm_pages_alloc_internal(order, true);
+    ret = AllocInternal(order, true);
     SpinlockUnlock(&lock);
 
     return ret;

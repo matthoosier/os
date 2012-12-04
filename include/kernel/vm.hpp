@@ -55,6 +55,10 @@ public:
      * \param page  The page that's being returned back to the free-pages pool
      */
     static void Free (Page * page);
+
+private:
+    static Page * AllocInternal (unsigned int order,
+                                 bool mark_busy_in_bitmap);
 };
 
 /**
