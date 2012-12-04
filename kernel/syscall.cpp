@@ -198,7 +198,7 @@ static ssize_t DoMessageSendV (
 
 free_bufs:
     if (k_msgv)     kfree(k_msgv, k_msgv_sz);
-    if (k_replyv)   kfree(k_msgv, k_replyv_sz);
+    if (k_replyv)   kfree(k_replyv, k_replyv_sz);
 
     return ret;
 }
