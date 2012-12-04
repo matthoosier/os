@@ -20,11 +20,11 @@ BEGIN_DECLS
 typedef void (*ProcMgrOperationFunc) (Message * message);
 
 void ProcMgrRegisterMessageHandler (
-        enum ProcMgrMessageType type,
+        ProcMgrMessageType type,
         ProcMgrOperationFunc func
         );
 
-ProcMgrOperationFunc ProcMgrGetMessageHandler (enum ProcMgrMessageType type);
+ProcMgrOperationFunc ProcMgrGetMessageHandler (ProcMgrMessageType type);
 
 END_DECLS
 

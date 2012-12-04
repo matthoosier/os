@@ -26,19 +26,21 @@ int Spawn (char const path[])
 {
     struct iovec msgv[3];
     struct iovec replyv[1];
-    enum ProcMgrMessageType type = PROC_MGR_MESSAGE_SPAWN;
+    struct ProcMgrMessage msg;
     struct ProcMgrReply reply;
-    size_t path_len = strlen(path) + 1;
     int status;
 
-    msgv[0].iov_base = &type;
+    msg.type = PROC_MGR_MESSAGE_SPAWN;
+    msg.payload.spawn.path_len = strlen(path) + 1;
+
+    msgv[0].iov_base = &msg.type;
     msgv[0].iov_len = offsetof(struct ProcMgrMessage, payload.spawn.path_len) - offsetof(struct ProcMgrMessage, type);
 
-    msgv[1].iov_base = &path_len;
+    msgv[1].iov_base = &msg.payload.spawn.path_len;
     msgv[1].iov_len = offsetof(struct ProcMgrMessage, payload.spawn.path) - offsetof(struct ProcMgrMessage, payload.spawn.path_len);
 
     msgv[2].iov_base = (void *)&path[0];
-    msgv[2].iov_len = path_len * sizeof(char);
+    msgv[2].iov_len = msg.payload.spawn.path_len * sizeof(char);
 
     replyv[0].iov_base = &reply;
     replyv[0].iov_len = sizeof(reply);

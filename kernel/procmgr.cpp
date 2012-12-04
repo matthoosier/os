@@ -5,7 +5,7 @@
 static ProcMgrOperationFunc handler_funcs[PROC_MGR_MESSAGE_COUNT] = { NULL };
 
 void ProcMgrRegisterMessageHandler (
-        enum ProcMgrMessageType type,
+        ProcMgrMessageType type,
         ProcMgrOperationFunc func
         )
 {
@@ -14,7 +14,7 @@ void ProcMgrRegisterMessageHandler (
     handler_funcs[type] = func;
 }
 
-ProcMgrOperationFunc ProcMgrGetMessageHandler (enum ProcMgrMessageType type)
+ProcMgrOperationFunc ProcMgrGetMessageHandler (ProcMgrMessageType type)
 {
     if (type >= 0 && type < N_ELEMENTS(handler_funcs)) {
         return handler_funcs[type];

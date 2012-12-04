@@ -17,7 +17,7 @@ BEGIN_DECLS
     + sizeof(((struct ProcMgrMessage *)NULL)->payload.payload_name) \
     )
 
-enum ProcMgrMessageType
+typedef enum
 {
     PROC_MGR_MESSAGE_EXIT = 0,
     PROC_MGR_MESSAGE_SIGNAL,
@@ -32,11 +32,11 @@ enum ProcMgrMessageType
      * Not a message. Just a count.
      */
     PROC_MGR_MESSAGE_COUNT,
-};
+} ProcMgrMessageType;
 
 struct ProcMgrMessage
 {
-    enum ProcMgrMessageType type;
+    ProcMgrMessageType type;
 
     union {
 
