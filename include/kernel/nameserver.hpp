@@ -70,7 +70,7 @@ private:
 
 private:
 
-    static TreeMap<char *, NameRecord *> * sMap;
+    static TreeMap<char const *, NameRecord *> * sMap;
     static Spinlock_t sMapLock;
     static Once_t sOnceControl;
 };

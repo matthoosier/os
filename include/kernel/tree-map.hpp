@@ -23,7 +23,7 @@ public:
     /**
      * \brief   Key types
      */
-    typedef void * Key_t;
+    typedef void const * Key_t;
 
     /**
      * \brief   Value types
@@ -138,6 +138,9 @@ private:
  *
  * This is a convenience wrapper around RawTreeMap to free user
  * code from using casts during all operations.
+ *
+ * \tparam K    Key type. Must be immutable and const.
+ * \tparam V    Value type.
  */
 template<typename K, typename V>
     class TreeMap : public RawTreeMap

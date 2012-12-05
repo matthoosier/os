@@ -16,7 +16,7 @@ NameRecord::~NameRecord()
     NameServer::UnregisterName(this);
 }
 
-TreeMap<char *, NameRecord *> * NameServer::sMap;
+TreeMap<char const *, NameRecord *> * NameServer::sMap;
 Spinlock_t NameServer::sMapLock;
 
 Once_t NameServer::sOnceControl = ONCE_INIT;
@@ -32,7 +32,7 @@ static int CompareStrings (RawTreeMap::Key_t k1, RawTreeMap::Key_t k2)
 void NameServer::OnceInit (void * ignored)
 {
     SpinlockInit(&sMapLock);
-    sMap = new TreeMap<char *, NameRecord *>(&CompareStrings);
+    sMap = new TreeMap<char const *, NameRecord *>(&CompareStrings);
 }
 
 NameRecord *
@@ -51,11 +51,11 @@ NameServer::RegisterName (char const aFullPath[], Channel & aChannel)
     if (ret) {
         SpinlockLock(&sMapLock);
 
-        if (sMap->Lookup(const_cast<char *>(aFullPath)) == NULL) {
+        if (sMap->Lookup(aFullPath) == NULL) {
 
-            sMap->Insert(const_cast<char *>(ret->mFullPath.c_str()), ret);
+            sMap->Insert(ret->mFullPath.c_str(), ret);
 
-            if (sMap->Lookup(const_cast<char *>(ret->mFullPath.c_str())) != ret) {
+            if (sMap->Lookup(ret->mFullPath.c_str()) != ret) {
                 delete ret;
                 ret = NULL;
             }
@@ -72,7 +72,7 @@ void NameServer::UnregisterName (NameRecord * aProvider)
     Once(&sOnceControl, &NameServer::OnceInit, NULL);
 
     SpinlockLock(&sMapLock);
-    sMap->Remove(const_cast<char *>(aProvider->mFullPath.c_str()));
+    sMap->Remove(aProvider->mFullPath.c_str());
     SpinlockUnlock(&sMapLock);
 }
 
@@ -83,7 +83,7 @@ Channel * NameServer::LookupName (char const aFullPath[])
     Once(&sOnceControl, &NameServer::OnceInit, NULL);
 
     SpinlockLock(&sMapLock);
-    record = sMap->Lookup(const_cast<char *>(aFullPath));
+    record = sMap->Lookup(aFullPath);
     SpinlockUnlock(&sMapLock);
 
     if (record) {
