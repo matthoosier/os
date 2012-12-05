@@ -1,6 +1,7 @@
 #include <sys/procmgr.h>
 #include <sys/syscall.h>
 #include <sys/message.h>
+#include <sys/naming.h>
 #include <sys/process.h>
 
 #define N_ELEMENTS(_array)  \
@@ -15,7 +16,7 @@ int main () {
     /* Send message to echo server */
     char msg[] = "Artoo";
     char reply[sizeof(msg)];
-    int echoCon = Connect(3, FIRST_CHANNEL_ID);
+    int echoCon = NameOpen("/dev/echo");
 
     /*
     Just for fun, fragment up the message to exercise the

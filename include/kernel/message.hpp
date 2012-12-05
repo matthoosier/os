@@ -12,6 +12,7 @@
 #include <kernel/assert.h>
 #include <kernel/io.hpp>
 #include <kernel/list.hpp>
+#include <kernel/nameserver.hpp>
 #include <kernel/slaballocator.hpp>
 #include <kernel/smart-ptr.hpp>
 
@@ -309,6 +310,12 @@ public:
     ~Channel ();
 
     /**
+     * @brief   Install (and take ownership of) a filesystem name
+     *          by which this channel is accessible
+     */
+    void SetNameRecord (NameRecord * name_record);
+
+    /**
      * @brief   Synchronously receive a message
      *
      * @return  if zero or greater, the number of bytes written into \a msgbuf.
@@ -337,6 +344,11 @@ private:
      * @brief   Allocates instances of Channel
      */
     static SyncSlabAllocator<Channel> sSlab;
+
+    /**
+     * @brief   Filesystem name (if any) of this channel
+     */
+    ScopedPtr<NameRecord> name_record;
 
     /**
      * @brief   All the receivers who are queued waiting to receive

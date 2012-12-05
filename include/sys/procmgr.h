@@ -27,6 +27,8 @@ typedef enum
     PROC_MGR_MESSAGE_INTERRUPT_DETACH,
     PROC_MGR_MESSAGE_INTERRUPT_COMPLETE,
     PROC_MGR_MESSAGE_MAP_PHYS,
+    PROC_MGR_MESSAGE_NAME_ATTACH,
+    PROC_MGR_MESSAGE_NAME_OPEN,
 
     /**
      * Not a message. Just a count.
@@ -77,6 +79,16 @@ struct ProcMgrMessage
             size_t len;
         } map_phys;
 
+        struct {
+            size_t path_len;
+            char path[0];
+        } name_attach;
+
+        struct {
+            size_t path_len;
+            char path[0];
+        } name_open;
+
     } payload;
 };
 
@@ -111,6 +123,14 @@ struct ProcMgrReply
         struct {
             uintptr_t vmaddr;
         } map_phys;
+
+        struct {
+            int channel_id;
+        } name_attach;
+
+        struct {
+            int connection_id;
+        } name_open;
 
     } payload;
 };

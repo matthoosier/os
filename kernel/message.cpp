@@ -219,6 +219,11 @@ ssize_t Connection::SendMessage (
     return result;
 } /* Connection::SendMessage() */
 
+void Channel::SetNameRecord (NameRecord * name_record)
+{
+    this->name_record = name_record;
+}
+
 ssize_t Channel::ReceiveMessage (
         Message  ** context,
         IoBuffer const msgv[],

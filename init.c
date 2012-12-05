@@ -6,7 +6,6 @@ int main (int argc, char *argv[]) {
     int my_pid = GetPid();
 
     pid = Spawn("echo");
-    pid = Spawn("syscall-client");
     pid = Spawn("uio");
     pid = Spawn("pl011");
     pid = Spawn("crasher");
