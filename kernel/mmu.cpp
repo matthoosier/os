@@ -1,6 +1,5 @@
 #include <stdint.h>
 #include <string.h>
-#include <strings.h>
 
 #include <sys/arch.h>
 #include <sys/bits.h>
@@ -186,9 +185,9 @@ void MmuSetEnabled ()
     /*
     Enfoce that kernel-reserved address range starts on an even power of 2
     */
-    assert(1 << (ffs(KERNEL_MODE_OFFSET) - 1) == KERNEL_MODE_OFFSET);
+    assert(1U << (__builtin_ffs(KERNEL_MODE_OFFSET) - 1) == KERNEL_MODE_OFFSET);
 
-    n = 32 - (ffs(KERNEL_MODE_OFFSET) - 1);
+    n = 32 - (__builtin_ffs(KERNEL_MODE_OFFSET) - 1);
     uint32_t ttbc = GetTTBC();
     ttbc &= ~TTBC_N_MASK;
     ttbc |= (n & TTBC_N_MASK);

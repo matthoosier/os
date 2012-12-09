@@ -248,8 +248,3 @@ char * strncpy (char *s1, const char *s2, size_t n)
 
     return orig_s1;
 }
-
-int ffs (int i)
-{
-    return __builtin_ffs(i);
-}

@@ -1,7 +1,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-#include <strings.h>
 
 #include <sys/arch.h>
 #include <sys/atomic.h>

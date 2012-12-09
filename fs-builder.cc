@@ -1,14 +1,16 @@
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 #include <iostream>
 #include <fstream>
 
+#include <errno.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <errno.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 struct InputFile {
 

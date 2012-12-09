@@ -1,5 +1,4 @@
 #include <stdint.h>
-#include <strings.h>
 
 #include <kernel/interrupts.hpp>
 #include <kernel/mmu.hpp>
@@ -72,7 +71,7 @@ int Pl190::GetRaisedIrqNum ()
 {
     uint32_t irqs = *this->IrqStatus;
 
-    int which = ffs(irqs) - 1;
+    int which = __builtin_ffs(irqs) - 1;
     assert(which >= 0);
 
     return which;
