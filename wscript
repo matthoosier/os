@@ -52,6 +52,8 @@ kernel_sources = [
     'kernel/exception-entry.S',
     'kernel/high-entry.S',
     'kernel/vector.S',
+
+    'newlib/stubs.c',
 ]
 
 libc_sources = [
@@ -61,6 +63,7 @@ libc_sources = [
     'libc/user_message.c',
     'libc/user_naming.c',
     'libc/user_process.c',
+    'newlib/stubs.c',
 ]
 
 user_progs = [
@@ -131,10 +134,11 @@ def build(bld):
 
     bld.add_group()
 
-    bld.stlib(source    =   libc_sources,
-              target    =   'my_c',
-              includes  =   ['include'],
-              env       =   bld.all_envs[CROSS].derive())
+    bld(source    =   libc_sources,
+        target    =   'my_c',
+        includes  =   ['include'],
+        features  =   ['c'],
+        env       =   bld.all_envs[CROSS].derive())
 
     for (p, src_list, link_base_addr) in user_progs:
         bld.program(source      = src_list,
