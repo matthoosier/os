@@ -714,6 +714,7 @@ static void HandleExitMessage (Message * message)
     TerminateProcess(sender->process);
 
     /* No MessageReply(), so manually free the Message */
+    message->Disarm();
     delete message;
 }
 
@@ -740,6 +741,7 @@ static void HandleSignalMessage (Message * message)
 
             if (senderProcess == signalee) {
                 // Nobody around to return message to
+                message->Disarm();
                 delete message;
             } else {
                 message->Reply(ERROR_OK, IoBuffer::GetEmpty());

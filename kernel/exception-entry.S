@@ -435,16 +435,17 @@ irq_handler:
     scheduler need to run again.
     */
     bl ThreadResetNeedResched       /* r0 := boolean result         */
-
-    /* If not, we're done */
     teq r0, FALSE
+
+    /*
+    If don't need a reschedule, then jump past the fast-path below
+    */
     ldmnefd sp!, {r0-r3,ip,lr}      /* Undo fast-path register save */
     bne irq_handler__need_switch$
 
-/**
- * Fast-path exit to interrupted task
- */
-irq_handler__fast_exit$:
+    /*
+    Fast-path return (no context switch) to interrupted task
+    */
     ldmfd sp!, {r0-r3,ip,lr}    /* Restore corrupted registers      */
     movs pc, lr                 /* CPU mode transition              */
     mov r0, FALSE               /* Should never get here            */

@@ -4,6 +4,7 @@
 #include <sys/spinlock.h>
 
 #include <kernel/assert.h>
+#include <kernel/process.hpp>
 #include <kernel/thread.hpp>
 #include <kernel/vm.hpp>
 

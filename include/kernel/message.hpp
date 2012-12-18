@@ -13,6 +13,7 @@
 #include <kernel/io.hpp>
 #include <kernel/list.hpp>
 #include <kernel/nameserver.hpp>
+#include <kernel/semaphore.hpp>
 #include <kernel/slaballocator.hpp>
 #include <kernel/smart-ptr.hpp>
 
@@ -152,6 +153,11 @@ public:
 
     size_t GetLength ();
 
+    /**
+     * @brief   Clear out all back-pointers
+     */
+    void Disarm ();
+
 private:
     /**
      * @brief   Allocates memory for instances of Message
@@ -172,9 +178,21 @@ private:
     Thread * mSender;
 
     /**
+     * @brief   Synchronizes the wait of the sender until
+     *          the reply is sent.
+     */
+    Semaphore mSenderSemaphore;
+
+    /**
      * @brief   The process to whom the message is being sent
      */
     Thread * mReceiver;
+
+    /**
+     * @brief   Synchronizes the wait of the receiver until
+     *          the message is sent.
+     */
+    Semaphore mReceiverSemaphore;
 
     /**
      * @brief   All the metadata about the buffer addresses/sizes

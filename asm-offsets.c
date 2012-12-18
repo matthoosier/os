@@ -1,6 +1,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#include <sys/spinlock.h>
+
 #include <kernel/thread.hpp>
 
 #define DEFINE(_id, _val)               \
