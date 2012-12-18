@@ -8,8 +8,15 @@
 #include <kernel/message.hpp>
 #include <kernel/minmax.hpp>
 #include <kernel/mmu.hpp>
+#include <kernel/process.hpp>
 #include <kernel/slaballocator.hpp>
 #include <kernel/thread.hpp>
+
+/**
+ * Synchronizes modification to channel/connection pairs during
+ * message passing.
+ */
+static Spinlock_t gLock = SPINLOCK_INIT;
 
 SyncSlabAllocator<Channel> Channel::sSlab;
 SyncSlabAllocator<Connection> Connection::sSlab;
@@ -44,20 +51,30 @@ Channel::Channel ()
 
 Channel::~Channel ()
 {
+    SpinlockLock(&gLock);
+
     assert(this->waiting_clients.Empty());
     assert(this->unwaiting_clients.Empty());
     assert(this->receive_blocked_head.Empty());
     assert(this->link.Unlinked());
+
+    SpinlockUnlock(&gLock);
 }
 
 Connection::Connection (Channel * server)
     : channel(server)
 {
+    SpinlockLock(&gLock);
+
     server->unwaiting_clients.Append(this);
+
+    SpinlockUnlock(&gLock);
 }
 
 Connection::~Connection ()
 {
+    SpinlockLock(&gLock);
+
     if (this->send_blocked_head.Empty()) {
         if (this->channel) {
             this->channel->unwaiting_clients.Remove(this);
@@ -83,12 +100,16 @@ Connection::~Connection ()
     }
 
     assert(this->send_blocked_head.Empty());
+
+    SpinlockUnlock(&gLock);
 }
 
 Message::Message ()
     : mConnection ()
     , mSender (NULL)
+    , mSenderSemaphore (0)
     , mReceiver (NULL)
+    , mReceiverSemaphore (0)
     , mResult ()
 {
     memset(&mSendData, 0, sizeof(mSendData));
@@ -99,15 +120,24 @@ Message::~Message ()
 {
 }
 
+void Message::Disarm ()
+{
+    mSenderSemaphore.Disarm();
+    mReceiverSemaphore.Disarm();
+}
+
 ssize_t Connection::SendMessageAsync (uintptr_t payload)
 {
     Message * message;
+
+    SpinlockLock(&gLock);
 
     if (this->channel->receive_blocked_head.Empty()) {
         /* No receiver thread is waiting on the channel at the moment */
         try {
             message = new Message();
         } catch (std::bad_alloc) {
+            SpinlockUnlock(&gLock);
             return -ERROR_NO_MEM;
         }
 
@@ -123,6 +153,10 @@ ssize_t Connection::SendMessageAsync (uintptr_t payload)
             this->channel->waiting_clients.Append(this);
         }
         this->send_blocked_head.Append(message);
+
+        SpinlockUnlock(&gLock);
+        message->mReceiverSemaphore.UpDuringException();
+        SpinlockLock(&gLock);
     }
     else {
         /* Receiver thread is ready to go */
@@ -134,12 +168,15 @@ ssize_t Connection::SendMessageAsync (uintptr_t payload)
         message->mSender = NULL;
         message->mSendData.async.payload = payload;
 
+        SpinlockUnlock(&gLock);
+
         /* Allow receiver to wake up */
-        Thread::BeginTransactionDuringException();
-        Thread::MakeReady(message->mReceiver);
-        Thread::SetNeedResched();
-        Thread::EndTransaction();
+        message->mReceiverSemaphore.UpDuringException();
+
+        SpinlockLock(&gLock);
     }
+
+    SpinlockUnlock(&gLock);
 
     return ERROR_OK;
 }
@@ -153,6 +190,8 @@ ssize_t Connection::SendMessage (
 {
     Message * message;
     ssize_t result;
+
+    SpinlockLock(&gLock);
 
     if (this->channel->receive_blocked_head.Empty()) {
         /* No receiver thread is waiting on the channel at the moment */
@@ -177,11 +216,6 @@ ssize_t Connection::SendMessage (
             this->channel->waiting_clients.Append(this);
         }
         this->send_blocked_head.Append(message);
-
-        Thread::BeginTransaction();
-        Thread::MakeUnready(THREAD_CURRENT(), Thread::STATE_SEND);
-        Thread::RunNextThread();
-        Thread::EndTransaction();
     }
     else {
         /* Receiver thread is ready to go */
@@ -198,14 +232,12 @@ ssize_t Connection::SendMessage (
 
         /* Temporarily gift our priority to the message-handling thread */
         message->mReceiver->SetEffectivePriority(THREAD_CURRENT()->effective_priority);
-
-        /* Now allow handler to run */
-        Thread::BeginTransaction();
-        Thread::MakeReady(message->mReceiver);
-        Thread::MakeUnready(THREAD_CURRENT(), Thread::STATE_REPLY);
-        Thread::RunNextThread();
-        Thread::EndTransaction();
     }
+
+    SpinlockUnlock(&gLock);
+
+    message->mReceiverSemaphore.Up();
+    message->mSenderSemaphore.Down(Thread::STATE_REPLY);
 
     /*
     By the time that the receiver wakes us back up, the reply payload
@@ -233,6 +265,8 @@ ssize_t Channel::ReceiveMessage (
     Message       * message;
     ssize_t         num_copied;
 
+    SpinlockLock(&gLock);
+
     if (this->waiting_clients.Empty()) {
         /* No message is waiting in the channel at the moment */
         try {
@@ -250,11 +284,6 @@ ssize_t Channel::ReceiveMessage (
 
         /* Enqueue as blocked on the channel */
         this->receive_blocked_head.Append(message);
-
-        Thread::BeginTransaction();
-        Thread::MakeUnready(THREAD_CURRENT(), Thread::STATE_RECEIVE);
-        Thread::RunNextThread();
-        Thread::EndTransaction();
     }
     else {
         /* Some message is waiting in the channel already */
@@ -271,6 +300,10 @@ ssize_t Channel::ReceiveMessage (
         message->mReceiveData.msgv = msgv;
         message->mReceiveData.msgv_count = msgv_count;
     }
+
+    SpinlockUnlock(&gLock);
+
+    message->mReceiverSemaphore.Down(Thread::STATE_RECEIVE);
 
     if (message->mSender != NULL) {
         /* Synchronous message */
@@ -413,20 +446,11 @@ ssize_t Message::Reply (
 
     result = status == ERROR_OK ? mResult : ERROR_OK;
 
-    Thread::BeginTransaction();
-
     /* Sender will get to run again whenever a scheduling decision happens */
-    Thread::MakeReady(mSender);
+    mSenderSemaphore.Up();
 
     /* Abandon any temporary priority boost we had now that the sender is unblocked */
     THREAD_CURRENT()->SetEffectivePriority(THREAD_CURRENT()->assigned_priority);
-
-    /* Current thread (replier) remains runnable. */
-    Thread::MakeReady(THREAD_CURRENT());
-
-    Thread::RunNextThread();
-
-    Thread::EndTransaction();
 
     /* Sender frees the message after fetching the return value from it */
     return result;

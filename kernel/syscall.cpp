@@ -547,16 +547,5 @@ void do_syscall (Thread * current)
             p_regs[0] = -ERROR_NO_SYS;
             break;
     }
-
-    /*
-    Check whether any interrupts handlers decided that the scheduling
-    algorithm needs to run and pick a new next task.
-    */
-    Thread::BeginTransaction();
-    if (Thread::ResetNeedResched()) {
-        Thread::MakeReady(THREAD_CURRENT());
-        Thread::RunNextThread();
-    }
-    Thread::EndTransaction();
 }
 

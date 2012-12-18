@@ -20,7 +20,7 @@ void Semaphore::Up ()
         ++mCount;
     } else {
         Waiter * w = mWaitList.PopFirst();
-        w->mReleased = true;
+        w->mState = Waiter::STATE_RELEASED;
         Thread::MakeReady(w->mThread);
         Thread::MakeReady(THREAD_CURRENT());
         Thread::RunNextThread();
@@ -29,9 +29,26 @@ void Semaphore::Up ()
     Thread::EndTransaction();
 }
 
-void Semaphore::Down ()
+void Semaphore::UpDuringException ()
+{
+    Thread::BeginTransactionDuringException();
+
+    if (mWaitList.Empty()) {
+        ++mCount;
+    } else {
+        Waiter * w = mWaitList.PopFirst();
+        w->mState = Waiter::STATE_RELEASED;
+        Thread::MakeReady(w->mThread);
+        Thread::SetNeedResched();
+    }
+
+    Thread::EndTransaction();
+}
+
+bool Semaphore::Down (Thread::State aReasonForWait)
 {
     Thread * current = THREAD_CURRENT();
+    bool ret;
 
     Thread::BeginTransaction();
 
@@ -40,13 +57,29 @@ void Semaphore::Down ()
         Waiter w(current);
         mWaitList.Append(&w);
 
-        while (!w.mReleased) {
-            Thread::MakeUnready(current, Thread::STATE_SEM);
+        while (w.mState == Waiter::STATE_WAITING) {
+            Thread::MakeUnready(current, aReasonForWait);
             Thread::RunNextThread();
         }
 
+        ret = (w.mState == Waiter::STATE_RELEASED);
+
     } else {
+        ret = false;
         --mCount;
+    }
+
+    Thread::EndTransaction();
+
+    return ret;
+}
+
+void Semaphore::Disarm ()
+{
+    Thread::BeginTransaction();
+
+    while (!mWaitList.Empty()) {
+        mWaitList.PopFirst();
     }
 
     Thread::EndTransaction();

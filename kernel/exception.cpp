@@ -4,6 +4,7 @@
 #include <kernel/assert.h>
 #include <kernel/exception.hpp>
 #include <kernel/message.hpp>
+#include <kernel/process.hpp>
 #include <kernel/thread.hpp>
 
 void ScheduleSelfAbort ()

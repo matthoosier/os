@@ -5,8 +5,11 @@
 #include <sys/decls.h>
 
 #include <kernel/list.hpp>
-#include <kernel/process.hpp>
 #include <kernel/smart-ptr.hpp>
+#include <kernel/vm.hpp>
+
+// Forward declaration
+class Process;
 
 #define ALIGNED_THREAD_STRUCT_SIZE                                  \
     /* Padded out to multiple of 8 to preserve %sp requirements */  \
@@ -286,11 +289,6 @@ public:
      * a syscall or IRQ handling unwinds.
      */
     static void SetNeedResched ();
-
-    /**
-     * \brief   Query and clear the scheduler flag set by SetNeedResched()
-     */
-    static bool GetNeedResched ();
 
     /**
      * \brief   Clear the scheduler flag set by SetNeedResched()

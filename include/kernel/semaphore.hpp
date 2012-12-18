@@ -15,16 +15,30 @@ private:
     class Waiter
     {
     public:
+        enum State
+        {
+            STATE_WAITING,
+            STATE_RELEASED,
+            STATE_ABORTED,
+        };
+
         Waiter (Thread * who)
             : mThread(who)
-            , mReleased(false)
+            , mState(STATE_WAITING)
         {
         }
+
+    private:
+        //! Prevent heap allocation
+        void * operator new (size_t size);
+
+        //! Prevent heap allocation
+        void operator delete (void * mem);
 
     public:
         ListElement mLink;
         Thread *    mThread;
-        bool        mReleased;
+        State       mState;
     };
 
 public:
@@ -44,15 +58,30 @@ public:
      * If any waiters are queued, wake one of them and allow it
      * to consume the new count.
      */
-    void Up();
+    void Up ();
+
+    /**
+     * \brief   Version of Up() to use when running from
+     *          interrupt context
+     */
+    void UpDuringException ();
 
     /**
      * \brief   Decrease count by one.
      *
      * If the count is zero, then sleep until count becomes
      * nonzero.
+     *
+     * \return  true if the wait completes successfully, false
+     *          if it was aborted by the infrastructure to
+     *          facilitate a process termination
      */
-    void Down();
+    bool Down (Thread::State aReasonForWait = Thread::STATE_SEM);
+
+    /**
+     * \brief   Drop all back-pointers
+     */
+    void Disarm ();
 
 private:
     unsigned int                    mCount;
