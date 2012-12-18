@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -140,6 +141,25 @@ static void pl011_blocking_write (pl011_t volatile * uart, uint8_t c)
     uart->DR = c;
 }
 
+static void pl011_printf (pl011_t volatile * uart,
+                          const char format[],
+                          ...)
+{
+    char buf[64];
+    va_list list;
+    int num;
+    int i;
+
+    va_start(list, format);
+    vsnprintf(buf, sizeof(buf), format, list);
+    va_end(list);
+
+    num = strlen(buf);
+    for (i = 0; i < num; ++i) {
+        pl011_blocking_write(uart, buf[i]);
+    }
+}
+
 char my_toupper (char c)
 {
     if (c >= 'a' && c <= 'z') {
@@ -189,44 +209,12 @@ int main (int argc, char *argv[]) {
     int chid;
     int coid;
 
-    unsigned int i;
-
     chid = ChannelCreate();
     coid = Connect(SELF_PID, chid);
 
     uart0 = MapPhysical(VERSATILE_UART0_BASE, PL011_MMAP_SIZE);
 
-    char buf[64];
-
-    for (i = 0; i < 10; i++) {
-        snprintf(buf, sizeof(buf), "UART0 IMSC bit %d: %s\n", i, (uart0->IMSC & SETBIT(i)) != 0 ? "set" : "unset");
-        unsigned int j;
-        for (j = 0 ; j < strlen(buf); j++) {
-            pl011_blocking_write(uart0, buf[j]);
-        }
-    }
-
-    for (i = 0; i < 16; i++) {
-        snprintf(buf, sizeof(buf), "UART0 CR bit %d: %s (setbit %d: 0x%x)\n", i, (uart0->CR & SETBIT(i)) != 0 ? "set" : "unset", i, SETBIT(i));
-        unsigned int j;
-        for (j = 0; j < strlen(buf); j++) {
-            pl011_blocking_write(uart0, buf[j]);
-        }
-    }
-
-    for (i = 0; i < 11; i++) {
-        snprintf(buf, sizeof(buf), "UART0 RIS bit %d: %s\n", i, (uart0->RIS & SETBIT(i)) != 0 ? "set" : "unset");
-        unsigned int j;
-        for (j = 0; j < strlen(buf); j++) {
-            pl011_blocking_write(uart0, buf[j]);
-        }
-    }
-
-    static const char message[] = "Hello, World\n";
-
-    for (i = 0; i < strlen(message); i++) {
-        pl011_blocking_write(uart0, message[i]);
-    }
+    pl011_printf(uart0, "PL011 UART driver started up in echo mode...\n");
 
     // Clear all pending interrupts
     uart0->ICR = ICR_ALL;
