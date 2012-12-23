@@ -186,7 +186,7 @@ def build(bld):
                         features        = ['asmoffsets', 'ramfs_source', 'ldscript', 'linkermap'],
                         asmoffsets      = 'asm-offsets.c',
                         ramfs_source    = 'ramfs_image.c',
-                        ldscript        = 'kernel.ldscript')
+                        ldscript        = 'kernel/kernel.ldscript')
 
 """
 Look up the linked executable for each of the taskgens
