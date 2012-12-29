@@ -238,11 +238,11 @@ char * strncpy (char *s1, const char *s2, size_t n)
     char *orig_s1 = s1;
     char *last_s1 = s1 + n;
 
-    for (; (s1 <= last_s1) && (*s2 != '\0'); s1++, s2++) {
+    for (; (s1 < last_s1 - 1) && (*s2 != '\0'); s1++, s2++) {
         *s1 = *s2;
     }
 
-    for (;s1 <= last_s1; s1++) {
+    for (;s1 < last_s1; s1++) {
         *s1 = '\0';
     }
 
