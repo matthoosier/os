@@ -7,6 +7,7 @@
 
 #include <kernel/array.h>
 #include <kernel/list.hpp>
+#include <kernel/math.hpp>
 #include <kernel/once.h>
 #include <kernel/vm.hpp>
 
@@ -40,7 +41,7 @@ struct BuddylistLevel
     struct
     {
         unsigned int    element_count;
-        uint8_t *       elements;
+        uint8_t *       busy_elements;
     } bitmap;
 
 };
@@ -59,6 +60,7 @@ static Once_t           init_control = ONCE_INIT;
 
 static inline unsigned int page_index_from_base_address (VmAddr_t base)
 {
+    assert(base >= pages_base);
     return (base - pages_base) >> PAGE_SHIFT;
 }
 
@@ -69,7 +71,7 @@ static inline unsigned int page_index_from_struct (Page * page)
 
 static inline int buddylist_level_from_alignment (VmAddr_t addr)
 {
-    unsigned int i;
+    int i;
 
     for (i = NUM_BUDDYLIST_LEVELS - 1; i >= 0; i--) {
         if (addr % (PAGE_SIZE << i) == 0) {
@@ -108,7 +110,7 @@ static void vm_init (void * ignored)
         buddylists[i].bitmap.element_count = page_count >> i;
 
         /* Assign bitmap pointer, increment pages_base */
-        buddylists[i].bitmap.elements = (uint8_t *)pages_base;
+        buddylists[i].bitmap.busy_elements = (uint8_t *)pages_base;
         pages_base += BITS_TO_BYTES(
             /* Round up to nearest byte boundary */
             (buddylists[i].bitmap.element_count + 7) & ~0x7
@@ -116,13 +118,12 @@ static void vm_init (void * ignored)
 
         /* Initialize bitmap. All blocks are initially unowned. */
         for (idx = 0; idx < buddylists[i].bitmap.element_count; idx++) {
-            BitmapClear(buddylists[i].bitmap.elements, idx);
+            BitmapClear(buddylists[i].bitmap.busy_elements, idx);
         }
     }
 
     /* Round up to the nearest largest-buddy block boundary */
-    pages_base += (PAGE_SIZE << (NUM_BUDDYLIST_LEVELS - 1)) - 1;
-    pages_base &= PAGE_MASK << (NUM_BUDDYLIST_LEVELS - 1);
+    pages_base = Math::RoundUp(pages_base, PAGE_SIZE << (NUM_BUDDYLIST_LEVELS - 1));
 
     num_pages = PAGE_COUNT_FROM_SIZE(HEAP_SIZE - (pages_base - VIRTUAL_HEAP_START));
     page_structs = (Page *)VIRTUAL_HEAP_START;
@@ -135,12 +136,20 @@ static void vm_init (void * ignored)
     for (i = 0; i < num_pages; i += SETBIT(NUM_BUDDYLIST_LEVELS - 1)) {
         VmAddr_t base_address = pages_base + (i * PAGE_SIZE);
         int buddy_level = buddylist_level_from_alignment(base_address);
+        assert(buddy_level == NUM_BUDDYLIST_LEVELS - 1);
 
         page_structs[i].base_address = base_address;
 
         new (&page_structs[i].list_link) ListElement();
 
         buddylists[buddy_level].freelist_head->Append(&page_structs[i]);
+
+        for (unsigned int j = i + 1; j < i + SETBIT(NUM_BUDDYLIST_LEVELS - 1); j++)
+        {
+            base_address = pages_base + (j * PAGE_SIZE);
+            page_structs[j].base_address = base_address;
+            new (&page_structs[j].list_link) ListElement();
+        }
     }
 }
 
@@ -180,6 +189,7 @@ Page * Page::AllocInternal (
         */
         second_half_address = block_to_split->base_address + (PAGE_SIZE << order);
         second_half_struct = &page_structs[page_index_from_base_address(second_half_address)];
+        assert(second_half_struct->base_address == second_half_address);
         second_half_struct->base_address = second_half_address;
 
         /*
@@ -187,8 +197,6 @@ Page * Page::AllocInternal (
         But just do this to make sure, since we already have to initialize
         second_half_struct's list head anyway.
         */
-        new (&block_to_split->list_link) ListElement();
-        new (&second_half_struct->list_link) ListElement();
 
         /*
         Insert these two new (PAGE_SIZE << order)-sized chunks of memory
@@ -197,6 +205,8 @@ Page * Page::AllocInternal (
         They'll be found immediately below in the code that extracts
         the block at the head of the list.
         */
+        assert(block_to_split->list_link.Unlinked());
+        assert(second_half_struct->list_link.Unlinked());
         buddylists[order].freelist_head->Append(block_to_split);
         buddylists[order].freelist_head->Append(second_half_struct);
     }
@@ -210,8 +220,9 @@ Page * Page::AllocInternal (
 
     /* Mark page as busy in whichever level's bitmap is appropriate. */
     if (mark_busy_in_bitmap) {
+        assert((page_index_from_struct(result) % (1 << order)) == 0);
         BitmapSet(
-            buddylists[order].bitmap.elements,
+            buddylists[order].bitmap.busy_elements,
             page_index_from_struct(result) >> order
             );
     }
@@ -232,6 +243,24 @@ Page * Page::Alloc (unsigned int order)
     return ret;
 }
 
+static int get_order_allocated (Page * page)
+{
+    int largest_order = buddylist_level_from_alignment(page->base_address);
+
+    // Find the chunk level this block was allocated on
+    for (int order = largest_order; order >= 0; order--)
+    {
+        int idx = page_index_from_base_address(page->base_address) >> order;
+
+        if (BitmapGet(buddylists[order].bitmap.busy_elements, idx))
+        {
+            return order;
+        }
+    }
+
+    return -1;
+}
+
 static void try_merge_block (Page * block, unsigned int order)
 {
     VmAddr_t        partner_address;
@@ -243,69 +272,86 @@ static void try_merge_block (Page * block, unsigned int order)
         return;
     }
 
-    partner_address = (block->base_address >> PAGE_SHIFT) == ((block->base_address >> (PAGE_SHIFT + 1)) << 1)
-            ? block->base_address + (PAGE_SIZE << order)
-            : block->base_address - (PAGE_SIZE << order);
+    if (block->base_address == Math::RoundUp(block->base_address, PAGE_SIZE << (order + 1)))
+    {
+        // 'block' is aligned at a PAGE_SIZE << (order + 1) boundary, so
+        // its buddy must be immediately above
+        partner_address = block->base_address + (PAGE_SIZE << order);
+    }
+    else
+    {
+        // 'block' is not aligned at a PAGE_SIZE << (order + 1) boundary,
+        // so its buddy must be immediately below
+        partner_address = block->base_address - (PAGE_SIZE << order);
+    }
 
     partner_index = page_index_from_base_address(partner_address);
 
     partner = &page_structs[partner_index];
 
-    /* If the partner isn't allocated out to a user, then merge */
-    if (!BitmapGet(buddylists[order].bitmap.elements, partner_index >> order)) {
-        Page * merged_block = block->base_address < partner->base_address
-                ? block
-                : partner;
+    // Check that the block passed in is _really_ marked as not-in-use
+    assert(!BitmapGet(buddylists[order].bitmap.busy_elements, page_index_from_base_address(block->base_address) >> order));
 
-        /* Unlink from current blocksize's freelist */
-        List<Page, &Page::list_link>::Remove(block);
-        List<Page, &Page::list_link>::Remove(partner);
+    for (int fragment_order = order; fragment_order >= 0; fragment_order--)
+    {
+        for (VmAddr_t fragment_address = partner_address;
+             fragment_address < partner_address + (PAGE_SIZE << order);
+             fragment_address += PAGE_SIZE << (fragment_order))
+        {
+            unsigned int fragment_idx = page_index_from_base_address(fragment_address);
 
-        /* Insert lower of the two blocks into next blocksize's freelist. */
-        buddylists[order + 1].freelist_head->Append(merged_block);
-
-        /* Now try to merge at the next level. */
-        try_merge_block(merged_block, order + 1);
+            if (BitmapGet(buddylists[fragment_order].bitmap.busy_elements,
+                          fragment_idx >> fragment_order))
+            {
+                // Partner page (or a divided part of it) is still
+                // allocated out to a client. Abandon attempt to
+                // merge.
+                return;
+            }
+        }
     }
+
+    // Partner isn't allocated out to a user, so merge.
+    Page * merged_block = block->base_address < partner->base_address
+            ? block
+            : partner;
+
+    assert(!block->list_link.Unlinked());
+    assert(!partner->list_link.Unlinked());
+
+    /* Unlink from current blocksize's freelist */
+    List<Page, &Page::list_link>::Remove(block);
+    List<Page, &Page::list_link>::Remove(partner);
+
+    /* Insert lower of the two blocks into next blocksize's freelist. */
+    buddylists[order + 1].freelist_head->Append(merged_block);
+
+    /* Now try to merge at the next level. */
+    try_merge_block(merged_block, order + 1);
 }
 
 void Page::Free (Page * page)
 {
-    unsigned int order;
-    unsigned int largest_order;
-    unsigned int idx;
+    assert(page->list_link.Unlinked());
 
     Once(&init_control, vm_init, NULL);
 
     SpinlockLock(&lock);
 
-    /*
-    Figure out the chunkiest possible buddylist level this block could
-    belong to, based on its address.
-    */
-    largest_order = buddylist_level_from_alignment(page->base_address);
+    // Figure out what buddylevel the pageset was allocated on
+    int order = get_order_allocated(page);
+    assert(order != -1);
 
-    /*
-    Find the chunk level this block was allocated on, and return it to
-    the freelist for that size.
-    */
-    for (order = largest_order; order >= 0; order--) {
-        idx = page_index_from_base_address(page->base_address) >> order;
+    int idx = page_index_from_base_address(page->base_address);
 
-        if (BitmapGet(buddylists[order].bitmap.elements, idx)) {
+    // Return to freelist and clear bitmap
+    new (&page->list_link) ListElement();
+    buddylists[order].freelist_head->Prepend(page);
+    BitmapClear(buddylists[order].bitmap.busy_elements, idx);
 
-            /* Found it. Return to freelist and clear bitmap. Then done. */
-            new (&page->list_link) ListElement();
-            buddylists[order].freelist_head->Prepend(page);
-            BitmapClear(buddylists[order].bitmap.elements, idx);
-            try_merge_block(page, order);
-            goto done;
-        }
-    }
+    // Try to coalesce
+    try_merge_block(page, order);
 
-    assert(false);
-
-done:
     SpinlockUnlock(&lock);
     return;
 }

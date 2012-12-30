@@ -21,17 +21,17 @@ class Page
 {
 public:
     /**
-     * \brief   Location in the flat high-memory map of all RAM.
-     *          Always a multiple of #PAGE_SIZE.
-     */
-    VmAddr_t    base_address;
-
-    /**
      * \brief   Used internally by VM to keep list of free pages, and
      *          allowed for external use by holders of allocated pages
      *          to track the ownership.
      */
     ListElement list_link;
+
+    /**
+     * \brief   Location in the flat high-memory map of all RAM.
+     *          Always a multiple of #PAGE_SIZE.
+     */
+    VmAddr_t    base_address;
 
     /**
      * \brief   Find and provision 2<sup>\em order + 1</sup> consecutive pages of
