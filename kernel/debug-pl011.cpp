@@ -175,13 +175,22 @@ public:
     virtual ~Pl011DebugDriver ();
 
     virtual void Init ();
+    virtual void DoInit ();
     virtual void PrintMessage (const char message[]);
 
 private:
     pl011_t volatile * mUart0;
+    bool mInitRequested;
 };
 
 void Pl011DebugDriver::Init ()
+{
+    mInitRequested = true;
+}
+
+static char backlog[4096] = { '\0' };
+
+void Pl011DebugDriver::DoInit ()
 {
     assert (PL011_MMAP_SIZE <= PAGE_SIZE);
     bool mapped = TranslationTable::GetKernel()->MapPage(KERNEL_UART0_ADDRESS, VERSATILE_UART0_BASE, PROT_KERNEL);
@@ -192,17 +201,45 @@ void Pl011DebugDriver::Init ()
 
 void Pl011DebugDriver::PrintMessage (const char message[])
 {
-    const char * c = message;
+    if (mInitRequested && TranslationTable::GetKernel())
+    {
+        if (!mUart0)
+        {
+            DoInit();
 
-    while (*c != '\0') {
-        pl011_blocking_write(mUart0, *c);
-        ++c;
+            const char * c = backlog;
+
+            while (*c != '\0') {
+                pl011_blocking_write(mUart0, *c);
+                ++c;
+            }
+
+            c = "<END BACKLOG>\n";
+
+            while (*c != '\0') {
+                pl011_blocking_write(mUart0, *c);
+                ++c;
+            }
+        }
+
+        const char * c = message;
+
+        while (*c != '\0') {
+            pl011_blocking_write(mUart0, *c);
+            ++c;
+        }
+    }
+    else
+    {
+        strncat(backlog, message, sizeof(backlog) - strlen(backlog) - 1);
     }
 }
 
 Pl011DebugDriver::Pl011DebugDriver ()
 {
     Debug::RegisterDriver(this);
+    mInitRequested = false;
+    mUart0 = NULL;
 }
 
 Pl011DebugDriver::~Pl011DebugDriver ()
