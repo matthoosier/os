@@ -1,11 +1,13 @@
 #include <string.h>
 
+#include <kernel/message.hpp>
 #include <kernel/nameserver.hpp>
 #include <kernel/once.h>
 
 SyncSlabAllocator<NameRecord> NameRecord::sSlab;
 
-NameRecord::NameRecord (const char aFullPath[], Channel & aChannel)
+NameRecord::NameRecord (const char aFullPath[],
+                        RefPtr<Channel> aChannel)
     : mFullPath(aFullPath)
     , mChannel(aChannel)
 {
@@ -36,7 +38,8 @@ void NameServer::OnceInit (void * ignored)
 }
 
 NameRecord *
-NameServer::RegisterName (char const aFullPath[], Channel & aChannel)
+NameServer::RegisterName (char const aFullPath[],
+                          RefPtr<Channel> aChannel)
 {
     NameRecord * ret;
 
@@ -76,7 +79,7 @@ void NameServer::UnregisterName (NameRecord * aProvider)
     SpinlockUnlock(&sMapLock);
 }
 
-Channel * NameServer::LookupName (char const aFullPath[])
+RefPtr<Channel> NameServer::LookupName (char const aFullPath[])
 {
     NameRecord * record;
 
@@ -87,9 +90,9 @@ Channel * NameServer::LookupName (char const aFullPath[])
     SpinlockUnlock(&sMapLock);
 
     if (record) {
-        return &record->mChannel;
+        return record->mChannel;
     }
     else {
-        return NULL;
+        return RefPtr<Channel>();
     }
 }

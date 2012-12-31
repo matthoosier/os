@@ -8,6 +8,7 @@
 #include <sys/spinlock.h>
 
 #include <kernel/assert.h>
+#include <kernel/interrupt-handler.hpp>
 #include <kernel/list.hpp>
 #include <kernel/message.hpp>
 #include <kernel/mmu.hpp>
@@ -62,7 +63,7 @@ public:
      */
     Segment (Process & owner);
 
-    ~Segment ();
+    virtual ~Segment ();
 
 private:
     /**
@@ -138,7 +139,14 @@ public:
 
     typedef TreeMap<Pid_t, Process *>           PidMap_t;
 
+    typedef TreeMap<InterruptHandler_t, UserInterruptHandler *> IdToInterruptHandlerMap_t;
+
 public:
+    /**
+     * \brief   Name of program
+     */
+    char const * GetName ();
+
     /**
      * \brief   Fetches the value of the 'pagetable' field on a process object.
      */
@@ -189,23 +197,29 @@ public:
      */
     Pid_t GetId ();
 
-    Channel_t RegisterChannel (Channel * c);
+    Channel_t RegisterChannel (RefPtr<Channel> c);
 
     int UnregisterChannel (Channel_t id);
 
-    Channel * LookupChannel (Channel_t id);
+    RefPtr<Channel> LookupChannel (Channel_t id);
 
-    Connection_t RegisterConnection (Connection * c);
+    Connection_t RegisterConnection (RefPtr<Connection> c);
 
     int UnregisterConnection (Connection_t id);
 
-    Connection * LookupConnection (Connection_t id);
+    RefPtr<Connection> LookupConnection (Connection_t id);
 
-    Message_t RegisterMessage (Message * m);
+    Message_t RegisterMessage (RefPtr<Message> m);
 
     int UnregisterMessage (Message_t id);
 
-    Message * LookupMessage (Message_t id);
+    RefPtr<Message> LookupMessage (Message_t id);
+
+    InterruptHandler_t RegisterInterruptHandler (RefPtr<UserInterruptHandler> h);
+
+    int UnregisterInterruptHandler (InterruptHandler_t id);
+
+    RefPtr<UserInterruptHandler> LookupInterruptHandler (InterruptHandler_t id);
 
 public:
     /**
@@ -228,7 +242,7 @@ public:
     /**
      * \brief   Tear down a process instance
      */
-    ~Process ();
+    virtual ~Process ();
 
     /**
      * \brief   Get the thread executing inside this process
@@ -240,7 +254,7 @@ private:
      * \brief   Hidden to prevent the general public from making
      *          instances
      */
-    Process ();
+    Process (char const aComm[]);
 
 private:
     /**
@@ -337,11 +351,6 @@ private:
     ScopedPtr<IdToChannelMap_t> id_to_channel_map;
 
     /**
-     * \brief   All the Channels currently owned by this process
-     */
-    List<Channel, &Channel::link> channels_head;
-
-    /**
      * \brief   Value of the next handle that will be assigned
      *          to a Channel structure owned by this process
      */
@@ -370,6 +379,18 @@ private:
      *          to a Message structure owned by this process
      */
     int next_msgid;
+
+    /**
+     * \brief   Map integer handles to one of the UserInterruptHandler
+     *          data structure owned by this proces
+     */
+    ScopedPtr<IdToInterruptHandlerMap_t> id_to_interrupt_handler_map;
+
+    /**
+     * \brief   Value of the next handle that will be assigned
+     *          to a UserInterruptHandler owned by this process
+     */
+    int next_interrupt_handler_id;
 };
 
 BEGIN_DECLS

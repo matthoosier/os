@@ -8,6 +8,7 @@
 #include <kernel/message.hpp>
 #include <kernel/mmu.hpp>
 #include <kernel/process.hpp>
+#include <kernel/reaper.hpp>
 #include <kernel/thread.hpp>
 
 static bool CopyIoVecToIoBuffer (TranslationTable * user_pagetable,
@@ -35,20 +36,21 @@ static bool CopyIoVecToIoBuffer (TranslationTable * user_pagetable,
     return true;
 }
 
+static void checkExit (int messaging_result_code)
+{
+    if (messaging_result_code == -ERROR_EXITING)
+    {
+        Reaper::Reap(THREAD_CURRENT()->process);
+        assert(false);
+    }
+}
+
 static Channel_t DoChannelCreate ()
 {
-    Channel_t ret;
-
     try {
-        Channel * c = new Channel();
+        RefPtr<Channel> c(new Channel());
 
-        ret = THREAD_CURRENT()->process->RegisterChannel(c);
-
-        if (ret < 0) {
-            delete c;
-        }
-
-        return ret;
+        return THREAD_CURRENT()->process->RegisterChannel(c);
     }
     catch (std::bad_alloc) {
         return -ERROR_NO_MEM;
@@ -57,7 +59,7 @@ static Channel_t DoChannelCreate ()
 
 static int DoChannelDestroy (Channel_t chid)
 {
-    Channel * c = THREAD_CURRENT()->process->LookupChannel(chid);
+    RefPtr<Channel> c = THREAD_CURRENT()->process->LookupChannel(chid);
     int ret;
 
     if (!c) {
@@ -65,10 +67,7 @@ static int DoChannelDestroy (Channel_t chid)
     }
 
     ret = THREAD_CURRENT()->process->UnregisterChannel(chid);
-
-    if (ret >= 0) {
-        delete c;
-    }
+    c->Dispose();
 
     return ret;
 }
@@ -76,8 +75,8 @@ static int DoChannelDestroy (Channel_t chid)
 static Connection_t DoConnect (Pid_t pid, Channel_t chid)
 {
     Process * other;
-    Connection * conn;
-    Channel * chan;
+    RefPtr<Connection> conn;
+    RefPtr<Channel> chan;
     Connection_t ret;
 
     if (pid == SELF_PID) {
@@ -97,31 +96,33 @@ static Connection_t DoConnect (Pid_t pid, Channel_t chid)
     }
 
     try {
-        conn = new Connection(chan);
+        conn.Reset(new Connection(chan));
     } catch (std::bad_alloc) {
         return -ERROR_NO_MEM;
     }
 
     ret = THREAD_CURRENT()->process->RegisterConnection(conn);
 
-    if (ret < 0) {
-        delete conn;
-    }
-
     return ret;
 }
 
 static int DoDisconnect (Connection_t coid)
 {
-    int ret;
+    RefPtr<Connection> con;
 
     /* Don't allow the process's connection to the Process Manager to be closed */
     if (coid == PROCMGR_CONNECTION_ID) {
-        ret = -ERROR_INVALID;
+        return -ERROR_INVALID;
     }
-    else {
-        ret = THREAD_CURRENT()->process->UnregisterConnection(coid);
+
+    con = THREAD_CURRENT()->process->LookupConnection(coid);
+
+    if (!con) {
+        return -ERROR_INVALID;
     }
+
+    int ret = THREAD_CURRENT()->process->UnregisterConnection(coid);
+    con->Dispose();
     return ret;
 }
 
@@ -133,13 +134,17 @@ static ssize_t DoMessageSend (
         size_t replybuf_len
         )
 {
-    Connection * c = THREAD_CURRENT()->process->LookupConnection(coid);
+    RefPtr<Connection> c = THREAD_CURRENT()->process->LookupConnection(coid);
 
     if (!c) {
         return -ERROR_INVALID;
     }
 
-    return c->SendMessage(IoBuffer(msgbuf, msgbuf_len), IoBuffer(replybuf, replybuf_len));
+    int ret = c->SendMessage(IoBuffer(msgbuf, msgbuf_len), IoBuffer(replybuf, replybuf_len));
+
+    checkExit(ret);
+
+    return ret;
 }
 
 static ssize_t DoMessageSendV (
@@ -155,7 +160,7 @@ static ssize_t DoMessageSendV (
     TranslationTable * user_tt;
     TranslationTable * kernel_tt;
 
-    Connection * c = THREAD_CURRENT()->process->LookupConnection(coid);
+    RefPtr<Connection> c = THREAD_CURRENT()->process->LookupConnection(coid);
 
     if (!c) {
         return -ERROR_INVALID;
@@ -200,6 +205,9 @@ free_bufs:
     if (k_msgv)     kfree(k_msgv, k_msgv_sz);
     if (k_replyv)   kfree(k_replyv, k_replyv_sz);
 
+
+    checkExit(ret);
+
     return ret;
 }
 
@@ -210,26 +218,28 @@ static ssize_t DoMessageReceive (
         size_t msgbuf_len
         )
 {
-    Message * m;
+    RefPtr<Message> m;
 
-    Channel * c = THREAD_CURRENT()->process->LookupChannel(chid);
+    RefPtr<Channel> c = THREAD_CURRENT()->process->LookupChannel(chid);
 
     if (!c) {
         return -ERROR_INVALID;
     }
 
-    int ret = c->ReceiveMessage(&m, msgbuf, msgbuf_len);
+    int ret = c->ReceiveMessage(m, msgbuf, msgbuf_len);
 
     if (ret < 0) {
         *msgid = -1;
     } else {
-        if (m == NULL) {
+        if (!m) {
             *msgid = 0;
         }
         else {
             *msgid = THREAD_CURRENT()->process->RegisterMessage(m);
         }
     }
+
+    checkExit(ret);
 
     return ret;
 }
@@ -242,8 +252,8 @@ static ssize_t DoMessageReceiveV (
         )
 {
     int ret;
-    Message * m;
-    Channel * c = THREAD_CURRENT()->process->LookupChannel(chid);
+    RefPtr<Message> m;
+    RefPtr<Channel> c = THREAD_CURRENT()->process->LookupChannel(chid);
 
     TranslationTable * user_tt = TranslationTable::GetUser();
     TranslationTable * kernel_tt = TranslationTable::GetKernel();
@@ -269,12 +279,12 @@ static ssize_t DoMessageReceiveV (
         }
     }
 
-    ret = c->ReceiveMessage(&m, k_msgv, msgv_count);
+    ret = c->ReceiveMessage(m, k_msgv, msgv_count);
 
     if (ret < 0) {
         *msgid = -1;
     } else {
-        if (m == NULL) {
+        if (!m) {
             *msgid = 0;
         }
         else {
@@ -288,12 +298,14 @@ free_buffers:
         kfree(k_msgv, k_msgv_sz);
     }
 
+    checkExit(ret);
+
     return ret;
 }
 
 static size_t DoMessageGetLength (uintptr_t msgid)
 {
-    Message * m = THREAD_CURRENT()->process->LookupMessage(msgid);
+    RefPtr<Message> m = THREAD_CURRENT()->process->LookupMessage(msgid);
 
     if (m) {
         return m->GetLength();
@@ -309,7 +321,7 @@ static ssize_t DoMessageRead (
         size_t len
         )
 {
-    Message * m = THREAD_CURRENT()->process->LookupMessage(msgid);
+    RefPtr<Message> m = THREAD_CURRENT()->process->LookupMessage(msgid);
 
     if (m) {
         return m->Read(src_offset, dest, len);
@@ -331,7 +343,7 @@ static ssize_t DoMessageReadV (
     size_t k_destv_sz;
     IoBuffer * k_destv = NULL;
 
-    Message * m = THREAD_CURRENT()->process->LookupMessage(msgid);
+    RefPtr<Message> m = THREAD_CURRENT()->process->LookupMessage(msgid);
 
     if (!m) {
         ret = -ERROR_INVALID;
@@ -376,14 +388,18 @@ static ssize_t DoMessageReply (
         size_t replybuf_len
         )
 {
-    Message * m = THREAD_CURRENT()->process->LookupMessage(msgid);
+    RefPtr<Message> m = THREAD_CURRENT()->process->LookupMessage(msgid);
 
     if (!m) {
         return -ERROR_INVALID;
     }
 
     THREAD_CURRENT()->process->UnregisterMessage(msgid);
-    return m->Reply(status, replybuf, replybuf_len);
+    int ret = m->Reply(status, replybuf, replybuf_len);
+
+    checkExit(ret);
+
+    return ret;
 }
 
 static ssize_t DoMessageReplyV (
@@ -394,7 +410,7 @@ static ssize_t DoMessageReplyV (
         )
 {
     int ret;
-    Message * m;
+    RefPtr<Message> m;
     IoBuffer * k_replyv = NULL;
     size_t k_replyv_sz;
     TranslationTable * user_tt;
@@ -435,6 +451,8 @@ free_buffers:
     if (k_replyv) {
         kfree(k_replyv, k_replyv_sz);
     }
+
+    checkExit(ret);
 
     return ret;
 }

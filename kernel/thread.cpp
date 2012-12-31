@@ -241,13 +241,19 @@ void Thread::Join ()
         EndTransaction();
     }
 
-    if (this->kernel_stack.page != NULL) {
-        Page::Free(this->kernel_stack.page);
-    }
-
     // Invoke the destructor to clean out member variables
     // that themselves have destructors
     this->~Thread();
+
+    // Free backing memory if it's dynamically allocated
+    if (this->kernel_stack.page != NULL) {
+        Page::Free(this->kernel_stack.page);
+    }
+}
+
+Thread::State Thread::GetState ()
+{
+    return this->state;
 }
 
 Thread::~Thread ()

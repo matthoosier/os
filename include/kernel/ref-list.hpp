@@ -1,65 +1,36 @@
-#ifndef __LIST_HPP__
-#define __LIST_HPP__
+#ifndef __REF_LIST_HPP__
+#define __REF_LIST_HPP__
 
-#ifdef __KERNEL__
-#   include <kernel/assert.h>
-#else
-#   include <assert.h>
-#endif
-
-#include <new>
 #include <stdint.h>
 
-/**
- * \brief   Datatype to be embedded into any object which wants to
- *          be insertable into an intrusive doubly-linked list.
- *
- * ListElement instances should live directly in the storage of
- * the containing object, and should be treated as an opaque
- * type.
- */
-class ListElement
-{
-public:
-    ListElement ()
-        : prev(this)
-        , next(this)
-    {
-    }
-
-    bool Unlinked ()
-    {
-        return prev == this && next == this;
-    }
-
-    ListElement * prev;
-    ListElement * next;
-};
+#include <kernel/list.hpp>
+#include <kernel/smart-ptr.hpp>
 
 /**
- * \brief   Typesafe doubly-linked intrusive list.
+ * \brief   Typesafe doubly-linked intrusive list over elements
+ *          referred to by reference-counting pointers.
  *
  * Suggested usage:
  *
  * \code
  *
- * class Apple {
+ * class Apple : public RefCounted {
  *   public:
  *     ListElement node;
  * };
  *
- * List<Apple, &Apple::node> list;
+ * RefList<Apple, &Apple::node> list;
  *
- * Apple golden;
- * Apple red;
+ * RefPtr<Apple> golden(new Apple);
+ * RefPtr<Apple> red(new Apple);
  *
- * list.Append(&golden);
- * list.Prepend(&red);
+ * list.Append(golden);
+ * list.Prepend(red);
  *
  * \endcode
  */
 template <class T, ListElement T::* Ptr>
-    class List
+    class RefList
     {
     public:
 
@@ -74,7 +45,7 @@ template <class T, ListElement T::* Ptr>
          * ...
          *
          * for (List<Foo>::Iterator i = list.Begin(); i; i++) {
-         *     Foo * element = *i;
+         *     RefPtr<Foo> element = *i;
          *     ...;
          *     if (someThing) {
          *         list.Remove(element);
@@ -85,10 +56,10 @@ template <class T, ListElement T::* Ptr>
          */
         class Iterator
         {
-        friend class List;
+        friend class RefList;
 
         private:
-            Iterator (List<T, Ptr> * list, ListElement * elem)
+            Iterator (RefList<T, Ptr> * list, ListElement * elem)
                 : mList(list)
                 , mElem(elem)
             {
@@ -102,9 +73,9 @@ template <class T, ListElement T::* Ptr>
             }
 
         private:
-            List<T, Ptr> *  mList;
-            ListElement *   mElem;
-            ListElement *   mNextElem;
+            RefList<T, Ptr> *   mList;
+            ListElement *       mElem;
+            ListElement *       mNextElem;
 
         public:
             /**
@@ -112,9 +83,9 @@ template <class T, ListElement T::* Ptr>
              *          that this iterator instance positionally refers
              *          to.
              */
-            T * operator -> ()
+            RefPtr<T> operator -> ()
             {
-                return mList->elemFromHead(mElem);
+                return RefPtr<T>(mList->elemFromHead(mElem));
             }
 
             /**
@@ -122,9 +93,9 @@ template <class T, ListElement T::* Ptr>
              *          that this iterator instance positionally refers
              *          to.
              */
-            T * operator * ()
+            RefPtr<T> operator * ()
             {
-                return mList->elemFromHead(mElem);
+                return RefPtr<T>(mList->elemFromHead(mElem));
             }
 
             /**
@@ -157,11 +128,11 @@ template <class T, ListElement T::* Ptr>
 
         typedef Iterator Iter;
 
-        List ()
+        RefList ()
         {
         }
 
-        ~List ()
+        ~RefList ()
         {
             assert(Empty());
         }
@@ -185,54 +156,75 @@ template <class T, ListElement T::* Ptr>
         /**
          * \brief   Insert an element at the beginning of this list
          */
-        void Prepend (T * element) {
-            ListElement * elementHead = &(element->*Ptr);
+        void Prepend (RefPtr<T> element) {
+            T * rawElement = *element;
+            ListElement * elementHead = &(rawElement->*Ptr);
             elementHead->prev = &mHead;
             elementHead->next = mHead.next;
             mHead.next->prev = elementHead;
             mHead.next = elementHead;
+
+            element->Ref();
         }
 
         /**
          * \brief   Insert an element at the end of this list
          */
-        void Append (T * element) {
-            ListElement * elementHead = &(element->*Ptr);
+        void Append (RefPtr<T> element) {
+            T * rawElement = *element;
+            ListElement * elementHead = &(rawElement->*Ptr);
             elementHead->prev = mHead.prev;
             elementHead->next = &mHead;
             mHead.prev->next = elementHead;
             mHead.prev = elementHead;
+
+            element->Ref();
         }
 
         /**
          * \brief   Remove an element from this list
          */
-        static void Remove (T * element) {
-            ListElement * elementHead = &(element->*Ptr);
+        static void Remove (RefPtr<T> element) {
+            T * rawElement = *element;
+            ListElement * elementHead = &(rawElement->*Ptr);
             elementHead->prev->next = elementHead->next;
             elementHead->next->prev = elementHead->prev;
             elementHead->next = elementHead->prev = elementHead;
+
+            element->Unref();
         }
 
         /**
          * \brief   Fetch the first element in this list
          */
-        T * First () {
-            return Empty() ? 0 : elemFromHead(mHead.next);
+        RefPtr<T> First () {
+            RefPtr<T> ret;
+
+            if (!Empty()) {
+                ret.Reset(elemFromHead(mHead.next));
+            }
+
+            return ret;
         }
 
         /**
          * \brief   Fetch the last element in this list
          */
-        T * Last () {
-            return Empty() ? 0 : elemFromHead(mHead.prev);
+        RefPtr<T> Last () {
+            RefPtr<T> ret;
+
+            if (!Empty()) {
+                ret.Reset(elemFromHead(mHead.prev));
+            }
+
+            return ret;
         }
 
         /**
          * \brief   Fetch and remove the first element in this list
          */
-        T * PopFirst () {
-            T * ret = elemFromHead(mHead.next);
+        RefPtr<T> PopFirst () {
+            RefPtr<T> ret(elemFromHead(mHead.next));
             Remove(ret);
             return ret;
         }
@@ -240,8 +232,8 @@ template <class T, ListElement T::* Ptr>
         /**
          *  \brief  Fetch and remove the last element in this list
          */
-        T * PopLast () {
-            T * ret = elemFromHead(mHead.prev);
+        RefPtr<T> PopLast () {
+            RefPtr<T> ret(elemFromHead(mHead.prev));
             Remove(ret);
             return ret;
         }
@@ -250,18 +242,20 @@ template <class T, ListElement T::* Ptr>
          * \brief   Fetch the element of the list consecutively
          *          subsequent to the argument
          */
-        T * Next (T * element) {
-            ListElement * elementHead = &(element->*Ptr);
-            return elemFromHead(elementHead->next);
+        RefPtr<T> Next (RefPtr<T> element) {
+            T * rawElement = *element;
+            ListElement * elementHead = &(rawElement->*Ptr);
+            return RefPtr<T>(elemFromHead(elementHead->next));
         }
 
         /**
          * \brief   Fetch the element of the list consecutively
          *          previous to the argument
          */
-        T * Prev (T * element) {
-            ListElement * elementHead = &(element->*Ptr);
-            return elemFromHead(elementHead->prev);
+        RefPtr<T> Prev (RefPtr<T> element) {
+            T * rawElement = *element;
+            ListElement * elementHead = &(rawElement->*Ptr);
+            return RefPtr<T>(elemFromHead(elementHead->prev));
         }
 
     private:
@@ -286,4 +280,4 @@ template <class T, ListElement T::* Ptr>
         }
     };
 
-#endif /* __LIST_HPP__ */
+#endif /* __REF_LIST_HPP__ */

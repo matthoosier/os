@@ -5,6 +5,7 @@
 
 Semaphore::Semaphore (unsigned int count)
     : mCount(count)
+    , mCanceled(false)
 {
 };
 
@@ -16,14 +17,19 @@ void Semaphore::Up ()
 {
     Thread::BeginTransaction();
 
-    if (mWaitList.Empty()) {
-        ++mCount;
-    } else {
-        Waiter * w = mWaitList.PopFirst();
-        w->mState = Waiter::STATE_RELEASED;
-        Thread::MakeReady(w->mThread);
-        Thread::MakeReady(THREAD_CURRENT());
-        Thread::RunNextThread();
+    if (mCanceled) {
+        assert(mWaitList.Empty());
+    }
+    else {
+        if (mWaitList.Empty()) {
+            ++mCount;
+        } else {
+            Waiter * w = mWaitList.PopFirst();
+            w->mState = Waiter::STATE_RELEASED;
+            Thread::MakeReady(w->mThread);
+            Thread::MakeReady(THREAD_CURRENT());
+            Thread::RunNextThread();
+        }
     }
 
     Thread::EndTransaction();
@@ -33,13 +39,18 @@ void Semaphore::UpDuringException ()
 {
     Thread::BeginTransactionDuringException();
 
-    if (mWaitList.Empty()) {
-        ++mCount;
-    } else {
-        Waiter * w = mWaitList.PopFirst();
-        w->mState = Waiter::STATE_RELEASED;
-        Thread::MakeReady(w->mThread);
-        Thread::SetNeedResched();
+    if (mCanceled) {
+        assert(mWaitList.Empty());
+    }
+    else {
+        if (mWaitList.Empty()) {
+            ++mCount;
+        } else {
+            Waiter * w = mWaitList.PopFirst();
+            w->mState = Waiter::STATE_RELEASED;
+            Thread::MakeReady(w->mThread);
+            Thread::SetNeedResched();
+        }
     }
 
     Thread::EndTransaction();
@@ -52,21 +63,27 @@ bool Semaphore::Down (Thread::State aReasonForWait)
 
     Thread::BeginTransaction();
 
-    if (mCount < 1) {
-
-        Waiter w(current);
-        mWaitList.Append(&w);
-
-        while (w.mState == Waiter::STATE_WAITING) {
-            Thread::MakeUnready(current, aReasonForWait);
-            Thread::RunNextThread();
-        }
-
-        ret = (w.mState == Waiter::STATE_RELEASED);
-
-    } else {
+    if (mCanceled) {
+        assert(mWaitList.Empty());
         ret = false;
-        --mCount;
+    }
+    else {
+        if (mCount < 1) {
+
+            Waiter w(current);
+            mWaitList.Append(&w);
+
+            while (w.mState == Waiter::STATE_WAITING) {
+                Thread::MakeUnready(current, aReasonForWait);
+                Thread::RunNextThread();
+            }
+
+            ret = (w.mState == Waiter::STATE_RELEASED);
+
+        } else {
+            ret = true;
+            --mCount;
+        }
     }
 
     Thread::EndTransaction();
@@ -74,13 +91,19 @@ bool Semaphore::Down (Thread::State aReasonForWait)
     return ret;
 }
 
-void Semaphore::Disarm ()
+void Semaphore::Cancel ()
 {
     Thread::BeginTransaction();
 
+    mCanceled = true;
+
     while (!mWaitList.Empty()) {
-        mWaitList.PopFirst();
+        Waiter * w = mWaitList.PopFirst();
+        w->mState = Waiter::STATE_ABORTED;
+        Thread::MakeReady(w->mThread);
     }
 
+    Thread::MakeReady(THREAD_CURRENT());
+    Thread::RunNextThread();
     Thread::EndTransaction();
 }

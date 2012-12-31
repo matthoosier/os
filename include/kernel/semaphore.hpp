@@ -81,10 +81,11 @@ public:
     /**
      * \brief   Drop all back-pointers
      */
-    void Disarm ();
+    void Cancel ();
 
 private:
     unsigned int                    mCount;
+    bool                            mCanceled;
     List<Waiter, &Waiter::mLink>    mWaitList;
 };
 

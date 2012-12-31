@@ -14,6 +14,7 @@
 #include <kernel/mmu.hpp>
 #include <kernel/once.h>
 #include <kernel/process.hpp>
+#include <kernel/ref-list.hpp>
 #include <kernel/slaballocator.hpp>
 
 static InterruptController * gController = 0;
@@ -50,7 +51,7 @@ static IrqKernelHandlerFunc kernel_irq_handlers[NUM_IRQS];
 /**
  * User program's IRQ handlers
  */
-typedef List<UserInterruptHandlerRecord, &UserInterruptHandlerRecord::link> user_irq_handler_list_t;
+typedef RefList<UserInterruptHandler, &UserInterruptHandler::mLink> user_irq_handler_list_t;
 static user_irq_handler_list_t user_irq_handlers[NUM_IRQS];
 
 /**
@@ -141,43 +142,43 @@ void InterruptAttachKernelHandler (unsigned int irq_number, IrqKernelHandlerFunc
 }
 
 void InterruptAttachUserHandler (
-        struct UserInterruptHandlerRecord * handler
+        RefPtr<UserInterruptHandler> handler
         )
 {
-    assert(handler->link.Unlinked());
-    assert(handler->handler_info.irq_number < NUM_IRQS && handler->handler_info.irq_number >= 0);
+    assert(handler->mLink.Unlinked());
+    assert(handler->mHandlerInfo.mIrqNumber < NUM_IRQS && handler->mHandlerInfo.mIrqNumber >= 0);
 
-    handler->state_info.masked = false;
+    handler->mStateInfo.mMasked = false;
 
     /* Acquire interrupt protection */
     SpinlockLock(&irq_handlers_lock);
 
-    user_irq_handlers[handler->handler_info.irq_number].Append(handler);
+    user_irq_handlers[handler->mHandlerInfo.mIrqNumber].Append(handler);
 
     /*
     Blip the mask count up and then down again to trigger the interrupt
     controller to unmask it (on the downward stroke) if there are no
     other masks against it right now.
     */
-    increment_irq_mask(handler->handler_info.irq_number);
-    decrement_irq_mask(handler->handler_info.irq_number);
+    increment_irq_mask(handler->mHandlerInfo.mIrqNumber);
+    decrement_irq_mask(handler->mHandlerInfo.mIrqNumber);
 
     /* Drop interrupt protection */
     SpinlockUnlock(&irq_handlers_lock);
 }
 
 void InterruptDetachUserHandler (
-        struct UserInterruptHandlerRecord * record
+        RefPtr<UserInterruptHandler> record
         )
 {
-    unsigned int n = record->handler_info.irq_number;
+    unsigned int n = record->mHandlerInfo.mIrqNumber;
 
     SpinlockLock(&irq_handlers_lock);
 
     user_irq_handlers[n].Remove(record);
 
     /* Flush out any outstanding per-drive interrupt masks */
-    if (record->state_info.masked) {
+    if (record->mStateInfo.mMasked) {
         decrement_irq_mask(n);
     }
 
@@ -197,15 +198,15 @@ void InterruptDetachUserHandler (
 }
 
 int InterruptCompleteUserHandler (
-    struct UserInterruptHandlerRecord * handler
+    RefPtr<UserInterruptHandler> handler
     )
 {
-    if (!handler->state_info.masked) {
+    if (!handler->mStateInfo.mMasked) {
         return ERROR_INVALID;
     }
     else {
-        handler->state_info.masked = false;
-        decrement_irq_mask(handler->handler_info.irq_number);
+        handler->mStateInfo.mMasked = false;
+        decrement_irq_mask(handler->mHandlerInfo.mIrqNumber);
         return ERROR_OK;
     }
 }
@@ -233,27 +234,14 @@ void InterruptHandler ()
          cursor;
          cursor++) {
 
-        Process       * process;
-        Connection    * connection;
+        RefPtr<UserInterruptHandler> record = *cursor;
 
-        struct UserInterruptHandlerRecord * record = *cursor;
+        assert(!record->mStateInfo.mMasked);
 
-        assert(!record->state_info.masked);
-
-        process = Process::Lookup(record->handler_info.pid);
-
-        if (process == NULL) {
-            continue;
-        }
-
-        connection = process->LookupConnection(record->handler_info.coid);
-
-        if (connection != NULL) {
-            int result = connection->SendMessageAsync((uintptr_t)record->handler_info.param);
-            if (result == ERROR_OK) {
-                record->state_info.masked = true;
-                increment_irq_mask(record->handler_info.irq_number);
-            }
+        int result = record->mHandlerInfo.mConnection->SendMessageAsyncDuringException((uintptr_t)record->mHandlerInfo.mPulsePayload);
+        if (result == ERROR_OK) {
+            record->mStateInfo.mMasked = true;
+            increment_irq_mask(record->mHandlerInfo.mIrqNumber);
         }
     }
 
@@ -270,21 +258,22 @@ void InterruptMaskIrq (int n)
     gController->MaskIrq(n);
 }
 
-static SyncSlabAllocator<UserInterruptHandlerRecord> user_interrupt_handler_slab;
+SyncSlabAllocator<UserInterruptHandler> UserInterruptHandler::sSlab;
 
-struct UserInterruptHandlerRecord * UserInterruptHandlerRecordAlloc ()
+UserInterruptHandler::UserInterruptHandler ()
+    : mDisposed(false)
 {
-    struct UserInterruptHandlerRecord * ret = user_interrupt_handler_slab.Allocate();
-
-    if (ret) {
-        memset(ret, 0, sizeof(*ret));
-        new (&ret->link) ListElement();
-    }
-
-    return ret;
 }
 
-void UserInterruptHandlerRecordFree (struct UserInterruptHandlerRecord * record)
+UserInterruptHandler::~UserInterruptHandler ()
 {
-    user_interrupt_handler_slab.Free(record);
+}
+
+void UserInterruptHandler::Dispose ()
+{
+    if (!mDisposed)
+    {
+        mDisposed = true;
+        mHandlerInfo.mConnection.Reset();
+    }
 }

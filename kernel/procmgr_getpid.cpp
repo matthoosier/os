@@ -5,7 +5,7 @@
 #include <kernel/procmgr.hpp>
 #include <kernel/thread.hpp>
 
-static void HandleGetPid (Message * message)
+static void HandleGetPid (RefPtr<Message> message)
 {
     struct ProcMgrReply reply;
     Thread * sender = message->GetSender();

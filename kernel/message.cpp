@@ -46,6 +46,7 @@ static ssize_t TransferPayload (
         );
 
 Channel::Channel ()
+    : mDisposed(false)
 {
 }
 
@@ -53,64 +54,141 @@ Channel::~Channel ()
 {
     SpinlockLock(&gLock);
 
-    assert(this->waiting_clients.Empty());
-    assert(this->unwaiting_clients.Empty());
-    assert(this->receive_blocked_head.Empty());
-    assert(this->link.Unlinked());
+    assert(this->mBlockedConnections.Empty());
+    assert(this->mNotBlockedConnections.Empty());
+    assert(this->mReceiveBlockedMessages.Empty());
 
     SpinlockUnlock(&gLock);
 }
 
-Connection::Connection (Channel * server)
+void Channel::Dispose ()
+{
+    if (mDisposed) {
+        return;
+    }
+
+    SpinlockLock(&gLock);
+
+    mDisposed = true;
+
+    // Immediately drop filesystem name of the channel
+    name_record.Reset();
+
+    // Dispose all our connections that are send-blocked
+    while (!mBlockedConnections.Empty()) {
+        RefPtr<Connection> connection = mBlockedConnections.PopFirst();
+
+        SpinlockUnlock(&gLock);
+        connection->Dispose();
+        SpinlockLock(&gLock);
+
+        assert(connection->link.Unlinked());
+    }
+
+    // Dispose all our connections that are not send-blocked
+    while (!mNotBlockedConnections.Empty()) {
+        RefPtr<Connection> connection = mNotBlockedConnections.PopFirst();
+
+        SpinlockUnlock(&gLock);
+        connection->Dispose();
+        SpinlockLock(&gLock);
+
+        assert(connection->link.Unlinked());
+    }
+
+    // Unqueue any receive-blocked messages
+    while (!mReceiveBlockedMessages.Empty()) {
+        RefPtr<Message> message = mReceiveBlockedMessages.PopFirst();
+
+        if (message->mSender && message->mSender->GetState() != Thread::STATE_FINISHED) {
+            assert(message->mReceiver != NULL);
+
+            message->mSendData.sync.msgv = NULL;
+            message->mSendData.sync.msgv_count = 0;
+            message->mSendData.sync.replyv = NULL;
+            message->mSendData.sync.replyv_count = 0;
+
+            SpinlockUnlock(&gLock);
+            message->mReceiverSemaphore.Up();
+            SpinlockLock(&gLock);
+        }
+    }
+
+    // By disposing all the connected channels above, we've
+    // ensured that there are no remaining receive-blocked
+    // messages.
+    assert(mReceiveBlockedMessages.Empty());
+
+    SpinlockUnlock(&gLock);
+}
+
+Connection::Connection (RefPtr<Channel> server)
     : channel(server)
+    , mDisposed(false)
 {
     SpinlockLock(&gLock);
 
-    server->unwaiting_clients.Append(this);
+    server->mNotBlockedConnections.Append(SelfRef());
 
     SpinlockUnlock(&gLock);
 }
 
 Connection::~Connection ()
 {
+}
+
+void Connection::Dispose ()
+{
+    if (mDisposed) {
+        return;
+    }
+
     SpinlockLock(&gLock);
 
-    if (this->send_blocked_head.Empty()) {
-        if (this->channel) {
-            this->channel->unwaiting_clients.Remove(this);
-        }
+    assert(channel);
+
+    if (this->mSendBlockedMessages.Empty()) {
+        // Channel flushes out all send-blocked messages upon its
+        // own disposal, so there's no need to check whether the
+        // channel is disposed.
+        this->channel->mNotBlockedConnections.Remove(SelfRef());
     }
     else {
-        if (this->channel) {
-            this->channel->waiting_clients.Remove(this);
-        }
+        // Channel disconnects all non-send-blocked connections upon
+        // its own disposal, so there's no need to check whether
+        // the channel is disposed.
+        this->channel->mBlockedConnections.Remove(SelfRef());
 
-        while (!this->send_blocked_head.Empty()) {
-            Message * message = this->send_blocked_head.PopFirst();
+        while (!this->mSendBlockedMessages.Empty()) {
+            RefPtr<Message> message = this->mSendBlockedMessages.PopFirst();
 
-            if (message->mSender) {
+            if (message->mSender && message->mSender->GetState() != Thread::STATE_FINISHED) {
                 // Unblock sender; it'll deallocate the message when it returns
                 // out of SendMessage()
                 message->Reply(ERROR_NO_SYS, &IoBuffer::GetEmpty(), 1);
             } else {
                 // Async message; no reply needed. Just directly deallocate.
-                delete message;
+                message.Reset();
             }
         }
     }
 
-    assert(this->send_blocked_head.Empty());
+    channel.Reset();
+
+    assert(this->mSendBlockedMessages.Empty());
 
     SpinlockUnlock(&gLock);
+
+    mDisposed = true;
 }
 
 Message::Message ()
-    : mConnection ()
-    , mSender (NULL)
+    : mSender (NULL)
     , mSenderSemaphore (0)
     , mReceiver (NULL)
     , mReceiverSemaphore (0)
     , mResult ()
+    , mDisposed (false)
 {
     memset(&mSendData, 0, sizeof(mSendData));
     memset(&mReceiveData, 0, sizeof(mReceiveData));
@@ -120,39 +198,49 @@ Message::~Message ()
 {
 }
 
-void Message::Disarm ()
+void Message::Dispose ()
 {
-    mSenderSemaphore.Disarm();
-    mReceiverSemaphore.Disarm();
+    if (mDisposed) {
+        return;
+    }
+
+    mConnection.Reset();
+    mDisposed = true;
 }
 
-ssize_t Connection::SendMessageAsync (uintptr_t payload)
+ssize_t Connection::SendMessageAsyncDuringException (uintptr_t payload)
 {
-    Message * message;
+    RefPtr<Message> message;
 
     SpinlockLock(&gLock);
 
-    if (this->channel->receive_blocked_head.Empty()) {
+    if (this->mDisposed || this->channel->mDisposed) {
+        SpinlockUnlock(&gLock);
+        return -ERROR_INVALID;
+    }
+
+    if (this->channel->mReceiveBlockedMessages.Empty()) {
         /* No receiver thread is waiting on the channel at the moment */
         try {
-            message = new Message();
+            message.Reset(new Message());
         } catch (std::bad_alloc) {
             SpinlockUnlock(&gLock);
             return -ERROR_NO_MEM;
         }
 
-        message->mConnection = this;
+        message->mConnection = SelfRef();
         message->mSender = NULL;
         message->mSendData.async.payload = payload;
 
         message->mReceiver = NULL;
 
         /* Enqueue message for delivery whenever receiver asks for it */
-        if (this->send_blocked_head.Empty()) {
-            this->channel->unwaiting_clients.Remove(this);
-            this->channel->waiting_clients.Append(this);
+        if (this->mSendBlockedMessages.Empty()) {
+            RefPtr<Connection> self = SelfRef();
+            this->channel->mNotBlockedConnections.Remove(self);
+            this->channel->mBlockedConnections.Append(self);
         }
-        this->send_blocked_head.Append(message);
+        this->mSendBlockedMessages.Append(message);
 
         SpinlockUnlock(&gLock);
         message->mReceiverSemaphore.UpDuringException();
@@ -160,11 +248,11 @@ ssize_t Connection::SendMessageAsync (uintptr_t payload)
     }
     else {
         /* Receiver thread is ready to go */
-        message = this->channel->receive_blocked_head.PopFirst();
+        message = this->channel->mReceiveBlockedMessages.PopFirst();
 
         assert(message->mReceiver != NULL);
 
-        message->mConnection = this;
+        message->mConnection = SelfRef();
         message->mSender = NULL;
         message->mSendData.async.payload = payload;
 
@@ -188,20 +276,25 @@ ssize_t Connection::SendMessage (
         size_t         replyv_count
         )
 {
-    Message * message;
+    RefPtr<Message> message;
     ssize_t result;
 
     SpinlockLock(&gLock);
 
-    if (this->channel->receive_blocked_head.Empty()) {
+    if (this->mDisposed || this->channel->mDisposed) {
+        SpinlockUnlock(&gLock);
+        return -ERROR_INVALID;
+    }
+
+    if (this->channel->mReceiveBlockedMessages.Empty()) {
         /* No receiver thread is waiting on the channel at the moment */
         try {
-            message = new Message();
+            message.Reset(new Message());
         } catch (std::bad_alloc) {
             return -ERROR_NO_MEM;
         }
 
-        message->mConnection = this;
+        message->mConnection = SelfRef();
         message->mSender = THREAD_CURRENT();
         message->mSendData.sync.msgv = msgv;
         message->mSendData.sync.msgv_count = msgv_count;
@@ -211,19 +304,20 @@ ssize_t Connection::SendMessage (
         message->mReceiver = NULL;
 
         /* Enqueue as blocked on the channel */
-        if (this->send_blocked_head.Empty()) {
-            this->channel->unwaiting_clients.Remove(this);
-            this->channel->waiting_clients.Append(this);
+        if (this->mSendBlockedMessages.Empty()) {
+            RefPtr<Connection> self = SelfRef();
+            this->channel->mNotBlockedConnections.Remove(self);
+            this->channel->mBlockedConnections.Append(self);
         }
-        this->send_blocked_head.Append(message);
+        this->mSendBlockedMessages.Append(message);
     }
     else {
         /* Receiver thread is ready to go */
-        message = this->channel->receive_blocked_head.PopFirst();
+        message = this->channel->mReceiveBlockedMessages.PopFirst();
 
         assert(message->mReceiver != NULL);
 
-        message->mConnection = this;
+        message->mConnection = SelfRef();
         message->mSender = THREAD_CURRENT();
         message->mSendData.sync.msgv = msgv;
         message->mSendData.sync.msgv_count = msgv_count;
@@ -246,7 +340,7 @@ ssize_t Connection::SendMessage (
     */
 
     result = message->mResult;
-    delete message;
+    message.Reset();
 
     return result;
 } /* Connection::SendMessage() */
@@ -257,20 +351,20 @@ void Channel::SetNameRecord (NameRecord * name_record)
 }
 
 ssize_t Channel::ReceiveMessage (
-        Message  ** context,
+        RefPtr<Message> & context,
         IoBuffer const msgv[],
         size_t msgv_count
         )
 {
-    Message       * message;
+    RefPtr<Message> message;
     ssize_t         num_copied;
 
     SpinlockLock(&gLock);
 
-    if (this->waiting_clients.Empty()) {
+    if (this->mBlockedConnections.Empty()) {
         /* No message is waiting in the channel at the moment */
         try {
-            message = new Message();
+            message.Reset(new Message());
         } catch (std::bad_alloc) {
             return -ERROR_NO_MEM;
         }
@@ -280,20 +374,19 @@ ssize_t Channel::ReceiveMessage (
         message->mReceiveData.msgv_count = msgv_count;
 
         message->mSender = NULL;
-        message->mConnection = NULL;
 
         /* Enqueue as blocked on the channel */
-        this->receive_blocked_head.Append(message);
+        this->mReceiveBlockedMessages.Append(message);
     }
     else {
         /* Some message is waiting in the channel already */
-        Connection * client = this->waiting_clients.First();
-        assert(!client->send_blocked_head.Empty());
-        message = client->send_blocked_head.PopFirst();
+        RefPtr<Connection> client = this->mBlockedConnections.First();
+        assert(!client->mSendBlockedMessages.Empty());
+        message = client->mSendBlockedMessages.PopFirst();
 
-        if (client->send_blocked_head.Empty()) {
-            this->waiting_clients.Remove(client);
-            this->unwaiting_clients.Append(client);
+        if (client->mSendBlockedMessages.Empty()) {
+            this->mBlockedConnections.Remove(client);
+            this->mNotBlockedConnections.Append(client);
         }
 
         message->mReceiver = THREAD_CURRENT();
@@ -307,7 +400,7 @@ ssize_t Channel::ReceiveMessage (
 
     if (message->mSender != NULL) {
         /* Synchronous message */
-        *context = message;
+        context = message;
 
         num_copied = TransferPayloadV(
                 message->mSender,
@@ -322,7 +415,7 @@ ssize_t Channel::ReceiveMessage (
     }
     else {
         /* Asynchronous message */
-        *context = NULL;
+        context.Reset();
 
         IoBuffer payload_chunk(message->mSendData.async.payload);
 
@@ -344,7 +437,7 @@ ssize_t Channel::ReceiveMessage (
                 );
 
         /* There will be no reply, so free the Message struct now */
-        delete message;
+        message.Reset();
     }
 
     return num_copied;
@@ -404,50 +497,42 @@ ssize_t Message::Reply (
 {
     size_t result;
 
-    /*
-    Make sure that client process hasn't been torn down already. If it has,
-    just forget about the reply and deallocate the message object immediately.
-
-    We can determine whether the client process is dead by inspecting whether
-    the weak-pointer 'connection' has been nulled out. That happens
-    automatically when the object deconstructs itself.
-    */
-    if (!mConnection) {
-        delete this;
-        return -ERROR_INVALID;
-    }
-
     assert(mReceiver == THREAD_CURRENT());
 
-    mReceiveData.replyv = replyv;
-    mReceiveData.replyv_count = replyv_count;
-
-    /*
-    Releasing this thread to run again might make the receiver's reply
-    buffer invalid, so do the transfer before returning control. The sender
-    will wake up with the reply message already copied into his address
-    space's replybuf.
-    */
-    if (status == ERROR_OK) {
-        result = TransferPayloadV (
-                mReceiver,
-                IoVector(mReceiveData.replyv,
-                         mReceiveData.replyv_count),
-                0,
-                mSender,
-                IoVector(mSendData.sync.replyv,
-                         mSendData.sync.replyv_count),
-                0
-                );
-        mResult = result;
-    } else {
-        mResult = -status;
+    if (mDisposed) {
+        result = -ERROR_INVALID;
     }
+    else {
+        mReceiveData.replyv = replyv;
+        mReceiveData.replyv_count = replyv_count;
 
-    result = status == ERROR_OK ? mResult : ERROR_OK;
+        /*
+        Releasing this thread to run again might make the receiver's reply
+        buffer invalid, so do the transfer before returning control. The sender
+        will wake up with the reply message already copied into his address
+        space's replybuf.
+        */
+        if (status == ERROR_OK) {
+            result = TransferPayloadV (
+                    mReceiver,
+                    IoVector(mReceiveData.replyv,
+                             mReceiveData.replyv_count),
+                    0,
+                    mSender,
+                    IoVector(mSendData.sync.replyv,
+                             mSendData.sync.replyv_count),
+                    0
+                    );
+            mResult = result;
+        } else {
+            mResult = -status;
+        }
 
-    /* Sender will get to run again whenever a scheduling decision happens */
-    mSenderSemaphore.Up();
+        result = status == ERROR_OK ? mResult : ERROR_OK;
+
+        /* Sender will get to run again whenever a scheduling decision happens */
+        mSenderSemaphore.Up();
+    }
 
     /* Abandon any temporary priority boost we had now that the sender is unblocked */
     THREAD_CURRENT()->SetEffectivePriority(THREAD_CURRENT()->assigned_priority);

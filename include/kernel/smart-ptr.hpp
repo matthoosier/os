@@ -50,7 +50,7 @@ template <class T>
             Release();
         }
 
-        inline void Clear ()
+        inline void Reset ()
         {
             Release();
         }
@@ -124,39 +124,13 @@ protected:
 template <class T>
     class RefPtr : public RefPtrBase
     {
-    private:
-        T * mPointee;
-
-    protected:
-        inline void Release ()
-        {
-            if (mPointee)
-            {
-                unsigned int newCount = DecrementReference(*mPointee);
-
-                if (newCount < 1)
-                {
-                    delete mPointee;
-                }
-
-                mPointee = 0;
-            }
-        }
-
-        inline void Acquire (T * pointee)
-        {
-            assert(pointee != 0);
-            mPointee = pointee;
-            IncrementReference(*mPointee);
-        }
-
     public:
-        inline RefPtr ()
+        explicit inline RefPtr ()
             : mPointee(0)
         {
         }
 
-        inline RefPtr (T * pointee)
+        explicit inline RefPtr (T * pointee)
             : mPointee(0)
         {
             Acquire(pointee);
@@ -206,9 +180,13 @@ template <class T>
             return mPointee;
         }
 
-        inline RefPtr<T> & operator= (RefPtr<T> & other)
+        inline RefPtr<T> & operator= (RefPtr<T> const& other)
         {
-            if (other.mPointee != mPointee)
+            if (&other == this)
+            {
+                // Nothing to do
+            }
+            else if (other.mPointee != mPointee)
             {
                 Release();
                 Acquire(other.mPointee);
@@ -227,6 +205,32 @@ template <class T>
 
             return *this;
         }
+
+    protected:
+        inline void Release ()
+        {
+            if (mPointee)
+            {
+                unsigned int newCount = DecrementReference(*mPointee);
+
+                if (newCount < 1)
+                {
+                    delete mPointee;
+                }
+
+                mPointee = 0;
+            }
+        }
+
+        inline void Acquire (T * pointee)
+        {
+            assert(pointee != 0);
+            mPointee = pointee;
+            IncrementReference(*mPointee);
+        }
+
+    private:
+        T * mPointee;
     };
 
 class WeakPointee;
@@ -336,22 +340,6 @@ public:
  */
 class RefCounted
 {
-friend class RefPtrBase;
-
-private:
-    unsigned int mRefCount;
-
-protected:
-    unsigned int Increment ()
-    {
-        return ++mRefCount;
-    }
-
-    unsigned int Decrement ()
-    {
-        return --mRefCount;
-    }
-
 public:
     inline RefCounted ()
         : mRefCount(0)
@@ -361,16 +349,43 @@ public:
     virtual inline ~RefCounted ()
     {
     }
+
+    /**
+     * \brief   Normally for use by RefPtrBase, but can also be
+     *          used to manually implement reference-counting.
+     *
+     * \return  The the number of references after the increment
+     *          finishes.
+     */
+    unsigned int Ref ()
+    {
+        return ++mRefCount;
+    }
+
+    /**
+     * \brief   Normally for use by RefPtrBase, but can also be
+     *          used to manually implement reference-counting.
+     *
+     * \return  The the number of references after the decrement
+     *          finishes.
+     */
+    unsigned int Unref ()
+    {
+        return --mRefCount;
+    }
+
+private:
+    unsigned int mRefCount;
 };
 
 inline unsigned int RefPtrBase::IncrementReference (RefCounted & countee)
 {
-    return countee.Increment();
+    return countee.Ref();
 }
 
 inline unsigned int RefPtrBase::DecrementReference (RefCounted & countee)
 {
-    return countee.Decrement();
+    return countee.Unref();
 }
 
 inline WeakPtrBase::WeakPtrBase ()

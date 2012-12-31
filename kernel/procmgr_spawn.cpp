@@ -2,7 +2,7 @@
 #include <kernel/process.hpp>
 #include <kernel/procmgr.hpp>
 
-static void HandleSpawn (Message * message)
+static void HandleSpawn (RefPtr<Message> message)
 {
     size_t path_len;
     char * path;

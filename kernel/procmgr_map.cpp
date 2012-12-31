@@ -39,7 +39,7 @@ public:
 
 SyncSlabAllocator<MappedPage> MappedPage::sSlab;
 
-static void HandleMapPhys (Message * message)
+static void HandleMapPhys (RefPtr<Message> message)
 {
     struct ProcMgrMessage   msg;
     struct ProcMgrReply reply;
@@ -115,8 +115,6 @@ static void HandleMapPhys (Message * message)
         if (mapped_pages.Empty()) {
             message->Reply(ERROR_INVALID, &reply, sizeof(reply));
         } else {
-            message->Reply(ERROR_OK, &reply, sizeof(reply));
-
             /* List of partial pages no longer needed */
             while (!mapped_pages.Empty()) {
                 page = mapped_pages.PopFirst();
@@ -124,6 +122,11 @@ static void HandleMapPhys (Message * message)
                 /* Free the block hosting the list node */
                 delete page;
             }
+
+            // No need to record this as a Segment; no VM pages
+            // were allocated to back this mapping--it's straight
+            // to physical memory.
+            message->Reply(ERROR_OK, &reply, sizeof(reply));
         }
     }
 }

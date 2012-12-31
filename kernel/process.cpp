@@ -28,9 +28,6 @@ struct process_creation_context
 /** Allocates monotonically increasing process identifiers */
 static Pid_t get_next_pid (void);
 
-/** Terminates a process and removes registrations related to it */
-static void TerminateProcess (Process * p);
-
 SyncSlabAllocator<Segment> Segment::sSlab;
 
 Segment::Segment (Process & p)
@@ -63,19 +60,24 @@ Segment::~Segment ()
 
 SyncSlabAllocator<Process> Process::sSlab;
 
-Process::Process ()
-    : pagetable(0)
+Process::Process (char const aComm[])
+    : pagetable(new TranslationTable())
     , entry(0)
     , thread(NULL)
     , next_chid(FIRST_CHANNEL_ID)
     , next_coid(FIRST_CONNECTION_ID)
     , next_msgid(1)
+    , next_interrupt_handler_id(1)
 {
+    /* Record our name */
+    strncpy(comm, aComm, sizeof(comm));
+
     SpinlockInit(&this->lock);
 
     this->id_to_channel_map    = new IdToChannelMap_t(IdToChannelMap_t::SignedIntCompareFunc);
     this->id_to_connection_map = new IdToConnectionMap_t(IdToConnectionMap_t::SignedIntCompareFunc);
     this->id_to_message_map    = new IdToMessageMap_t(IdToMessageMap_t::SignedIntCompareFunc);
+    this->id_to_interrupt_handler_map   = new IdToInterruptHandlerMap_t(IdToInterruptHandlerMap_t::SignedIntCompareFunc);
 }
 
 static void ForeachMessage (
@@ -94,14 +96,58 @@ static void ForeachMessage (
     message->Reply(ERROR_NO_SYS, IoBuffer::GetEmpty());
 }
 
-static void ForeachConnection (
+static void DisposeConnection (
         RawTreeMap::Key_t key,
         RawTreeMap::Value_t value,
         void * ignored
         )
 {
     Connection * connection = static_cast<Connection *>(value);
-    delete connection;
+
+    // Drop all internal references
+    connection->Dispose();
+
+    // Little dance to avoid making the manual Unref() call below
+    // be the one to drop the final reference.
+    RefPtr<Connection> deleter(connection);
+    connection->Unref();
+    deleter.Reset();
+}
+
+static void DisposeChannel (
+        RawTreeMap::Key_t key,
+        RawTreeMap::Value_t value,
+        void * ignored
+        )
+{
+    Channel * channel = static_cast<Channel *>(value);
+
+    // Drop all internal references
+    channel->Dispose();
+
+    // Little dance to avoid making the manual Unref() call below
+    // be the one to drop the final reference.
+    RefPtr<Channel> deleter(channel);
+    channel->Unref();
+    deleter.Reset();
+}
+
+static void DisposeInterruptHandler (
+        RawTreeMap::Key_t key,
+        RawTreeMap::Value_t value,
+        void * ignored
+        )
+{
+    UserInterruptHandler * handler = static_cast<UserInterruptHandler *>(value);
+
+    // Little dance to avoid making the manual Unref() call below
+    // be the one to drop the final reference
+    RefPtr<UserInterruptHandler> deleter(handler);
+    handler->Unref();
+    handler->Dispose();
+
+    InterruptDetachUserHandler(deleter);
+    deleter.Reset();
 }
 
 Process::~Process ()
@@ -111,16 +157,15 @@ Process::~Process ()
     the connection object will free any messages that have been queued
     for sending but aren't yet received by a server.
     */
-    this->id_to_connection_map->Foreach (ForeachConnection, NULL);
+    this->id_to_connection_map->Foreach (DisposeConnection, NULL);
 
-    /* Free all channels owned by process */
-    while (!this->channels_head.Empty()) {
-        Channel * channel = this->channels_head.PopFirst();
-        delete channel;
-    }
+    this->id_to_channel_map->Foreach (DisposeChannel, NULL);
 
     /* Free all messages that the process has received but not yet responded to */
     this->id_to_message_map->Foreach (ForeachMessage, NULL);
+
+    /* Free and unregister all interrupt handlers installed by the process */
+    this->id_to_interrupt_handler_map->Foreach (DisposeInterruptHandler, NULL);
     
     /* Deallocate virtual memory of the process */
     while (!this->segments_head.Empty()) {
@@ -137,9 +182,9 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
     const Elf32_Ehdr * hdr;
     unsigned int i;
     Connection_t procmgr_coid;
-    Connection * procmgr_con;
     Process * procmgr;
-    Channel * procmgr_chan;
+    RefPtr<Connection> procmgr_con;
+    RefPtr<Channel> procmgr_chan;
 
     image = RamFsGetImage(executableName);
 
@@ -159,16 +204,11 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
         return NULL;
     }
 
-    // May throw. If it does, this function'll just cascade unwind to the caller,
-    // who's trapping the exception
     try {
-        p = new Process();
+        p = new Process(executableName);
     } catch (std::bad_alloc) {
         return NULL;
     }
-
-    /* Record our name */
-    strncpy(p->comm, executableName, sizeof(p->comm));
 
     /* Allocate, assign, and record Pid */
     p->pid = get_next_pid();
@@ -179,14 +219,6 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
     THREAD_CURRENT()->process = p;
 
     // Get pagetable for the new process.
-    try {
-        p->pagetable = new TranslationTable();
-    } catch (std::bad_alloc a) {
-        assert(false);
-        THREAD_CURRENT()->process = NULL;
-        goto free_process;
-    }
-
     tt = *p->pagetable;
 
     /*
@@ -277,10 +309,10 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
     procmgr = Lookup(PROCMGR_PID);
     assert(procmgr != NULL);
     procmgr_chan = procmgr->LookupChannel(FIRST_CHANNEL_ID);
-    assert(procmgr_chan != NULL);
+    assert(procmgr_chan);
 
     try {
-        procmgr_con = new Connection(procmgr_chan);
+        procmgr_con.Reset(new Connection(procmgr_chan));
     } catch (std::bad_alloc) {
         goto free_process;
     }
@@ -288,8 +320,7 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
     procmgr_coid = p->RegisterConnection(procmgr_con);
     
     if (procmgr_coid < 0) {
-        /* Not enough resources to register the connection */
-        delete procmgr_con;
+        procmgr_con.Reset();
         goto free_process;
     }
 
@@ -299,6 +330,7 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
 
 free_process:
 
+    assert(false);
     delete p;
     return NULL;
 }
@@ -462,16 +494,16 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
 {
     struct process_creation_context * caller_context;
     Process * p;
-    Channel * channel;
+    RefPtr<Channel> channel;
 
     struct ProcMgrMessage   buf;
-    Message               * m;
+    RefPtr<Message>         m;
 
     caller_context = (struct process_creation_context *)pProcessCreationContext;
 
     /* Allocate the singular channel on which the Process Manager listens for messages */
     try {
-        channel = new Channel();
+        channel.Reset(new Channel());
     } catch (std::bad_alloc) {
         /* This is unrecoverably bad. */
         assert(false);
@@ -481,13 +513,10 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
     }
 
     try {
-        caller_context->created = p = new Process();
+        caller_context->created = p = new Process("procmgr");
     } catch (std::bad_alloc a) {
         assert(false);
     }
-
-    /* Record our name */
-    strncpy(p->comm, "procmgr", sizeof(p->comm));
 
     /* Allocate, assign, and record Pid */
     p->pid = PROCMGR_PID;
@@ -499,9 +528,8 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
     THREAD_CURRENT()->process = p;
 
     /* Map the channel to a well-known integer identifier */
-    p->id_to_channel_map->Insert(p->next_chid, channel);
-    assert(p->id_to_channel_map->Lookup(p->next_chid) == channel);
-    p->next_chid++;
+    Channel_t chid = p->RegisterChannel(channel);
+    assert(chid == FIRST_CHANNEL_ID);
 
     /* Start periodic timer to use for pre-emption */
     Timer::StartPeriodic(5);
@@ -511,7 +539,7 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
 
     while (true) {
         ssize_t hdr_len = offsetof(struct ProcMgrMessage, type) + sizeof(buf.type);
-        ssize_t len = channel->ReceiveMessage(&m, &buf, hdr_len);
+        ssize_t len = channel->ReceiveMessage(m, &buf, hdr_len);
 
         if (len == hdr_len) {
 
@@ -528,6 +556,10 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
             /* Send back empty reply */
             m->Reply(ERROR_NO_SYS, &buf, 0);
         }
+
+        // Release ref on message so that it can be deallocated as soon
+        // as sender wakes back up.
+        m.Reset();
     }
 }
 
@@ -562,7 +594,7 @@ Process * Process::GetManager ()
     return managerProcess;
 }
 
-Channel_t Process::RegisterChannel (Channel * c)
+Channel_t Process::RegisterChannel (RefPtr<Channel> c)
 {
     Channel_t id = this->next_chid++;
 
@@ -571,14 +603,14 @@ Channel_t Process::RegisterChannel (Channel * c)
         return -ERROR_INVALID;
     }
 
-    this->id_to_channel_map->Insert(id, c);
+    this->id_to_channel_map->Insert(id, *c);
 
-    if (this->id_to_channel_map->Lookup(id) != c) {
+    if (this->id_to_channel_map->Lookup(id) == *c) {
+        c->Ref();
+        return id;
+    } else {
         return -ERROR_NO_MEM;
     }
-
-    this->channels_head.Append(c);
-    return id;
 }
 
 int Process::UnregisterChannel (Channel_t id)
@@ -589,17 +621,27 @@ int Process::UnregisterChannel (Channel_t id)
         return -ERROR_INVALID;
     }
 
-    this->channels_head.Remove(c);
+    RefPtr<Channel> deleter(c);
+    c->Unref();
+    deleter.Reset();
 
     return ERROR_OK;
 }
 
-Channel * Process::LookupChannel (Channel_t id)
+RefPtr<Channel> Process::LookupChannel (Channel_t id)
 {
-    return this->id_to_channel_map->Lookup(id);
+    RefPtr<Channel> ret;
+
+    Channel * value = this->id_to_channel_map->Lookup(id);
+
+    if (value) {
+        ret = value;
+    }
+
+    return ret;
 }
 
-Connection_t Process::RegisterConnection (Connection * c)
+Connection_t Process::RegisterConnection (RefPtr<Connection> c)
 {
     Connection_t id = this->next_coid++;
 
@@ -608,13 +650,14 @@ Connection_t Process::RegisterConnection (Connection * c)
         return -ERROR_INVALID;
     }
 
-    this->id_to_connection_map->Insert(id, c);
+    this->id_to_connection_map->Insert(id, *c);
 
-    if (this->id_to_connection_map->Lookup(id) != c) {
+    if (this->id_to_connection_map->Lookup(id) == *c) {
+        c->Ref();
+        return id;
+    } else {
         return -ERROR_NO_MEM;
     }
-
-    return id;
 }
 
 int Process::UnregisterConnection (Connection_t id)
@@ -625,15 +668,27 @@ int Process::UnregisterConnection (Connection_t id)
         return -ERROR_INVALID;
     }
 
+    RefPtr<Connection> deleter(c);
+    c->Unref();
+    deleter.Reset();
+
     return ERROR_OK;
 }
 
-Connection * Process::LookupConnection (Connection_t id)
+RefPtr<Connection> Process::LookupConnection (Connection_t id)
 {
-    return this->id_to_connection_map->Lookup(id);
+    RefPtr<Connection> ret;
+
+    Connection * value = this->id_to_connection_map->Lookup(id);
+
+    if (value) {
+        ret.Reset(value);
+    }
+
+    return RefPtr<Connection>(ret);
 }
 
-Message_t Process::RegisterMessage (Message * m)
+Message_t Process::RegisterMessage (RefPtr<Message> m)
 {
     int msgid = this->next_msgid++;
 
@@ -642,29 +697,96 @@ Message_t Process::RegisterMessage (Message * m)
         return -ERROR_INVALID;
     }
 
-    this->id_to_message_map->Insert(msgid, m);
+    this->id_to_message_map->Insert(msgid, *m);
 
-    if (this->id_to_message_map->Lookup(msgid) != m) {
+    if (this->id_to_message_map->Lookup(msgid) == *m) {
+        m->Ref();
+        return msgid;
+    } else {
         return -ERROR_NO_MEM;
     }
-
-    return msgid;
 }
 
 int Process::UnregisterMessage (Message_t id)
 {
     Message * m = this->id_to_message_map->Remove(id);
+    RefPtr<Message> deleter;
 
     if (!m) {
         return -ERROR_INVALID;
     }
 
+    // Dtor will automatically invoke privileged Message dtor
+    deleter.Reset(m);
+    m->Unref();
+    deleter.Reset();
+
     return ERROR_OK;
 }
 
-Message * Process::LookupMessage (Message_t id)
+RefPtr<Message> Process::LookupMessage (Message_t id)
 {
-    return this->id_to_message_map->Lookup(id);
+    RefPtr<Message> ret;
+
+    Message * m = this->id_to_message_map->Lookup(id);
+
+    if (m) {
+        ret.Reset(m);
+    }
+
+    return ret;
+}
+
+InterruptHandler_t Process::RegisterInterruptHandler (RefPtr<UserInterruptHandler> h)
+{
+    InterruptHandler_t id = this->next_interrupt_handler_id++;
+
+    if (this->id_to_interrupt_handler_map->Lookup(id) != NULL) {
+        assert(false);
+        return -ERROR_INVALID;
+    }
+
+    this->id_to_interrupt_handler_map->Insert(id, *h);
+
+    if (this->id_to_interrupt_handler_map->Lookup(id) == *h) {
+        h->Ref();
+        return id;
+    } else {
+        return -ERROR_NO_MEM;
+    }
+}
+
+int Process::UnregisterInterruptHandler (InterruptHandler_t id)
+{
+    UserInterruptHandler * h = this->id_to_interrupt_handler_map->Remove(id);
+
+    if (!h) {
+        return -ERROR_INVALID;
+    }
+
+    RefPtr<UserInterruptHandler> deleter(h);
+    h->Unref();
+    deleter.Reset();
+
+    return ERROR_OK;
+}
+
+RefPtr<UserInterruptHandler> Process::LookupInterruptHandler (InterruptHandler_t id)
+{
+    RefPtr<UserInterruptHandler> ret;
+
+    UserInterruptHandler * value = this->id_to_interrupt_handler_map->Lookup(id);
+
+    if (value) {
+        ret.Reset(value);
+    }
+
+    return RefPtr<UserInterruptHandler>(ret);
+}
+
+char const * Process::GetName ()
+{
+    return this->comm;
 }
 
 TranslationTable * Process::GetTranslationTable ()
@@ -677,51 +799,27 @@ TranslationTable * ProcessGetTranslationTable (Process * p)
     return p->GetTranslationTable();
 }
 
-static void TerminateProcess (Process * process)
-{
-    Thread * t = process->GetThread();
-
-    /* Get rid of mapping */
-    assert(Process::Lookup(process->GetId()) == process);
-
-    Process::Remove(process->GetId());
-
-    /* Reclaim all userspace resources */
-    delete process;
-    process = NULL;
-
-    t->process = NULL;
-
-    /* Force sender's kernel thread to appear done */
-    Thread::BeginTransaction();
-    Thread::MakeUnready(t, Thread::STATE_FINISHED);
-    Thread::EndTransaction();
-
-    /* Reap sender's kernel thread */
-    t->Join();
-}
-
 /**
  * Handler for PROC_MGR_MESSAGE_EXIT.
  */
-static void HandleExitMessage (Message * message)
+static void HandleExitMessage (RefPtr<Message> message)
 {
     Thread * sender = message->GetSender();
 
     /* Syscalls are always invoked by processes */
     assert(sender->process != NULL);
 
-    TerminateProcess(sender->process);
-
-    /* No MessageReply(), so manually free the Message */
-    message->Disarm();
-    delete message;
+    /*
+    Syscall entrypoint code will terminate process in response
+    to the special ERROR_EXITING return code.
+    */
+    message->Reply(ERROR_EXITING, IoBuffer::GetEmpty());
 }
 
 /**
  * Handler for PROC_MGR_MESSAGE_SIGNAL
  */
-static void HandleSignalMessage (Message * message)
+static void HandleSignalMessage (RefPtr<Message> message)
 {
     struct ProcMgrMessage buf;
 
@@ -736,17 +834,18 @@ static void HandleSignalMessage (Message * message)
         Process * senderProcess = sender->process;
         Process * signalee = Process::Lookup(buf.payload.signal.signalee_pid);
 
-        if (signalee) {
-            TerminateProcess(signalee);
-
-            if (senderProcess == signalee) {
-                // Nobody around to return message to
-                message->Disarm();
-                delete message;
-            } else {
-                message->Reply(ERROR_OK, IoBuffer::GetEmpty());
-            }
+        if (signalee == senderProcess) {
+            /*
+            Special return code; syscall framework will terminate
+            caller upon return.
+            */
+            message->Reply(ERROR_EXITING, IoBuffer::GetEmpty());
         } else {
+            // TODO: wake up signalle from any blocking sleeps and
+            // allow it to unwind its stack back down to syscall entry,
+            // where it will be reaped just as though it had called
+            // Exit()
+            assert(false);
             message->Reply(ERROR_INVALID, IoBuffer::GetEmpty());
         }
     }

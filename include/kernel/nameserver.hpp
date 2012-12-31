@@ -7,6 +7,7 @@
 
 #include <kernel/once.h>
 #include <kernel/slaballocator.hpp>
+#include <kernel/smart-ptr.hpp>
 #include <kernel/string.hpp>
 #include <kernel/tree-map.hpp>
 
@@ -37,14 +38,14 @@ public:
     virtual ~NameRecord ();
 
 private:
-    NameRecord (const char aFullPath[], Channel & aChannel);
+    NameRecord (const char aFullPath[], RefPtr<Channel> aChannel);
 
 private:
     static SyncSlabAllocator<NameRecord> sSlab;
 
     String mFullPath;
 
-    Channel & mChannel;
+    RefPtr<Channel> mChannel;
 
     friend class NameServer;
 };
@@ -53,7 +54,7 @@ class NameServer
 {
 public:
     static NameRecord *
-    RegisterName (char const aFullPath[], Channel & aChannel);
+    RegisterName (char const aFullPath[], RefPtr<Channel> aChannel);
 
     /**
      * Unregisters the channel bound when aProvider was created
@@ -63,7 +64,7 @@ public:
      */
     static void UnregisterName (NameRecord * aProvider);
 
-    static Channel * LookupName (char const aFullPath[]);
+    static RefPtr<Channel> LookupName (char const aFullPath[]);
 
 private:
     void static OnceInit (void * ignored);

@@ -173,6 +173,7 @@ void run_first_thread ()
     InterruptsConfigure();
     InterruptsEnable();
 
+    Reaper::Start();
     Process::StartManager();
     Process::Create("init");
 

@@ -231,6 +231,11 @@ public:
             );
 
     /**
+     * \brief   Get the scheduler status of this thread
+     */
+    State GetState ();
+
+    /**
      * \brief   Deallocates resources used by thread a thread.
      *
      * Must not be called while thread is actively executing on the processor.

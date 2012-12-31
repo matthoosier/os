@@ -12,6 +12,7 @@ typedef enum
     ERROR_INVALID,
     ERROR_NO_MEM,
     ERROR_FAULT,
+    ERROR_EXITING,
 } Error_t;
 
 END_DECLS

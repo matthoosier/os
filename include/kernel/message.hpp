@@ -13,6 +13,7 @@
 #include <kernel/io.hpp>
 #include <kernel/list.hpp>
 #include <kernel/nameserver.hpp>
+#include <kernel/ref-list.hpp>
 #include <kernel/semaphore.hpp>
 #include <kernel/slaballocator.hpp>
 #include <kernel/smart-ptr.hpp>
@@ -46,7 +47,7 @@ class Connection;
  * that accepts to reply. In this case, the message payload is in
  * \a send_data.async.
  */
-class Message
+class Message : public RefCounted
 {
 public:
     /**
@@ -96,7 +97,6 @@ public:
     }
 
     Message ();
-    ~Message ();
 
     /**
      * @brief   Query sender of this message
@@ -156,7 +156,13 @@ public:
     /**
      * @brief   Clear out all back-pointers
      */
-    void Disarm ();
+    void Dispose ();
+
+protected:
+    /**
+     * Only RefPtr can free instances
+     */
+    ~Message ();
 
 private:
     /**
@@ -168,7 +174,7 @@ private:
      * @brief   The connection through which the sender sent this
      *          message
      */
-    WeakPtr<Connection> mConnection;
+    RefPtr<Connection> mConnection;
 
     /**
      * @brief   The process sending this message
@@ -221,29 +227,29 @@ private:
      */
     ListElement mQueueLink;
 
+    /**
+     * @brief   True if object is about to be deallocated
+     */
+    bool mDisposed;
+
     friend class Channel;
     friend class Connection;
+
+    /**
+     * For allowing RefPtr to invoke dtor
+     */
+    friend class RefPtr<Message>;
 };
 
 /**
  * @brief   Client object on which MessageSend() is performed
  */
-class Connection : public WeakPointee
+class Connection : public RefCounted
 {
 public:
-    void * operator new (size_t size) throw (std::bad_alloc)
-    {
-        assert(size == sizeof(Connection));
-        return sSlab.AllocateWithThrow();
-    }
+    Connection (RefPtr<Channel> channel);
 
-    void operator delete (void * mem) throw ()
-    {
-        sSlab.Free(mem);
-    }
-
-    Connection (Channel * channel);
-    ~Connection ();
+    void Dispose ();
 
     /**
      * @brief   Synchronously send a message
@@ -278,7 +284,23 @@ public:
      *          error happened and the specific \c Error_t value is
      *          found by negating the return value.
      */
-    ssize_t SendMessageAsync (uintptr_t payload);
+    ssize_t SendMessageAsyncDuringException (uintptr_t payload);
+
+    inline RefPtr<Connection> SelfRef ()
+    {
+        return RefPtr<Connection>(this);
+    }
+
+    void * operator new (size_t size) throw (std::bad_alloc)
+    {
+        assert(size == sizeof(Connection));
+        return sSlab.AllocateWithThrow();
+    }
+
+    void operator delete (void * mem) throw ()
+    {
+        sSlab.Free(mem);
+    }
 
 public:
     /**
@@ -286,6 +308,13 @@ public:
      *          into linked lists of connections.
      */
     ListElement link;
+
+protected:
+    /**
+     * Only RefPtr can free instances
+     */
+    ~Connection ();
+
 
 private:
     /**
@@ -297,20 +326,30 @@ private:
      * @brief   All the senders who are queued waiting to send on
      *          this connection
      */
-    List<Message, &Message::mQueueLink> send_blocked_head;
+    RefList<Message, &Message::mQueueLink> mSendBlockedMessages;
 
     /**
      * @brief   The server object to which this client is connected
      */
-    WeakPtr<Channel> channel;
+    RefPtr<Channel> channel;
+
+    /**
+     * @brief   True if object is about to be deallocated
+     */
+    bool mDisposed;
 
     friend class Channel;
+
+    /**
+     * For allowing RefPtr to invoke dtor
+     */
+    friend class RefPtr<Connection>;
 };
 
 /**
  * @brief   Server object on which MsgReceive() is performed
  */
-class Channel : public WeakPointee
+class Channel : public RefCounted
 {
 public:
     void * operator new (size_t size) throw (std::bad_alloc)
@@ -325,7 +364,8 @@ public:
     }
 
     Channel ();
-    ~Channel ();
+
+    void Dispose ();
 
     /**
      * @brief   Install (and take ownership of) a filesystem name
@@ -340,22 +380,28 @@ public:
      *          If less than zero, then an error happened and the specific
      *          \c Error_t value is found by negating the return value.
      */
-    ssize_t ReceiveMessage (Message ** context,
+    ssize_t ReceiveMessage (RefPtr<Message> & context,
                             IoBuffer const msgv[],
                             size_t msgv_count);
 
-    inline ssize_t ReceiveMessage (Message ** context,
+    inline ssize_t ReceiveMessage (RefPtr<Message> & context,
                                    IoBuffer const & msg)
     {
         return ReceiveMessage(context, &msg, 1);
     }
 
-    ssize_t ReceiveMessage (Message ** context,
+    ssize_t ReceiveMessage (RefPtr<Message> & context,
                             void * msg_buf,
                             size_t msg_buf_len)
     {
         return ReceiveMessage(context, IoBuffer(msg_buf, msg_buf_len));
     }
+
+protected:
+    /**
+     * Only RefPtr can free instances
+     */
+    ~Channel ();
 
 private:
     /**
@@ -369,32 +415,38 @@ private:
     ScopedPtr<NameRecord> name_record;
 
     /**
+     * @brief   True if object is about to be deallocated
+     */
+    bool mDisposed;
+
+    /**
      * @brief   All the receivers who are queued waiting to receive
      *          on this channel
      */
-    List<Message, &Message::mQueueLink> receive_blocked_head;
+    RefList<Message, &Message::mQueueLink> mReceiveBlockedMessages;
 
     /**
      * @brief   Client connections to the channel, who have a message
      *          waiting
      */
-    List<Connection, &Connection::link> waiting_clients;
+    RefList<Connection, &Connection::link> mBlockedConnections;
 
     /**
      * @brief   Client connections to the channel, who do not have a
      *          message waiting
      */
-    List<Connection, &Connection::link> unwaiting_clients;
+    RefList<Connection, &Connection::link> mNotBlockedConnections;
 
 public:
-    /**
-     * @brief   Intrusive link for inserting this channel object
-     *          into linked lists of channels.
-     */
-    ListElement link;
 
     friend class Connection;
+
     friend class Message;
+
+    /**
+     * For allowing RefPtr to invoke dtor
+     */
+    friend class RefPtr<Channel>;
 };
 
 #endif /* __MESSAGE_H__ */

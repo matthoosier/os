@@ -36,6 +36,7 @@ kernel_sources = [
     'kernel/procmgr_naming.cpp',
     'kernel/procmgr_spawn.cpp',
     'kernel/ramfs.cpp',
+    'kernel/reaper.cpp',
     'kernel/semaphore.cpp',
     'kernel/small-object-cache.cpp',
     'kernel/stdlib.c',

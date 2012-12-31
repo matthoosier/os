@@ -7,12 +7,12 @@
 #include <kernel/procmgr.hpp>
 #include <kernel/thread.hpp>
 
-static void HandleNameAttach (Message * message)
+static void HandleNameAttach (RefPtr<Message> message)
 {
     struct ProcMgrReply reply;
     size_t path_len;
     char * path;
-    Channel * channel;
+    RefPtr<Channel> channel;
     Channel_t channel_id;
     NameRecord * name_record;
     int status;
@@ -30,7 +30,7 @@ static void HandleNameAttach (Message * message)
                   path_len);
 
     try {
-        channel = new Channel();
+        channel.Reset(new Channel());
     }
     catch (std::bad_alloc) {
         status = ERROR_NO_MEM;
@@ -40,13 +40,12 @@ static void HandleNameAttach (Message * message)
     channel_id = message->GetSender()->process->RegisterChannel(channel);
 
     if (channel_id < 0) {
-        delete channel;
-        channel = NULL;
+        channel.Reset();
         status = ERROR_NO_MEM;
         goto cleanup;
     }
 
-    name_record = NameServer::RegisterName(path, *channel);
+    name_record = NameServer::RegisterName(path, channel);
 
     if (name_record) {
         channel->SetNameRecord(name_record);
@@ -55,8 +54,7 @@ static void HandleNameAttach (Message * message)
     }
     else {
         message->GetSender()->process->UnregisterChannel(channel_id);
-        delete channel;
-        channel = NULL;
+        channel.Reset();
         status = ERROR_NO_MEM;
     }
 
@@ -66,14 +64,14 @@ cleanup:
     message->Reply(status, &reply, sizeof(reply));
 }
 
-static void HandleNameOpen (Message * message)
+static void HandleNameOpen (RefPtr<Message> message)
 {
     ProcMgrReply reply;
     size_t path_len;
     char * path;
     size_t n;
-    Channel * channel;
-    Connection * connection;
+    RefPtr<Channel> channel;
+    RefPtr<Connection> connection;
     Connection_t connection_id;
     int status;
 
@@ -110,7 +108,7 @@ static void HandleNameOpen (Message * message)
     }
 
     try {
-        connection = new Connection(channel);
+        connection.Reset(new Connection(channel));
     } catch (std::bad_alloc) {
         connection_id = -1;
         status = ERROR_NO_MEM;
@@ -123,7 +121,7 @@ static void HandleNameOpen (Message * message)
     status = ERROR_OK;
 
     if (connection_id < 0) {
-        delete connection;
+        connection.Reset();
         status = ERROR_NO_MEM;
         goto cleanup;
     }

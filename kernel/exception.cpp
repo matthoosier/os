@@ -5,12 +5,14 @@
 #include <kernel/exception.hpp>
 #include <kernel/message.hpp>
 #include <kernel/process.hpp>
+#include <kernel/reaper.hpp>
 #include <kernel/thread.hpp>
 
 void ScheduleSelfAbort ()
 {
+  #if 0
     struct ProcMgrMessage message;
-    Connection * connection;
+    RefPtr<Connection> connection;
 
     assert(THREAD_CURRENT()->process != NULL);
     connection = THREAD_CURRENT()->process->LookupConnection(PROCMGR_CONNECTION_ID);
@@ -18,9 +20,13 @@ void ScheduleSelfAbort ()
     message.type = PROC_MGR_MESSAGE_SIGNAL;
     message.payload.signal.signalee_pid = THREAD_CURRENT()->process->GetId();
 
-    IoBuffer chunk(&message, sizeof(message));
-    IoBuffer reply(NULL, 0);
-    connection->SendMessage(&chunk, 1, &reply, 0);
+    connection->SendMessage(IoBuffer(&message, sizeof(message)),
+                            IoBuffer::GetEmpty());
+  #endif
+
+    /* Deallocate current process */
+    Thread * thread = THREAD_CURRENT();
+    Reaper::Reap(thread->process);
 
     assert(false);
 }

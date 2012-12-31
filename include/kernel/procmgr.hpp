@@ -17,7 +17,7 @@ BEGIN_DECLS
         ProcMgrRegisterMessageHandler(_type, _func);                        \
     }
 
-typedef void (*ProcMgrOperationFunc) (Message * message);
+typedef void (*ProcMgrOperationFunc) (RefPtr<Message> message);
 
 void ProcMgrRegisterMessageHandler (
         ProcMgrMessageType type,
