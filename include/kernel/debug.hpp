@@ -10,7 +10,11 @@ BEGIN_DECLS
  *
  * \memberof Debug
  */
-extern void printk (const char * format, ...);
+extern void printk (const char * format, ...)
+        #ifdef __GNUC__
+            __attribute__ ((format (printf, 1, 2)))
+        #endif
+            ;
 
 END_DECLS
 
