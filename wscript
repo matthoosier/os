@@ -83,7 +83,7 @@ def options(opt):
 
 def configure(conf):
 
-    conf.find_program('doxygen')
+    conf.load('doxygen')
 
     #
     # Make environment suitable for compiling custom programs that are
@@ -308,23 +308,12 @@ def asm_hook(taskgen, node):
     t.env['CC_TGT_F'] = ['-E', '-o']
     return taskgen.create_compiled_task('asm', preproc)
 
-def doc(bld):
-    bld(features = 'doxygen')
+def doxygen(bld):
+    bld(features = ['doxygen'], doxyfile = 'Doxyfile')
 
-@feature('doxygen')
-def apply_doxygen(taskgen):
-    taskgen.create_task('doxygen', taskgen.bld.path.find_resource('Doxyfile'), None)
+class DoxygenContext(BuildContext):
+    fun = 'doxygen'
+    cmd = 'doxygen'
 
-class doxygen(Task.Task):
-    run_str2 = '${DOXYGEN} ${SRC}'
-    def run(self):
-        self.exec_command(
-            [self.env.DOXYGEN, self.inputs[0].srcpath()],
-            cwd=self.generator.bld.path.abspath()           # src dir
-        )
-
-Task.always_run(doxygen)
-
-class DocsContext(BuildContext):
-    fun = 'doc'
-    cmd = 'doc'
+import waflib.extras.doxygen
+Task.always_run(waflib.extras.doxygen.doxygen)
