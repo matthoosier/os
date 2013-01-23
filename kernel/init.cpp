@@ -11,6 +11,7 @@
 #include <kernel/object-cache.hpp>
 #include <kernel/once.h>
 #include <kernel/process.hpp>
+#include <kernel/reaper.hpp>
 #include <kernel/thread.hpp>
 #include <kernel/vm.hpp>
 
