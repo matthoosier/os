@@ -176,7 +176,7 @@ void run_first_thread ()
 
     Reaper::Start();
     Process::StartManager();
-    Process::Create("init");
+    Process::Create("init", NULL);
 
     run_idle_loop();
 }

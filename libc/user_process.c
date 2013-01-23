@@ -58,3 +58,56 @@ int Spawn (char const path[])
         return status;
     }
 }
+
+int ChildWaitAttach (int connection_id, int pid)
+{
+    struct ProcMgrMessage msg;
+    struct ProcMgrReply reply;
+    int status;
+
+    msg.type = PROC_MGR_MESSAGE_CHILD_WAIT_ATTACH;
+    msg.payload.child_wait_attach.connection_id = connection_id;
+    msg.payload.child_wait_attach.child_pid = pid;
+
+    status = MessageSend(PROCMGR_CONNECTION_ID,
+                         &msg, sizeof(msg),
+                         &reply, sizeof(reply));
+
+    if (status >= 0) {
+        return reply.payload.child_wait_attach.handler_id;
+    }
+    else {
+        return status;
+    }
+}
+
+int ChildWaitDetach (int handler_id)
+{
+    struct ProcMgrMessage msg;
+    struct ProcMgrReply reply;
+    int status;
+
+    msg.type = PROC_MGR_MESSAGE_CHILD_WAIT_DETACH;
+    msg.payload.child_wait_detach.handler_id = handler_id;
+
+    status = MessageSend(PROCMGR_CONNECTION_ID,
+                         &msg, sizeof(msg), &reply, sizeof(reply));
+
+    return status >= 0 ? 0 : status;
+}
+
+int ChildWaitArm (int handler_id, unsigned int count)
+{
+    struct ProcMgrMessage msg;
+    struct ProcMgrReply reply;
+    int status;
+
+    msg.type = PROC_MGR_MESSAGE_CHILD_WAIT_ARM;
+    msg.payload.child_wait_arm.handler_id = handler_id;
+    msg.payload.child_wait_arm.count = count;
+
+    status = MessageSend(PROCMGR_CONNECTION_ID,
+                         &msg, sizeof(msg), &reply, sizeof(reply));
+
+    return status >= 0 ? 0 : status;
+}

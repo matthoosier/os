@@ -33,6 +33,7 @@ void Reaper::Body (void * ignored)
 {
     while (true) {
         Thread * thread;
+        Process * process;
 
         Thread::BeginTransaction();
         
@@ -43,13 +44,11 @@ void Reaper::Body (void * ignored)
         }
 
         thread = sDead.PopFirst();
+        process = thread->process;
 
         Thread::EndTransaction();
 
-        Process::Remove(thread->process->GetId());
-        delete thread->process;
-        thread->process = NULL;
-        thread->Join();
+        process->GetParent()->ReportChildFinished(process);
     }
 }
 

@@ -1,6 +1,7 @@
 #ifndef __SYS_MESSAGE_H__
 #define __SYS_MESSAGE_H__
 
+#include <stdint.h>
 #include <sys/types.h>
 
 #include <sys/decls.h>
@@ -9,9 +10,23 @@
 BEGIN_DECLS
 
 #define SELF_PID            0
+#define ANY_PID             -1
 #define PROCMGR_PID         1
 #define FIRST_CHANNEL_ID    0
 #define FIRST_CONNECTION_ID 0
+
+struct Pulse
+{
+    int8_t      type;
+    uint8_t     pad[3];
+    uintptr_t   value;
+};
+
+#define PULSE_TYPE_MIN_USER 0
+#define PULSE_TYPE_MAX_USER __INT8_MAX__
+
+#define PULSE_TYPE_INTERRUPT        (PULSE_TYPE_MIN_USER - 1)
+#define PULSE_TYPE_CHILD_FINISH     (PULSE_TYPE_MIN_USER - 2)
 
 int ChannelCreate ();
 

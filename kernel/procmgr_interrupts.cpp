@@ -48,9 +48,9 @@ static void HandleInterruptAttach (RefPtr<Message> message)
         return;
     }
 
-    reply.payload.interrupt_attach.handler = current->RegisterInterruptHandler(handler);
+    reply.payload.interrupt_attach.handler_id = current->RegisterInterruptHandler(handler);
 
-    if (reply.payload.interrupt_attach.handler < 0) {
+    if (reply.payload.interrupt_attach.handler_id < 0) {
         message->Reply(ERROR_NO_MEM, &reply, 0);
         return;
     }
@@ -83,7 +83,7 @@ static void HandleInterruptComplete (RefPtr<Message> message)
         return;
     }
 
-    handler = current->LookupInterruptHandler(msg.payload.interrupt_complete.handler);
+    handler = current->LookupInterruptHandler(msg.payload.interrupt_complete.handler_id);
 
     if (handler) {
         message->Reply(InterruptCompleteUserHandler(handler), IoBuffer::GetEmpty());
@@ -109,7 +109,7 @@ static void HandleInterruptDetach (RefPtr<Message> message)
         return;
     }
 
-    handler = current->LookupInterruptHandler(msg.payload.interrupt_detach.handler);
+    handler = current->LookupInterruptHandler(msg.payload.interrupt_detach.handler_id);
 
     if (handler) {
         InterruptDetachUserHandler(handler);

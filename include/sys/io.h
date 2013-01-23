@@ -8,8 +8,6 @@
 
 BEGIN_DECLS
 
-typedef int InterruptHandler_t;
-
 /**
  * One-time call by a user program to establish a hook to be
  * invoked when a particular IRQ arrives.
@@ -30,11 +28,9 @@ typedef int InterruptHandler_t;
  * If negative, the return value is the negated error code of
  * what went wrong while trying to register.
  */
-InterruptHandler_t InterruptAttach (
-        int connection_id,
-        int irq_number,
-        void * param
-        );
+int InterruptAttach (int connection_id,
+                     int irq_number,
+                     void * param);
 
 /**
  * One-time call by a user program to terminate an interrupt-
@@ -43,9 +39,7 @@ InterruptHandler_t InterruptAttach (
  * @id  the return value from InterruptAttach() indicating this
  *      unique IRQ-handling entity
  */
-int InterruptDetach (
-        InterruptHandler_t id
-        );
+int InterruptDetach (int handler_id);
 
 /**
  * Called a user-program which has installed an interrupt-handling
@@ -57,14 +51,9 @@ int InterruptDetach (
  * InterruptComplete(), or you will have an infinite sequence of
  * interrupts arrive.
  */
-int InterruptComplete (
-        InterruptHandler_t id
-        );
+int InterruptComplete (int id);
 
-void * MapPhysical (
-        uintptr_t physaddr,
-        size_t  len
-        );
+void * MapPhysical (uintptr_t physaddr, size_t len);
 
 END_DECLS
 

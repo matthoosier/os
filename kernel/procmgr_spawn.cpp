@@ -31,7 +31,7 @@ static void HandleSpawn (RefPtr<Message> message)
         goto cleanup;
     }
 
-    p = Process::Create(path);
+    p = Process::Create(path, message->GetSender()->process);
 
     if (!p) {
         ret = ERROR_INVALID;

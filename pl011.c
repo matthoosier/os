@@ -176,7 +176,7 @@ char my_toupper (char c)
     }
 }
 
-void pl011_isr (pl011_t volatile * uart, InterruptHandler_t irq_id)
+void pl011_isr (pl011_t volatile * uart, int irq_handler_id)
 {
     uint32_t mis = uart->MIS;
 
@@ -199,13 +199,13 @@ void pl011_isr (pl011_t volatile * uart, InterruptHandler_t irq_id)
         uart->ICR = ICR_TX;
     }
 
-    InterruptComplete(irq_id);
+    InterruptComplete(irq_handler_id);
 }
 
 int main (int argc, char *argv[]) {
 
     pl011_t volatile * uart0;
-    InterruptHandler_t irq_id;
+    int irq_handler_id;
     int chid;
     int coid;
 
@@ -222,7 +222,7 @@ int main (int argc, char *argv[]) {
     // Enable interrupts
     uart0->IMSC = (IMSC_RX | IMSC_TX);
 
-    irq_id = InterruptAttach(coid, VERSATILE_UART0_IRQ, NULL);
+    irq_handler_id = InterruptAttach(coid, VERSATILE_UART0_IRQ, NULL);
 
     // Main interrupt-handling loop
     for (;;) {
@@ -237,7 +237,7 @@ int main (int argc, char *argv[]) {
         }
         else {
             // Pulse received
-            pl011_isr(uart0, irq_id);
+            pl011_isr(uart0, irq_handler_id);
             num = num;
         }
     }
@@ -245,7 +245,7 @@ int main (int argc, char *argv[]) {
     // Disable interrupts
     uart0->IMSC &= ~(IMSC_RX | IMSC_TX);
 
-    InterruptDetach(irq_id);
+    InterruptDetach(irq_handler_id);
 
     while (true) {
         uint8_t c = pl011_blocking_read(uart0);

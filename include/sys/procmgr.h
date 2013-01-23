@@ -4,7 +4,6 @@
 #include <stdint.h>
 
 #include <sys/decls.h>
-#include <sys/io.h>
 #include <sys/message.h>
 
 #define PROCMGR_CONNECTION_ID FIRST_CONNECTION_ID
@@ -29,6 +28,9 @@ typedef enum
     PROC_MGR_MESSAGE_MAP_PHYS,
     PROC_MGR_MESSAGE_NAME_ATTACH,
     PROC_MGR_MESSAGE_NAME_OPEN,
+    PROC_MGR_MESSAGE_CHILD_WAIT_ATTACH,
+    PROC_MGR_MESSAGE_CHILD_WAIT_DETACH,
+    PROC_MGR_MESSAGE_CHILD_WAIT_ARM,
 
     /**
      * Not a message. Just a count.
@@ -67,11 +69,11 @@ struct ProcMgrMessage
         } interrupt_attach;
 
         struct {
-            InterruptHandler_t handler;
+            int handler_id;
         } interrupt_detach;
 
         struct {
-            InterruptHandler_t handler;
+            int handler_id;
         } interrupt_complete;
 
         struct {
@@ -88,6 +90,20 @@ struct ProcMgrMessage
             size_t path_len;
             char path[0];
         } name_open;
+
+        struct {
+            int connection_id;
+            int child_pid;
+        } child_wait_attach;
+
+        struct {
+            int handler_id;
+        } child_wait_detach;
+
+        struct {
+            int handler_id;
+            unsigned int count;
+        } child_wait_arm;
 
     } payload;
 };
@@ -114,7 +130,7 @@ struct ProcMgrReply
         } spawn;
 
         struct {
-            InterruptHandler_t handler;
+            int handler_id;
         } interrupt_attach;
 
         struct {
@@ -131,6 +147,16 @@ struct ProcMgrReply
         struct {
             int connection_id;
         } name_open;
+
+        struct {
+            int handler_id;
+        } child_wait_attach;
+
+        struct {
+        } child_wait_detach;
+
+        struct {
+        } child_wait_arm;
 
     } payload;
 };

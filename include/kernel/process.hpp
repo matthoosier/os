@@ -124,6 +124,99 @@ private:
 };
 
 /**
+ * Record type to record currently installed handlers for
+ * child process termination.
+ */
+class ChildWaitHandler
+{
+public:
+    /**
+     * Do not stack-allocate
+     *
+     * @param connection    see mConnection
+     * @param pid           see mPid
+     * @param count         see mCount
+     */
+    ChildWaitHandler (RefPtr<Connection> connection,
+                      Pid_t pid,
+                      unsigned int count)
+        : mPid(pid)
+        , mConnection(connection)
+        , mCount(count)
+    {
+    }
+
+    virtual ~ChildWaitHandler ()
+    {
+    }
+
+    void * operator new (size_t size) throw (std::bad_alloc)
+    {
+        assert(size == sizeof(ChildWaitHandler));
+        return sSlab.AllocateWithThrow();
+    }
+
+    void operator delete (void * mem) throw ()
+    {
+        sSlab.Free(mem);
+    }
+
+    /**
+     * Test whether this ChildWaitHandler is configured to
+     * be able to reap a process whose Pid_t is <tt>aPid</tt>
+     */
+    bool Handles (Pid_t aPid)
+    {
+        if (mPid == aPid || mPid == ANY_PID) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
+private:
+    //!< Prevent allocating arrays of ChildWaitHandlers
+    void * operator new[] (size_t);
+
+    //!< Prevent allocating arrays of ChildWaitHandlers
+    void operator delete[] (void *);
+
+public:
+    /**
+     * Unique identifier
+     */
+    int mId;
+
+    /**
+     * Intrusive list pointer
+     */
+    ListElement mLink;
+
+    /**
+     * Identifier (or ANY_PID) of child process to wait for
+     */
+    Pid_t mPid;
+
+    /**
+     * Connection on which a pulse with type PULSE_TYPE_CHILD_FINISH
+     * will be delivered when the indicated process is reaped.
+     */
+    RefPtr<Connection> mConnection;
+
+    /**
+     * Number of children that userspace has indicated it's prepared
+     * to be reaped. Can be increased with the ChildWaitArm() call.
+     */
+    unsigned int mCount;
+
+    /**
+     * Allocates instances of ChildWaitHandler
+     */
+    static SyncSlabAllocator<ChildWaitHandler> sSlab;
+};
+
+/**
  * \brief   Process control block implementation
  *
  * Classical protected-memory process implementation. Processes have
@@ -136,10 +229,8 @@ public:
     typedef TreeMap<Channel_t, Channel *>       IdToChannelMap_t;
     typedef TreeMap<Connection_t, Connection *> IdToConnectionMap_t;
     typedef TreeMap<int, Message *>             IdToMessageMap_t;
-
     typedef TreeMap<Pid_t, Process *>           PidMap_t;
-
-    typedef TreeMap<InterruptHandler_t, UserInterruptHandler *> IdToInterruptHandlerMap_t;
+    typedef TreeMap<int, UserInterruptHandler *>    IdToInterruptHandlerMap_t;
 
 public:
     /**
@@ -171,7 +262,8 @@ public:
     /**
      * \brief   Spawn a process from the named executable image
      */
-    static Process * Create (const char executableName[]);
+    static Process * Create (const char aExecutableName[],
+                             Process * aParent);
 
     /**
      * \brief   Register a new process in the reverse mapping
@@ -215,11 +307,17 @@ public:
 
     RefPtr<Message> LookupMessage (Message_t id);
 
-    InterruptHandler_t RegisterInterruptHandler (RefPtr<UserInterruptHandler> h);
+    int RegisterInterruptHandler (RefPtr<UserInterruptHandler> h);
 
-    int UnregisterInterruptHandler (InterruptHandler_t id);
+    int UnregisterInterruptHandler (int handler_id);
 
-    RefPtr<UserInterruptHandler> LookupInterruptHandler (InterruptHandler_t id);
+    RefPtr<UserInterruptHandler> LookupInterruptHandler (int handler_id);
+
+    int RegisterChildWaitHandler (ChildWaitHandler * h);
+
+    int UnregisterChildWaitHandler (int handler_id);
+
+    ChildWaitHandler * LookupChildWaitHandler (int handler_id);
 
 public:
     /**
@@ -249,12 +347,27 @@ public:
      */
     Thread * GetThread ();
 
+    Process * GetParent ();
+
+    void TryReapChildren (ChildWaitHandler * aHandler);
+
+    void ReportChildFinished (Process * aChild);
+
+    void ReapChild (Process * aChild, RefPtr<Connection> aConnection);
+
 private:
     /**
      * \brief   Hidden to prevent the general public from making
      *          instances
      */
-    Process (char const aComm[]);
+    Process (char const aComm[], Process * aParent);
+
+private:
+    /**
+     * \brief   Find a handler that's willing to reap the
+     *          indicated child process.
+     */
+    ChildWaitHandler * GetWaitHandlerForChild (Pid_t id);
 
 private:
     /**
@@ -274,7 +387,8 @@ private:
      * Returns NULL if the requested executable can't be found or
      * allocation of memory to back it fails.
      */
-    static Process * execIntoCurrent (const char executableName[]) throw (std::bad_alloc);
+    static Process * execIntoCurrent (const char aExecutableName[],
+                                      Process * aParent) throw (std::bad_alloc);
 
     /**
      * \brief   Function executed as main body of the kernel thread backing
@@ -391,6 +505,43 @@ private:
      *          to a UserInterruptHandler owned by this process
      */
     int next_interrupt_handler_id;
+
+    /**
+     * \brief   Map integer handles to one of the ChildWaitHandler
+     *          data structures owned by this process.
+     */
+    List<ChildWaitHandler, &ChildWaitHandler::mLink> mWaitHandlers;
+
+    /**
+     * \brief   Value of the next handle that will be assigned
+     *          to a ChildWaitHandler owned by this process
+     */
+    int next_child_wait_handler_id;
+
+    /**
+     * \brief   Instrusive node for use in maintaining list of
+     *          children
+     */
+    ListElement mChildrenLink;
+
+    /**
+     * \brief   List of all the children spawned by this process
+     */
+    List<Process, &Process::mChildrenLink> mAliveChildren;
+
+    /**
+     * \brief   List of all the terminated children spawned by
+     *          this process
+     */
+    List<Process, &Process::mChildrenLink> mDeadChildren;
+
+    /**
+     * \brief   Process that spawned this one
+     *
+     * Or, if the immediate parent has already terminated),
+     * <tt>init</tt>.
+     */
+    Process * mParent;
 };
 
 BEGIN_DECLS

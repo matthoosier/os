@@ -2,11 +2,9 @@
 #include <sys/message.h>
 #include <sys/procmgr.h>
 
-InterruptHandler_t InterruptAttach (
-        int connection_id,
-        int irq_number,
-        void * param
-        )
+int InterruptAttach (int connection_id,
+                     int irq_number,
+                     void * param)
 {
     struct ProcMgrMessage m;
     struct ProcMgrReply reply;
@@ -27,19 +25,17 @@ InterruptHandler_t InterruptAttach (
     if (ret < 0) {
         return ret;
     } else {
-        return reply.payload.interrupt_attach.handler;
+        return reply.payload.interrupt_attach.handler_id;
     }
 }
 
-int InterruptDetach (
-        InterruptHandler_t id
-        )
+int InterruptDetach (int handler_id)
 {
     struct ProcMgrMessage m;
     struct ProcMgrReply reply;
 
     m.type = PROC_MGR_MESSAGE_INTERRUPT_DETACH;
-    m.payload.interrupt_detach.handler = id;
+    m.payload.interrupt_detach.handler_id = handler_id;
 
     int ret = MessageSend(
             PROCMGR_CONNECTION_ID,
@@ -56,15 +52,13 @@ int InterruptDetach (
     }
 }
 
-int InterruptComplete (
-        InterruptHandler_t id
-        )
+int InterruptComplete (int handler_id)
 {
     struct ProcMgrMessage m;
     struct ProcMgrReply reply;
 
     m.type = PROC_MGR_MESSAGE_INTERRUPT_COMPLETE;
-    m.payload.interrupt_complete.handler = id;
+    m.payload.interrupt_complete.handler_id = handler_id;
 
     int ret = MessageSend(
             PROCMGR_CONNECTION_ID,

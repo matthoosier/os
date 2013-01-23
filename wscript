@@ -30,6 +30,7 @@ kernel_sources = [
     'kernel/once.cpp',
     'kernel/process.cpp',
     'kernel/procmgr.cpp',
+    'kernel/procmgr_childwait.cpp',
     'kernel/procmgr_getpid.cpp',
     'kernel/procmgr_interrupts.cpp',
     'kernel/procmgr_map.cpp',

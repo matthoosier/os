@@ -1,25 +1,60 @@
+#include <assert.h>
+#include <stdbool.h>
+
 #include <sys/message.h>
 #include <sys/naming.h>
 #include <sys/process.h>
 
+typedef union
+{
+    struct Pulse                async;
+    struct { char buf[64]; }    sync;
+
+} msg_t;
+
 int main (int argc, char * argv[])
 {
-    char buf[64];
+    msg_t msg;
     int rcvid;
     int len;
     int client_pid;
     int channel = -1;
+    int reap_coid;
+    int reap_handler;
 
     channel = NameAttach("/dev/echo");
+    reap_coid = Connect(SELF_PID, channel);
 
     client_pid = Spawn("echo-client");
 
-    while (channel >= 0) {
-        len = MessageReceive(channel, &rcvid, buf, sizeof(buf));
-        MessageReply(rcvid, 0, buf, len);
-    }
+    reap_handler = ChildWaitAttach(reap_coid, client_pid);
+    ChildWaitArm(reap_handler, 1);
 
-    client_pid = client_pid;
+    while (channel >= 0) {
+
+        len = MessageReceive(channel, &rcvid, &msg, sizeof(msg));
+
+        if (rcvid == 0) {
+            /* Pulse */
+            switch (msg.async.type) {
+
+                case PULSE_TYPE_CHILD_FINISH:
+                    assert(msg.async.value == client_pid);
+                    ChildWaitDetach(reap_handler);
+                    reap_handler = -1;
+                    Disconnect(reap_coid);
+                    reap_coid = -1;
+                    break;
+
+                default:
+                    assert(false);
+                    break;
+            }
+        }
+        else {
+            MessageReply(rcvid, 0, msg.sync.buf, len);
+        }
+    }
 
     return 0;
 }

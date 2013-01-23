@@ -4,6 +4,7 @@
 
 #include <sys/arch.h>
 #include <sys/atomic.h>
+#include <sys/message.h>
 #include <sys/spinlock.h>
 
 #include <kernel/array.h>
@@ -238,7 +239,7 @@ void InterruptHandler ()
 
         assert(!record->mStateInfo.mMasked);
 
-        int result = record->mHandlerInfo.mConnection->SendMessageAsyncDuringException((uintptr_t)record->mHandlerInfo.mPulsePayload);
+        int result = record->mHandlerInfo.mConnection->SendMessageAsyncDuringException(PULSE_TYPE_INTERRUPT, (uintptr_t)record->mHandlerInfo.mPulsePayload);
         if (result == ERROR_OK) {
             record->mStateInfo.mMasked = true;
             increment_irq_mask(record->mHandlerInfo.mIrqNumber);

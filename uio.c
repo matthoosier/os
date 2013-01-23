@@ -3,10 +3,18 @@
 #include <sys/message.h>
 #include <sys/procmgr.h>
 
-int main (int argc, char *argv[]) {
+typedef union
+{
+    struct Pulse async;
+} my_msg_type;
+
+int main (int argc, char *argv[])
+{
 
     int chid;
     int coid;
+
+    my_msg_type msg;
 
     chid = ChannelCreate();
     coid = Connect(SELF_PID, chid);
@@ -14,11 +22,11 @@ int main (int argc, char *argv[]) {
     void * zeroPtr = MapPhysical(0, 4096 * 4);
     zeroPtr = zeroPtr;
 
-    InterruptHandler_t id = InterruptAttach(coid, 4, NULL);
+    int handler_id = InterruptAttach(coid, 4, NULL);
 
     for (;;) {
         int msgid;
-        int num = MessageReceive(chid, &msgid, NULL, 0);
+        int num = MessageReceive(chid, &msgid, &msg, sizeof(msg));
 
         if (msgid > 0) {
             MessageReply(msgid, ERROR_NO_SYS, NULL, 0);
@@ -28,14 +36,20 @@ int main (int argc, char *argv[]) {
         }
         else {
             // Pulse received
-            id = id;
-            InterruptComplete(id);
+            switch (msg.async.type) {
+                case PULSE_TYPE_INTERRUPT:
+                    InterruptComplete(handler_id);
+                    break;
+                default:
+                    *((char *)NULL) = '\0';
+                    break;
+            }
         }
 
         num = num;
     }
 
-    InterruptDetach(id);
+    InterruptDetach(handler_id);
 
     return 0;
 }

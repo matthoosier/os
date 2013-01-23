@@ -20,6 +20,7 @@
 struct process_creation_context
 {
     Thread      * caller;
+    Process     * parent;
     Process     * created;
     const char  * executableName;
     Semaphore   * baton;
@@ -58,9 +59,11 @@ Segment::~Segment ()
     }
 }
 
+SyncSlabAllocator<ChildWaitHandler> ChildWaitHandler::sSlab;
+
 SyncSlabAllocator<Process> Process::sSlab;
 
-Process::Process (char const aComm[])
+Process::Process (char const aComm[], Process * aParent)
     : pagetable(new TranslationTable())
     , entry(0)
     , thread(NULL)
@@ -68,7 +71,11 @@ Process::Process (char const aComm[])
     , next_coid(FIRST_CONNECTION_ID)
     , next_msgid(1)
     , next_interrupt_handler_id(1)
+    , next_child_wait_handler_id(1)
+    , mParent(aParent)
 {
+    this->pid = get_next_pid();
+
     /* Record our name */
     strncpy(comm, aComm, sizeof(comm));
 
@@ -78,6 +85,10 @@ Process::Process (char const aComm[])
     this->id_to_connection_map = new IdToConnectionMap_t(IdToConnectionMap_t::SignedIntCompareFunc);
     this->id_to_message_map    = new IdToMessageMap_t(IdToMessageMap_t::SignedIntCompareFunc);
     this->id_to_interrupt_handler_map   = new IdToInterruptHandlerMap_t(IdToInterruptHandlerMap_t::SignedIntCompareFunc);
+
+    if (aParent) {
+        aParent->mAliveChildren.Append(this);
+    }
 }
 
 static void ForeachMessage (
@@ -152,6 +163,32 @@ static void DisposeInterruptHandler (
 
 Process::~Process ()
 {
+    assert(GetId() != PROCMGR_PID + 1);
+
+    // Reassign all children to the init process
+    while (!mAliveChildren.Empty())
+    {
+        Process * child = mAliveChildren.PopFirst();
+        Process * init = Process::Lookup(PROCMGR_PID + 1);
+
+        child->mParent = init;
+        init->mAliveChildren.Append(child);
+    }
+
+    while (!mDeadChildren.Empty())
+    {
+        Process * child = mDeadChildren.PopFirst();
+        Process * init = Process::Lookup(PROCMGR_PID + 1);
+
+        child->mParent = init;
+        init->mDeadChildren.Append(child);
+
+        ChildWaitHandler * handler = init->GetWaitHandlerForChild(child->GetId());
+        if (handler) {
+            init->TryReapChildren(handler);
+        }
+    }
+
     /*
     Free all connections owned by process. Internally, the destructor for
     the connection object will free any messages that have been queued
@@ -166,6 +203,12 @@ Process::~Process ()
 
     /* Free and unregister all interrupt handlers installed by the process */
     this->id_to_interrupt_handler_map->Foreach (DisposeInterruptHandler, NULL);
+
+    /* Free all the child-termination handlers on this process */
+    while (!this->mWaitHandlers.Empty()) {
+        ChildWaitHandler * wait_handler = mWaitHandlers.PopFirst();
+        delete wait_handler;
+    }
     
     /* Deallocate virtual memory of the process */
     while (!this->segments_head.Empty()) {
@@ -174,7 +217,8 @@ Process::~Process ()
     }
 }
 
-Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad_alloc)
+Process * Process::execIntoCurrent (const char executableName[],
+                                    Process * aParent) throw (std::bad_alloc)
 {
     TranslationTable *tt;
     Process * p;
@@ -205,13 +249,12 @@ Process * Process::execIntoCurrent (const char executableName[]) throw (std::bad
     }
 
     try {
-        p = new Process(executableName);
+        p = new Process(executableName, aParent);
     } catch (std::bad_alloc) {
         return NULL;
     }
 
-    /* Allocate, assign, and record Pid */
-    p->pid = get_next_pid();
+    /* Record Pid */
     Process::Register(p->pid, p);
 
     /* Okay. Save reference to this process object into the current thread */
@@ -341,7 +384,7 @@ void Process::UserProcessThreadBody (void * pProcessCreationContext)
     Process * p;
 
     context  = (struct process_creation_context *)pProcessCreationContext;
-    context->created = p = Process::execIntoCurrent(context->executableName);
+    context->created = p = Process::execIntoCurrent(context->executableName, context->parent);
 
     /* Release the spawner now that we have the resulting Process object */
     context->baton->Up();
@@ -403,7 +446,8 @@ void Process::UserProcessThreadBody (void * pProcessCreationContext)
     */
 }
 
-Process * Process::Create (const char executableName[])
+Process * Process::Create (const char aExecutableName[],
+                           Process * aParent)
 {
     struct process_creation_context context;
     Thread * t;
@@ -416,8 +460,9 @@ Process * Process::Create (const char executableName[])
     }
 
     context.caller = THREAD_CURRENT();
+    context.parent = aParent;
     context.created = NULL;
-    context.executableName = executableName;
+    context.executableName = aExecutableName;
     context.baton = &baton;
 
     /* Resulting process object will be stored into context->created */
@@ -436,7 +481,7 @@ Process * Process::Create (const char executableName[])
 
 static Pid_t get_next_pid ()
 {
-    static Pid_t counter = PROCMGR_PID + 1;
+    static Pid_t counter = PROCMGR_PID;
 
     return counter++;
 }
@@ -490,6 +535,24 @@ Thread * Process::GetThread ()
     return this->thread;
 }
 
+Process * Process::GetParent ()
+{
+    return mParent;
+}
+
+ChildWaitHandler * Process::GetWaitHandlerForChild (Pid_t aChild)
+{
+    typedef List<ChildWaitHandler, &ChildWaitHandler::mLink> List_t;
+
+    for (List_t::Iterator i = mWaitHandlers.Begin(); i; ++i) {
+        if (i->Handles(aChild)) {
+            return *i;
+        }
+    }
+
+    return NULL;
+}
+
 void Process::ManagerThreadBody (void * pProcessCreationContext)
 {
     struct process_creation_context * caller_context;
@@ -513,7 +576,7 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
     }
 
     try {
-        caller_context->created = p = new Process("procmgr");
+        caller_context->created = p = new Process("procmgr", NULL);
     } catch (std::bad_alloc a) {
         assert(false);
     }
@@ -584,6 +647,7 @@ Process * Process::StartManager ()
     baton.Down();
 
     managerProcess = context.created;
+    assert(managerProcess->GetId() == PROCMGR_PID);
 
     return managerProcess;
 }
@@ -737,28 +801,28 @@ RefPtr<Message> Process::LookupMessage (Message_t id)
     return ret;
 }
 
-InterruptHandler_t Process::RegisterInterruptHandler (RefPtr<UserInterruptHandler> h)
+int Process::RegisterInterruptHandler (RefPtr<UserInterruptHandler> h)
 {
-    InterruptHandler_t id = this->next_interrupt_handler_id++;
+    int handler_id = this->next_interrupt_handler_id++;
 
-    if (this->id_to_interrupt_handler_map->Lookup(id) != NULL) {
+    if (this->id_to_interrupt_handler_map->Lookup(handler_id) != NULL) {
         assert(false);
         return -ERROR_INVALID;
     }
 
-    this->id_to_interrupt_handler_map->Insert(id, *h);
+    this->id_to_interrupt_handler_map->Insert(handler_id, *h);
 
-    if (this->id_to_interrupt_handler_map->Lookup(id) == *h) {
+    if (this->id_to_interrupt_handler_map->Lookup(handler_id) == *h) {
         h->Ref();
-        return id;
+        return handler_id;
     } else {
         return -ERROR_NO_MEM;
     }
 }
 
-int Process::UnregisterInterruptHandler (InterruptHandler_t id)
+int Process::UnregisterInterruptHandler (int handler_id)
 {
-    UserInterruptHandler * h = this->id_to_interrupt_handler_map->Remove(id);
+    UserInterruptHandler * h = this->id_to_interrupt_handler_map->Remove(handler_id);
 
     if (!h) {
         return -ERROR_INVALID;
@@ -771,17 +835,57 @@ int Process::UnregisterInterruptHandler (InterruptHandler_t id)
     return ERROR_OK;
 }
 
-RefPtr<UserInterruptHandler> Process::LookupInterruptHandler (InterruptHandler_t id)
+RefPtr<UserInterruptHandler> Process::LookupInterruptHandler (int handler_id)
 {
     RefPtr<UserInterruptHandler> ret;
 
-    UserInterruptHandler * value = this->id_to_interrupt_handler_map->Lookup(id);
+    UserInterruptHandler * value = this->id_to_interrupt_handler_map->Lookup(handler_id);
 
     if (value) {
         ret.Reset(value);
     }
 
     return RefPtr<UserInterruptHandler>(ret);
+}
+
+int Process::RegisterChildWaitHandler (ChildWaitHandler * h)
+{
+    int handler_id = this->next_child_wait_handler_id++;
+
+    h->mId = handler_id;
+
+    mWaitHandlers.Append(h);
+
+    TryReapChildren(h);
+
+    return h->mId;
+}
+
+int Process::UnregisterChildWaitHandler (int handler_id)
+{
+    ChildWaitHandler * h = LookupChildWaitHandler(handler_id);
+
+    if (h) {
+        mWaitHandlers.Remove(h);
+        delete h;
+        return ERROR_OK;
+    }
+    else {
+        return -ERROR_INVALID;
+    }
+}
+
+ChildWaitHandler * Process::LookupChildWaitHandler (int handler_id)
+{
+    typedef List<ChildWaitHandler, &ChildWaitHandler::mLink> List_t;
+
+    for (List_t::Iterator i = mWaitHandlers.Begin(); i; ++i) {
+        if (i->mId == handler_id) {
+            return *i;
+        }
+    }
+
+    return NULL;
 }
 
 char const * Process::GetName ()
@@ -797,6 +901,49 @@ TranslationTable * Process::GetTranslationTable ()
 TranslationTable * ProcessGetTranslationTable (Process * p)
 {
     return p->GetTranslationTable();
+}
+
+void Process::TryReapChildren (ChildWaitHandler * aHandler)
+{
+    typedef List<Process, &Process::mChildrenLink> List_t;
+
+    for (List_t::Iterator i = mDeadChildren.Begin(); i; ++i) {
+        if (aHandler->Handles(i->GetId()) && aHandler->mCount > 0) {
+            aHandler->mCount--;
+            ReapChild(*i, aHandler->mConnection);
+        }
+    }
+}
+
+void Process::ReapChild (Process * aChild, RefPtr<Connection> aConnection)
+{
+    Pid_t child_pid = aChild->GetId();
+    Thread * thread = aChild->GetThread();
+
+    Remove(child_pid);
+    mDeadChildren.Remove(aChild);
+
+    delete aChild;
+    thread->process = NULL;
+    thread->Join();
+
+    aConnection->SendMessageAsync(PULSE_TYPE_CHILD_FINISH, child_pid);
+}
+
+void Process::ReportChildFinished (Process * aChild)
+{
+    Pid_t child_pid = aChild->GetId();
+
+    mAliveChildren.Remove(aChild);
+    mDeadChildren.Append(aChild);
+
+    ChildWaitHandler * handler = GetWaitHandlerForChild(child_pid);
+
+    if (handler && handler->Handles(child_pid) && handler->mCount > 0) {
+        handler->mCount--;
+        ReapChild(aChild, handler->mConnection);
+    }
+
 }
 
 /**

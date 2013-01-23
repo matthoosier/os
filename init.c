@@ -1,17 +1,37 @@
+#include <assert.h>
+
+#include <sys/message.h>
 #include <sys/process.h>
 
 int main (int argc, char *argv[]) {
 
     int pid;
-    int my_pid = GetPid();
+
+    int chid = ChannelCreate();
+    int coid = Connect(SELF_PID, chid);
+    int wait_id = ChildWaitAttach(coid, ANY_PID);
 
     pid = Spawn("echo");
     pid = Spawn("uio");
     pid = Spawn("pl011");
     pid = Spawn("crasher");
 
-    my_pid = my_pid;
     pid = pid;
+
+    while (1) {
+
+        /* Child wait is created with an initial count of 0 */
+        ChildWaitArm(wait_id, 1);
+
+        struct Pulse pulse;
+        int msgid;
+        size_t n = MessageReceive(chid, &msgid, &pulse, sizeof(pulse));
+
+        assert(n == sizeof(struct Pulse));
+        assert(msgid == 0);
+    }
+
+    ChildWaitDetach(wait_id);
 
     return 0;
 }

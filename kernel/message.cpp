@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include <sys/error.h>
+#include <sys/message.h>
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
@@ -101,7 +102,7 @@ void Channel::Dispose ()
         RefPtr<Message> message = mReceiveBlockedMessages.PopFirst();
 
         if (message->mSender && message->mSender->GetState() != Thread::STATE_FINISHED) {
-            assert(message->mReceiver != NULL);
+            assert(message->mReceiver);
 
             message->mSendData.sync.msgv = NULL;
             message->mSendData.sync.msgv_count = 0;
@@ -183,9 +184,9 @@ void Connection::Dispose ()
 }
 
 Message::Message ()
-    : mSender (NULL)
+    : mSender ()
     , mSenderSemaphore (0)
-    , mReceiver (NULL)
+    , mReceiver ()
     , mReceiverSemaphore (0)
     , mResult ()
     , mDisposed (false)
@@ -208,7 +209,20 @@ void Message::Dispose ()
     mDisposed = true;
 }
 
-ssize_t Connection::SendMessageAsyncDuringException (uintptr_t payload)
+ssize_t Connection::SendMessageAsync (int8_t type, uintptr_t value)
+{
+    return SendMessageAsyncInternal(type, value, false);
+}
+
+ssize_t Connection::SendMessageAsyncDuringException (int8_t type,
+                                                     uintptr_t value)
+{
+    return SendMessageAsyncInternal(type, value, true);
+}
+
+ssize_t Connection::SendMessageAsyncInternal (int8_t type,
+                                              uintptr_t value,
+                                              bool isDuringException)
 {
     RefPtr<Message> message;
 
@@ -230,7 +244,9 @@ ssize_t Connection::SendMessageAsyncDuringException (uintptr_t payload)
 
         message->mConnection = SelfRef();
         message->mSender = NULL;
-        message->mSendData.async.payload = payload;
+        message->mType = Message::TYPE_ASYNC;
+        message->mSendData.async.type = type;
+        message->mSendData.async.value = value;
 
         message->mReceiver = NULL;
 
@@ -241,30 +257,28 @@ ssize_t Connection::SendMessageAsyncDuringException (uintptr_t payload)
             this->channel->mBlockedConnections.Append(self);
         }
         this->mSendBlockedMessages.Append(message);
-
-        SpinlockUnlock(&gLock);
-        message->mReceiverSemaphore.UpDuringException();
-        SpinlockLock(&gLock);
     }
     else {
         /* Receiver thread is ready to go */
         message = this->channel->mReceiveBlockedMessages.PopFirst();
 
-        assert(message->mReceiver != NULL);
+        assert(message->mReceiver);
 
         message->mConnection = SelfRef();
         message->mSender = NULL;
-        message->mSendData.async.payload = payload;
-
-        SpinlockUnlock(&gLock);
-
-        /* Allow receiver to wake up */
-        message->mReceiverSemaphore.UpDuringException();
-
-        SpinlockLock(&gLock);
+        message->mType = Message::TYPE_ASYNC;
+        message->mSendData.async.type = type;
+        message->mSendData.async.value = value;
     }
 
     SpinlockUnlock(&gLock);
+
+    /* Allow receiver to wake up */
+    if (isDuringException) {
+        message->mReceiverSemaphore.UpDuringException();
+    } else {
+        message->mReceiverSemaphore.Up();
+    }
 
     return ERROR_OK;
 }
@@ -296,6 +310,7 @@ ssize_t Connection::SendMessage (
 
         message->mConnection = SelfRef();
         message->mSender = THREAD_CURRENT();
+        message->mType = Message::TYPE_SYNC;
         message->mSendData.sync.msgv = msgv;
         message->mSendData.sync.msgv_count = msgv_count;
         message->mSendData.sync.replyv = replyv;
@@ -315,10 +330,11 @@ ssize_t Connection::SendMessage (
         /* Receiver thread is ready to go */
         message = this->channel->mReceiveBlockedMessages.PopFirst();
 
-        assert(message->mReceiver != NULL);
+        assert(message->mReceiver);
 
         message->mConnection = SelfRef();
         message->mSender = THREAD_CURRENT();
+        message->mType = Message::TYPE_SYNC;
         message->mSendData.sync.msgv = msgv;
         message->mSendData.sync.msgv_count = msgv_count;
         message->mSendData.sync.replyv = replyv;
@@ -384,6 +400,7 @@ ssize_t Channel::ReceiveMessage (
         assert(!client->mSendBlockedMessages.Empty());
         message = client->mSendBlockedMessages.PopFirst();
 
+        /* If there are no more messages, mark conn as not-blocked */
         if (client->mSendBlockedMessages.Empty()) {
             this->mBlockedConnections.Remove(client);
             this->mNotBlockedConnections.Append(client);
@@ -398,26 +415,25 @@ ssize_t Channel::ReceiveMessage (
 
     message->mReceiverSemaphore.Down(Thread::STATE_RECEIVE);
 
-    if (message->mSender != NULL) {
-        /* Synchronous message */
+    if (message->mType == Message::TYPE_SYNC) {
+
+        // Give receiver a reference to the message
         context = message;
 
         num_copied = TransferPayloadV(
-                message->mSender,
+                *message->mSender,
                 IoVector(message->mSendData.sync.msgv,
                          message->mSendData.sync.msgv_count),
                 0,
-                message->mReceiver,
+                *message->mReceiver,
                 IoVector(message->mReceiveData.msgv,
                          message->mReceiveData.msgv_count),
                 0
                 );
     }
-    else {
-        /* Asynchronous message */
-        context.Reset();
+    else if (message->mType == Message::TYPE_ASYNC) {
 
-        IoBuffer payload_chunk(message->mSendData.async.payload);
+        IoBuffer payload_chunk(&message->mSendData.async, sizeof(message->mSendData.async));
 
         /*
         Slight hack. Just need to nominate some thread (the current one
@@ -430,14 +446,21 @@ ssize_t Channel::ReceiveMessage (
                 sender_pagetable_thread,
                 IoVector(&payload_chunk, 1),
                 0,
-                message->mReceiver,
+                *message->mReceiver,
                 IoVector(message->mReceiveData.msgv,
                          message->mReceiveData.msgv_count),
                 0
                 );
 
-        /* There will be no reply, so free the Message struct now */
+        // There will be no reply, so free the Message struct now
         message.Reset();
+
+        // ... and make sure that the receiver doesn't accidentally get
+        // a reference to it
+        context.Reset();
+    }
+    else {
+        assert(false);
     }
 
     return num_copied;
@@ -445,11 +468,14 @@ ssize_t Channel::ReceiveMessage (
 
 size_t Message::GetLength ()
 {
-    if (mSender != NULL) {
+    if (mType == TYPE_SYNC) {
         return IoVector(mSendData.sync.msgv,
                         mSendData.sync.msgv_count).Length();
+    } else if (mType == TYPE_ASYNC) {
+        return sizeof(mSendData.async);
     } else {
-        return sizeof(mSendData.async.payload);
+        assert(false);
+        return 0;
     }
 }
 
@@ -457,7 +483,7 @@ ssize_t Message::Read (size_t src_offset,
                        IoBuffer const destv[],
                        size_t destv_count)
 {
-    if (mSender != NULL) {
+    if (mType == TYPE_SYNC) {
 
         IoVector srcVector(mSendData.sync.msgv,
                            mSendData.sync.msgv_count);
@@ -468,16 +494,17 @@ ssize_t Message::Read (size_t src_offset,
             return 0;
         }
 
-        return TransferPayloadV(mSender, srcVector, src_offset,
+        return TransferPayloadV(*mSender, srcVector, src_offset,
                                 THREAD_CURRENT(), dstVector, 0);
-    } else {
+    } else if (mType == TYPE_ASYNC) {
+        assert(mType == Message::TYPE_ASYNC);
 
-        if (src_offset > sizeof(mSendData.async.payload)) {
+        if (src_offset > sizeof(mSendData.async)) {
             return 0;
         }
 
-        IoBuffer chunk((uint8_t *)&mSendData.async.payload + src_offset,
-                    sizeof(mSendData.async.payload) - src_offset);
+        IoBuffer chunk((uint8_t *)&mSendData.async + src_offset,
+                    sizeof(mSendData.async) - src_offset);
 
         return TransferPayloadV(
                 THREAD_CURRENT(),   // Dummy sender; won't matter
@@ -486,6 +513,9 @@ ssize_t Message::Read (size_t src_offset,
                 THREAD_CURRENT(),
                 IoVector(destv, destv_count),
                 0);
+    } else {
+        assert(false);
+        return 0;
     }
 }
 
@@ -497,7 +527,7 @@ ssize_t Message::Reply (
 {
     size_t result;
 
-    assert(mReceiver == THREAD_CURRENT());
+    assert(*mReceiver == THREAD_CURRENT());
 
     if (mDisposed) {
         result = -ERROR_INVALID;
@@ -514,11 +544,11 @@ ssize_t Message::Reply (
         */
         if (status == ERROR_OK) {
             result = TransferPayloadV (
-                    mReceiver,
+                    *mReceiver,
                     IoVector(mReceiveData.replyv,
                              mReceiveData.replyv_count),
                     0,
-                    mSender,
+                    *mSender,
                     IoVector(mSendData.sync.replyv,
                              mSendData.sync.replyv_count),
                     0
@@ -543,12 +573,12 @@ ssize_t Message::Reply (
 
 Thread * Message::GetSender ()
 {
-    return mSender;
+    return *mSender;
 }
 
 Thread * Message::GetReceiver ()
 {
-    return mReceiver;
+    return *mReceiver;
 }
 
 __attribute__((used))

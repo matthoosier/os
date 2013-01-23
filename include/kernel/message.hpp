@@ -8,6 +8,7 @@
 #include <new>
 
 #include <sys/decls.h>
+#include <sys/message.h>
 
 #include <kernel/assert.h>
 #include <kernel/io.hpp>
@@ -63,6 +64,12 @@ public:
         size_t replyv_count;
     };
 
+    enum Type
+    {
+        TYPE_SYNC,
+        TYPE_ASYNC,
+    };
+
     /**
      * @brief   All the metadata about the buffer addresses/sizes
      *          in the sender's virtual memory
@@ -78,10 +85,7 @@ public:
             size_t replyv_count;
         }  sync;
 
-        struct
-        {
-            uintptr_t payload;
-        } async;
+        struct Pulse async;
     };
 
 public:
@@ -181,7 +185,7 @@ private:
      *
      * NULL if the message is asynchronous
      */
-    Thread * mSender;
+    WeakPtr<Thread> mSender;
 
     /**
      * @brief   Synchronizes the wait of the sender until
@@ -192,13 +196,15 @@ private:
     /**
      * @brief   The process to whom the message is being sent
      */
-    Thread * mReceiver;
+    WeakPtr<Thread> mReceiver;
 
     /**
      * @brief   Synchronizes the wait of the receiver until
      *          the message is sent.
      */
     Semaphore mReceiverSemaphore;
+
+    Type mType;
 
     /**
      * @brief   All the metadata about the buffer addresses/sizes
@@ -281,10 +287,20 @@ public:
      * @brief   Asynchronously send a bounded-size message
      *
      * @return  if zero, then successful. If less than zero, then an
+     *          error happened and specific \c Error_t value is
+     *          found by negating the return value.
+     */
+    ssize_t SendMessageAsync (int8_t type, uintptr_t value);
+
+    /**
+     * @brief   Asynchronously send a bounded-size message
+     *
+     * @return  if zero, then successful. If less than zero, then an
      *          error happened and the specific \c Error_t value is
      *          found by negating the return value.
      */
-    ssize_t SendMessageAsyncDuringException (uintptr_t payload);
+    ssize_t SendMessageAsyncDuringException (int8_t type,
+                                             uintptr_t value);
 
     inline RefPtr<Connection> SelfRef ()
     {
@@ -301,6 +317,11 @@ public:
     {
         sSlab.Free(mem);
     }
+
+private:
+    ssize_t SendMessageAsyncInternal (int8_t type,
+                                      uintptr_t value,
+                                      bool isDuringException);
 
 public:
     /**
