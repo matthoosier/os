@@ -33,8 +33,9 @@ public:
     /**
      * \brief   Key comparison function
      *
-     * Return -1 if @left is less than @right, 0 if @left is
-     * equal to @right, and +1 if @left is greater than @right.
+     * Return -1 if <tt>left</tt> is less than <tt>right</tt>, 0 if
+     * <tt>left</tt> is equal to <tt>right</tt>, and +1 if <tt>left</tt>
+     * is greater than <tt>right</tt>.
      */
     typedef int (*CompareFunc) (
             Key_t left,
@@ -74,9 +75,9 @@ public:
     ~RawTreeMap () throw ();
 
     /**
-     * \brief   Maps @key to @value.
+     * \brief   Maps <tt>key</tt> to <tt>value</tt>.
      *
-     * Returns any previous value that was mapped to @key.
+     * Returns any previous value that was mapped to <tt>key</tt>.
      */
     Value_t Insert (
             Key_t key,
@@ -84,16 +85,16 @@ public:
             );
 
     /**
-     * \brief   Removes any mapping from @key to a value.
+     * \brief   Removes any mapping from <tt>key</tt> to a value.
      *
-     * Returns the value (if any) that was mapped to @key.
+     * Returns the value (if any) that was mapped to <tt>key</tt>.
      */
     Value_t Remove (
             Key_t key
             );
 
     /**
-     * \brief   Finds the value (if any) mapped to @key
+     * \brief   Finds the value (if any) mapped to <tt>key</tt>
      */
     Value_t Lookup (
             Key_t key

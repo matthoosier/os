@@ -8,7 +8,6 @@
 #include <kernel/message.hpp>
 #include <kernel/mmu.hpp>
 #include <kernel/process.hpp>
-#include <kernel/reaper.hpp>
 #include <kernel/thread.hpp>
 
 static bool CopyIoVecToIoBuffer (TranslationTable * user_pagetable,
@@ -40,7 +39,14 @@ static void checkExit (int messaging_result_code)
 {
     if (messaging_result_code == -ERROR_EXITING)
     {
-        Reaper::Reap(THREAD_CURRENT()->process);
+        Process * process = THREAD_CURRENT()->process;
+        process->LookupConnection(PROCMGR_CONNECTION_ID)->SendMessageAsync(PULSE_TYPE_CHILD_FINISH, process->GetId());
+
+        Thread::BeginTransaction();
+        Thread::MakeUnready(THREAD_CURRENT(), Thread::STATE_FINISHED);
+        Thread::RunNextThread();
+        Thread::EndTransaction();
+
         assert(false);
     }
 }

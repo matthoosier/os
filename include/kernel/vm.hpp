@@ -1,7 +1,7 @@
 #ifndef __VM_HPP__
 #define __VM_HPP__
 
-/*! \file kernel/vm.hpp */
+/*! \file */
 
 #include <sys/decls.h>
 

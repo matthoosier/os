@@ -12,23 +12,14 @@
 #include <kernel/list.hpp>
 #include <kernel/message.hpp>
 #include <kernel/mmu.hpp>
+#include <kernel/process-types.h>
+#include <kernel/reaper.hpp>
 #include <kernel/slaballocator.hpp>
 #include <kernel/smart-ptr.hpp>
 #include <kernel/tree-map.hpp>
 #include <kernel/vm.hpp>
 
 class Thread;
-
-BEGIN_DECLS
-
-/**
- * \brief   Unique integer identifier of a process.
- *
- * \memberof Process
- */
-typedef int Pid_t;
-
-END_DECLS
 
 class Process;
 
@@ -121,99 +112,6 @@ private:
     Process & owner;
 
     friend class Process;
-};
-
-/**
- * Record type to record currently installed handlers for
- * child process termination.
- */
-class ChildWaitHandler
-{
-public:
-    /**
-     * Do not stack-allocate
-     *
-     * @param connection    see mConnection
-     * @param pid           see mPid
-     * @param count         see mCount
-     */
-    ChildWaitHandler (RefPtr<Connection> connection,
-                      Pid_t pid,
-                      unsigned int count)
-        : mPid(pid)
-        , mConnection(connection)
-        , mCount(count)
-    {
-    }
-
-    virtual ~ChildWaitHandler ()
-    {
-    }
-
-    void * operator new (size_t size) throw (std::bad_alloc)
-    {
-        assert(size == sizeof(ChildWaitHandler));
-        return sSlab.AllocateWithThrow();
-    }
-
-    void operator delete (void * mem) throw ()
-    {
-        sSlab.Free(mem);
-    }
-
-    /**
-     * Test whether this ChildWaitHandler is configured to
-     * be able to reap a process whose Pid_t is <tt>aPid</tt>
-     */
-    bool Handles (Pid_t aPid)
-    {
-        if (mPid == aPid || mPid == ANY_PID) {
-            return true;
-        }
-        else {
-            return false;
-        }
-    }
-
-private:
-    //!< Prevent allocating arrays of ChildWaitHandlers
-    void * operator new[] (size_t);
-
-    //!< Prevent allocating arrays of ChildWaitHandlers
-    void operator delete[] (void *);
-
-public:
-    /**
-     * Unique identifier
-     */
-    int mId;
-
-    /**
-     * Intrusive list pointer
-     */
-    ListElement mLink;
-
-    /**
-     * Identifier (or ANY_PID) of child process to wait for
-     */
-    Pid_t mPid;
-
-    /**
-     * Connection on which a pulse with type PULSE_TYPE_CHILD_FINISH
-     * will be delivered when the indicated process is reaped.
-     */
-    RefPtr<Connection> mConnection;
-
-    /**
-     * Number of children that userspace has indicated it's prepared
-     * to be reaped. Can be increased with the ChildWaitArm() call.
-     */
-    unsigned int mCount;
-
-    /**
-     * Allocates instances of ChildWaitHandler
-     */
-    static SyncSlabAllocator<ChildWaitHandler> sSlab;
 };
 
 /**
@@ -313,11 +211,11 @@ public:
 
     RefPtr<UserInterruptHandler> LookupInterruptHandler (int handler_id);
 
-    int RegisterChildWaitHandler (ChildWaitHandler * h);
+    int RegisterReaper (RefPtr<Reaper> r);
 
-    int UnregisterChildWaitHandler (int handler_id);
+    int UnregisterReaper (int handler_id);
 
-    ChildWaitHandler * LookupChildWaitHandler (int handler_id);
+    RefPtr<Reaper> LookupReaper (int handler_id);
 
 public:
     /**
@@ -349,7 +247,7 @@ public:
 
     Process * GetParent ();
 
-    void TryReapChildren (ChildWaitHandler * aHandler);
+    void TryReapChildren (RefPtr<Reaper> aReaper);
 
     void ReportChildFinished (Process * aChild);
 
@@ -367,7 +265,7 @@ private:
      * \brief   Find a handler that's willing to reap the
      *          indicated child process.
      */
-    ChildWaitHandler * GetWaitHandlerForChild (Pid_t id);
+    RefPtr<Reaper> GetReaperForChild (Pid_t id);
 
 private:
     /**
@@ -507,14 +405,14 @@ private:
     int next_interrupt_handler_id;
 
     /**
-     * \brief   Map integer handles to one of the ChildWaitHandler
+     * \brief   Map integer handles to one of the Reaper
      *          data structures owned by this process.
      */
-    List<ChildWaitHandler, &ChildWaitHandler::mLink> mWaitHandlers;
+    RefList<Reaper, &Reaper::mLink> mReapers;
 
     /**
      * \brief   Value of the next handle that will be assigned
-     *          to a ChildWaitHandler owned by this process
+     *          to a Reaper owned by this process
      */
     int next_child_wait_handler_id;
 

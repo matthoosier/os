@@ -1,7 +1,7 @@
 #ifndef __VM_DEFS_H__
 #define __VM_DEFS_H__
 
-/*! \file kernel/vm-def.h */
+/*! \file */
 
 #include <stdint.h>
 #include <sys/types.h>

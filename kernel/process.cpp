@@ -8,6 +8,7 @@
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
+#include <kernel/minmax.hpp>
 #include <kernel/process.hpp>
 #include <kernel/procmgr.hpp>
 #include <kernel/ramfs.h>
@@ -58,8 +59,6 @@ Segment::~Segment ()
         Page::Free(page);
     }
 }
-
-SyncSlabAllocator<ChildWaitHandler> ChildWaitHandler::sSlab;
 
 SyncSlabAllocator<Process> Process::sSlab;
 
@@ -183,7 +182,7 @@ Process::~Process ()
         child->mParent = init;
         init->mDeadChildren.Append(child);
 
-        ChildWaitHandler * handler = init->GetWaitHandlerForChild(child->GetId());
+        RefPtr<Reaper> handler = init->GetReaperForChild(child->GetId());
         if (handler) {
             init->TryReapChildren(handler);
         }
@@ -205,9 +204,9 @@ Process::~Process ()
     this->id_to_interrupt_handler_map->Foreach (DisposeInterruptHandler, NULL);
 
     /* Free all the child-termination handlers on this process */
-    while (!this->mWaitHandlers.Empty()) {
-        ChildWaitHandler * wait_handler = mWaitHandlers.PopFirst();
-        delete wait_handler;
+    while (!this->mReapers.Empty()) {
+        RefPtr<Reaper> reaper = mReapers.PopFirst();
+        reaper.Reset();
     }
     
     /* Deallocate virtual memory of the process */
@@ -540,18 +539,24 @@ Process * Process::GetParent ()
     return mParent;
 }
 
-ChildWaitHandler * Process::GetWaitHandlerForChild (Pid_t aChild)
+RefPtr<Reaper> Process::GetReaperForChild (Pid_t aChild)
 {
-    typedef List<ChildWaitHandler, &ChildWaitHandler::mLink> List_t;
+    typedef RefList<Reaper, &Reaper::mLink> List_t;
 
-    for (List_t::Iterator i = mWaitHandlers.Begin(); i; ++i) {
+    for (List_t::Iterator i = mReapers.Begin(); i; ++i) {
         if (i->Handles(aChild)) {
             return *i;
         }
     }
 
-    return NULL;
+    return RefPtr<Reaper>();
 }
+
+typedef union
+{
+    struct ProcMgrMessage sync;
+    struct Pulse async;
+} MsgType;
 
 void Process::ManagerThreadBody (void * pProcessCreationContext)
 {
@@ -559,7 +564,7 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
     Process * p;
     RefPtr<Channel> channel;
 
-    struct ProcMgrMessage   buf;
+    MsgType                 msg;
     RefPtr<Message>         m;
 
     caller_context = (struct process_creation_context *)pProcessCreationContext;
@@ -601,23 +606,45 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
     caller_context->baton->Up();
 
     while (true) {
-        ssize_t hdr_len = offsetof(struct ProcMgrMessage, type) + sizeof(buf.type);
-        ssize_t len = channel->ReceiveMessage(m, &buf, hdr_len);
+        size_t hdr_len = offsetof(struct ProcMgrMessage, type) + sizeof(msg.sync.type);
+        size_t len = channel->ReceiveMessage(m, &msg, MAX(hdr_len, sizeof(struct Pulse)));
 
-        if (len == hdr_len) {
+        if (!m) {
+            // Pulse
+            assert(msg.async.type == PULSE_TYPE_CHILD_FINISH);
+            assert(len >= sizeof(struct Pulse));
 
-            ProcMgrOperationFunc handler = ProcMgrGetMessageHandler(buf.type);
+            // PID of finished process is in pulse 'value' field
+            Process * terminee = Process::Lookup(msg.async.value);
+
+            // Wait until that process is totally done executing. This
+            // amounts to making sure that its thread is finished
+            // returning from the SendMessageAsync() call that injected
+            // this message into our queue here.
+            Thread::BeginTransaction();
+            while (terminee->GetThread()->GetState() != Thread::STATE_FINISHED) {
+                Thread::MakeReady(THREAD_CURRENT());
+                Thread::RunNextThread();
+            }
+            Thread::EndTransaction();
+
+            // Notify its parent
+            terminee->GetParent()->ReportChildFinished(terminee);
+        }
+        else if (len >= hdr_len) {
+
+            ProcMgrOperationFunc handler = ProcMgrGetMessageHandler(msg.sync.type);
 
             if (handler != NULL ) {
                 handler(m);
             } else {
-                m->Reply(ERROR_NO_SYS, &buf, 0);
+                m->Reply(ERROR_NO_SYS, IoBuffer::GetEmpty());
             }
 
         }
         else {
             /* Send back empty reply */
-            m->Reply(ERROR_NO_SYS, &buf, 0);
+            m->Reply(ERROR_NO_SYS, IoBuffer::GetEmpty());
         }
 
         // Release ref on message so that it can be deallocated as soon
@@ -848,26 +875,25 @@ RefPtr<UserInterruptHandler> Process::LookupInterruptHandler (int handler_id)
     return RefPtr<UserInterruptHandler>(ret);
 }
 
-int Process::RegisterChildWaitHandler (ChildWaitHandler * h)
+int Process::RegisterReaper (RefPtr<Reaper> aReaper)
 {
     int handler_id = this->next_child_wait_handler_id++;
 
-    h->mId = handler_id;
+    aReaper->mId = handler_id;
 
-    mWaitHandlers.Append(h);
+    mReapers.Append(aReaper);
 
-    TryReapChildren(h);
+    TryReapChildren(aReaper);
 
-    return h->mId;
+    return aReaper->mId;
 }
 
-int Process::UnregisterChildWaitHandler (int handler_id)
+int Process::UnregisterReaper (int handler_id)
 {
-    ChildWaitHandler * h = LookupChildWaitHandler(handler_id);
+    RefPtr<Reaper> r = LookupReaper(handler_id);
 
-    if (h) {
-        mWaitHandlers.Remove(h);
-        delete h;
+    if (r) {
+        mReapers.Remove(r);
         return ERROR_OK;
     }
     else {
@@ -875,17 +901,17 @@ int Process::UnregisterChildWaitHandler (int handler_id)
     }
 }
 
-ChildWaitHandler * Process::LookupChildWaitHandler (int handler_id)
+RefPtr<Reaper> Process::LookupReaper (int handler_id)
 {
-    typedef List<ChildWaitHandler, &ChildWaitHandler::mLink> List_t;
+    typedef RefList<Reaper, &Reaper::mLink> List_t;
 
-    for (List_t::Iterator i = mWaitHandlers.Begin(); i; ++i) {
+    for (List_t::Iterator i = mReapers.Begin(); i; ++i) {
         if (i->mId == handler_id) {
             return *i;
         }
     }
 
-    return NULL;
+    return RefPtr<Reaper>();
 }
 
 char const * Process::GetName ()
@@ -903,14 +929,14 @@ TranslationTable * ProcessGetTranslationTable (Process * p)
     return p->GetTranslationTable();
 }
 
-void Process::TryReapChildren (ChildWaitHandler * aHandler)
+void Process::TryReapChildren (RefPtr<Reaper> aReaper)
 {
     typedef List<Process, &Process::mChildrenLink> List_t;
 
     for (List_t::Iterator i = mDeadChildren.Begin(); i; ++i) {
-        if (aHandler->Handles(i->GetId()) && aHandler->mCount > 0) {
-            aHandler->mCount--;
-            ReapChild(*i, aHandler->mConnection);
+        if (aReaper->Handles(i->GetId()) && aReaper->mCount > 0) {
+            aReaper->mCount--;
+            ReapChild(*i, aReaper->mConnection);
         }
     }
 }
@@ -937,7 +963,7 @@ void Process::ReportChildFinished (Process * aChild)
     mAliveChildren.Remove(aChild);
     mDeadChildren.Append(aChild);
 
-    ChildWaitHandler * handler = GetWaitHandlerForChild(child_pid);
+    RefPtr<Reaper> handler = GetReaperForChild(child_pid);
 
     if (handler && handler->Handles(child_pid) && handler->mCount > 0) {
         handler->mCount--;

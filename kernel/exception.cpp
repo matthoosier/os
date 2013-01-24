@@ -5,7 +5,6 @@
 #include <kernel/exception.hpp>
 #include <kernel/message.hpp>
 #include <kernel/process.hpp>
-#include <kernel/reaper.hpp>
 #include <kernel/thread.hpp>
 
 void ScheduleSelfAbort ()
@@ -25,8 +24,14 @@ void ScheduleSelfAbort ()
   #endif
 
     /* Deallocate current process */
-    Thread * thread = THREAD_CURRENT();
-    Reaper::Reap(thread->process);
+    Process * process = THREAD_CURRENT()->process;
+    RefPtr<Connection> con = process->LookupConnection(PROCMGR_CONNECTION_ID);
+    con->SendMessageAsync(PULSE_TYPE_CHILD_FINISH, process->GetId());
+
+    Thread::BeginTransaction();
+    Thread::MakeUnready(THREAD_CURRENT(), Thread::STATE_FINISHED);
+    Thread::RunNextThread();
+    Thread::EndTransaction();
 
     assert(false);
 }

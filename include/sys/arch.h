@@ -1,7 +1,7 @@
 #ifndef __ARCH_H__
 #define __ARCH_H__
 
-/*! \file sys/arch.h */
+/*! \file */
 
 #include <stdint.h>
 

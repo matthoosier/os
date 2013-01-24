@@ -2,6 +2,7 @@
 
 #include <kernel/process.hpp>
 #include <kernel/procmgr.hpp>
+#include <kernel/reaper.hpp>
 
 void HandleInstallWait (RefPtr<Message> message)
 {
@@ -9,7 +10,7 @@ void HandleInstallWait (RefPtr<Message> message)
     struct ProcMgrReply reply;
     size_t n;
     RefPtr<Connection> connection;
-    ChildWaitHandler * handler;
+    RefPtr<Reaper> handler;
     Process * process = message->GetSender()->process;
 
     n = message->Read(0, IoBuffer(&msg, sizeof(msg)));
@@ -27,20 +28,19 @@ void HandleInstallWait (RefPtr<Message> message)
     }
 
     try {
-        handler = new ChildWaitHandler(connection,
-                                       msg.payload.child_wait_attach.child_pid,
-                                       0);
+        handler = new Reaper(connection,
+                             msg.payload.child_wait_attach.child_pid,
+                             0);
 
     } catch (std::bad_alloc) {
         message->Reply(ERROR_NO_MEM, IoBuffer::GetEmpty());
         return;
     }
 
-    reply.payload.child_wait_attach.handler_id = process->RegisterChildWaitHandler(handler);
+    reply.payload.child_wait_attach.handler_id = process->RegisterReaper(handler);
 
     if (reply.payload.child_wait_attach.handler_id < 0) {
         message->Reply(-reply.payload.child_wait_attach.handler_id, IoBuffer::GetEmpty());
-        delete handler;
         return;
     }
 
@@ -61,7 +61,7 @@ void HandleRemoveWait (RefPtr<Message> message)
         return;
     }
 
-    n = process->UnregisterChildWaitHandler(msg.payload.child_wait_detach.handler_id);
+    n = process->UnregisterReaper(msg.payload.child_wait_detach.handler_id);
 
     message->Reply(n == ERROR_OK ? ERROR_OK : -n, IoBuffer::GetEmpty());
 }
@@ -80,7 +80,7 @@ void HandleAddWaitCount (RefPtr<Message> message)
         return;
     }
 
-    ChildWaitHandler * handler = process->LookupChildWaitHandler(msg.payload.child_wait_arm.handler_id);
+    RefPtr<Reaper> handler = process->LookupReaper(msg.payload.child_wait_arm.handler_id);
 
     if (!handler) {
         message->Reply(ERROR_INVALID, IoBuffer::GetEmpty());
