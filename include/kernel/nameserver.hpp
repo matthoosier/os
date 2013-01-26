@@ -19,6 +19,12 @@ class Channel;
 // and NameServer
 class NameServer;
 
+/**
+ * \brief   Association data between a filesystem pathname
+ *          and a message-receiving channel bound to it
+ *
+ * \class NameRecord nameserver.hpp kernel/nameserver.hpp
+ */
 class NameRecord
 {
 public:
@@ -50,6 +56,12 @@ private:
     friend class NameServer;
 };
 
+/**
+ * \brief   Registry of mappings between filesystem pathnames
+ *          and message-receiving channels bound to the paths.
+ *
+ * \class NameServer nameserver.hpp kernel/nameserver.hpp
+ */
 class NameServer
 {
 public:

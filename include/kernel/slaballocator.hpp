@@ -10,6 +10,8 @@
 
 /**
  * Fully functional locking mixin class for use by SlabAllocator
+ *
+ * \class SlabLocker slaballocator.hpp kernel/slaballocator.hpp
  */
 class SlabLocker
 {
@@ -44,6 +46,8 @@ public:
 
 /**
  * No-op locking mixin class for use by SlabAllocator
+ *
+ * \class SlabNullLocker slaballocator.hpp kernel/slaballocator.hpp
  */
 class SlabNullLocker
 {
@@ -67,6 +71,8 @@ public:
  *              SlabAllocator will allocate
  *
  * \tparam LockModel    either SlabNullLocker or SlabLocker
+ *
+ * \class SlabAllocator slaballocator.hpp kernel/slaballocator.hpp
  */
 template <typename T, typename LockModel = SlabNullLocker>
     class SlabAllocator
@@ -146,6 +152,8 @@ template <typename T, typename LockModel = SlabNullLocker>
  *
  * \tparam T    the type of object whose instances this
  *              SyncSlabAllocator will allocate
+ *
+ * \class SyncSlabAllocator slaballocator.hpp kernel/slaballocator.hpp
  */
 template <typename T>
     class SyncSlabAllocator : public SlabAllocator<T, SlabLocker>

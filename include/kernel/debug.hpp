@@ -1,14 +1,14 @@
 #ifndef __DEBUG_HPP__
 #define __DEBUG_HPP__
 
+/*! \file */
+
 #include <sys/decls.h>
 
 BEGIN_DECLS
 
 /**
  * \brief   Write a printf() style formatted string to debugging output
- *
- * \memberof Debug
  */
 extern void printk (const char * format, ...)
         #ifdef __GNUC__
@@ -21,7 +21,7 @@ END_DECLS
 /**
  * \brief   Driver model to be implemented by anything wanting
  *          to provide a backend implemetation for printing out
- *          #printk() messages.
+ *          printk() messages.
  *
  * To provide a backend for printk(), just write your subclass of DebugDriver.
  * Then declare a static global instance of it, and inside the constructor,
@@ -50,6 +50,8 @@ END_DECLS
  *
  * static UartDebugDriver driverInstance;
  * \endcode
+ *
+ * \class DebugDriver debug.hpp kernel/debug.hpp
  */
 class DebugDriver
 {
@@ -72,7 +74,9 @@ public:
 };
 
 /**
- * Registration and dispatch facilities for debug-drivers
+ * \brief Registration and dispatch facilities for debug-drivers
+ *
+ * \class Debug debug.hpp kernel/debug.hpp
  */
 class Debug
 {

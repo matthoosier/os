@@ -16,6 +16,8 @@ BEGIN_DECLS
  *
  * One instance of #Page is created for each page of RAM which is
  * not occupied by static kernel memory.
+ *
+ * \class Page vm.hpp kernel/vm.hpp
  */
 class Page
 {
@@ -66,6 +68,8 @@ private:
  *
  * This custom smart-pointer automatically calls Page#Free() on the
  * Page object it wraps.
+ *
+ * \class PagePtr vm.hpp kernel/vm.hpp
  */
 class PagePtr
 {

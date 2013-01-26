@@ -11,6 +11,8 @@
  * \brief   Classic AVL balanced tree implementation.
  *
  * Internal nodes of the tree are allocated dynamically by a slab.
+ *
+ * \class RawTreeMap tree-map.hpp kernel/tree-map.hpp
  */
 class RawTreeMap
 {
@@ -142,6 +144,8 @@ private:
  *
  * \tparam K    Key type. Must be immutable and const.
  * \tparam V    Value type.
+ *
+ * \class TreeMap tree-map.hpp kernel/tree-map.hpp
  */
 template<typename K, typename V>
     class TreeMap : public RawTreeMap

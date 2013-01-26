@@ -25,6 +25,8 @@ class Process;
 
 /**
  * \brief   Loaded in-memory copy of an ELF segment
+ *
+ * \class Segment process.hpp kernel/process.hpp
  */
 class Segment
 {
@@ -120,6 +122,8 @@ private:
  * Classical protected-memory process implementation. Processes have
  * a single thread of execution (whose kernel task is stored in
  * \a thread).
+ *
+ * \class Process process.hpp kernel/process.hpp
  */
 class Process
 {

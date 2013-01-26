@@ -3,6 +3,11 @@
 
 #include <new>
 
+/**
+ * \brief   Simple handle to a location and length in memory
+ *
+ * \class IoBuffer io.hpp kernel/io.hpp
+ */
 struct IoBuffer
 {
 public:
@@ -41,6 +46,11 @@ private:
 };
 
 
+/**
+ * \brief   A sequence of IoBuffer's
+ *
+ * \class IoVector io.hpp kernel/io.hpp
+ */
 struct IoVector
 {
 public:

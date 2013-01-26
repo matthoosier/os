@@ -35,6 +35,8 @@ class Channel;
 class Connection;
 
 /**
+ * @class Message message.hpp kernel/message.hpp
+ *
  * @brief   The fundamental unit of communication between processes
  *
  * Represents the sender, receiver, and parameters of a message
@@ -248,6 +250,8 @@ private:
 };
 
 /**
+ * @class Connection message.hpp kernel/message.hpp
+ *
  * @brief   Client object on which MessageSend() is performed
  */
 class Connection : public RefCounted
@@ -368,6 +372,8 @@ private:
 };
 
 /**
+ * @class Channel message.hpp kernel/message.hpp
+ *
  * @brief   Server object on which MsgReceive() is performed
  */
 class Channel : public RefCounted

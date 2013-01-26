@@ -86,6 +86,8 @@ class Process;
  *   Thread::EndTransaction();
  * }
  * \endcode
+ *
+ * \class Thread thread.hpp kernel/thread.hpp
  */
 class Thread : public WeakPointee
 {

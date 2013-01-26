@@ -28,6 +28,8 @@
  * list.Prepend(red);
  *
  * \endcode
+ *
+ * \class RefList ref-list.hpp kernel/ref-list.hpp
  */
 template <class T, ListElement T::* Ptr>
     class RefList

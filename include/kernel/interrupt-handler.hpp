@@ -20,7 +20,10 @@ BEGIN_DECLS
 typedef void (*IrqKernelHandlerFunc) ();
 
 /**
- * Record attached to
+ * \brief   State information about what connection an async message
+ *          should be sent on when a particular IRQ is raised.
+ *
+ * \class UserInterruptHandler interrupt-handler.hpp kernel/interrupt-handler.hpp
  */
 class UserInterruptHandler : public RefCounted
 {

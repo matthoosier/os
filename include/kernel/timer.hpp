@@ -1,3 +1,11 @@
+#ifndef __KERNEL_TIMER_HPP__
+#define __KERNEL_TIMER_HPP__
+
+/**
+ * \brief   Base class on in-kernel programmable timer driver
+ *
+ * \class TimerDevice timer.hpp kernel/timer.hpp
+ */
 class TimerDevice
 {
 public:
@@ -8,6 +16,11 @@ public:
     virtual void StartPeriodic (unsigned int period_ms) = 0;
 };
 
+/**
+ * \brief   Factory for doing programmable timer operations
+ *
+ * \class Timer timer.hpp kernel/timer.hpp
+ */
 class Timer
 {
 public:
@@ -15,3 +28,5 @@ public:
     static void StartPeriodic (unsigned int period_ms);
     static void ReportPeriodicInterrupt ();
 };
+
+#endif /* __KERNEL_TIMER_HPP__ */

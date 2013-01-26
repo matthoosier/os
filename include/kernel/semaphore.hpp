@@ -8,10 +8,15 @@
 
 /**
  * \brief Implementation of classical sleeping counted semaphore
+ *
+ * \class Semaphore semaphore.hpp kernel/semaphore.hpp
  */
 class Semaphore
 {
 private:
+    /**
+     * \class Waiter semaphore.hpp kernel/semaphore.hpp
+     */
     class Waiter
     {
     public:

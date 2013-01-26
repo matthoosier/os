@@ -17,6 +17,8 @@
  * ListElement instances should live directly in the storage of
  * the containing object, and should be treated as an opaque
  * type.
+ *
+ * \class ListElement list.hpp kernel/list.hpp
  */
 class ListElement
 {
@@ -57,6 +59,8 @@ public:
  * list.Prepend(&red);
  *
  * \endcode
+ *
+ * \class List list.hpp kernel/list.hpp
  */
 template <class T, ListElement T::* Ptr>
     class List

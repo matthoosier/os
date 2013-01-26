@@ -14,6 +14,8 @@
  *          deallocation of objects.
  *
  * No transferrance of the pointee is possible.
+ *
+ * \class ScopedPtr smart-ptr.hpp kernel/smart-ptr.hpp
  */
 template <class T>
     class ScopedPtr
@@ -93,6 +95,8 @@ class RefCounted;
  * \brief   Concrete non-template base class for RefPtr<T> that
  *          allows the destructor logic to be written without
  *          need for the template type argument of RefPtr.
+ *
+ * \class RefPtrBase smart-ptr.hpp kernel/smart-ptr.hpp
  */
 class RefPtrBase
 {
@@ -120,6 +124,8 @@ protected:
  *
  * Pointee will be automatically deallocated when the last RefPtr
  * reference to the pointee is dropped.
+ *
+ * \class RefPtr smart-ptr.hpp kernel/smart-ptr.hpp
  */
 template <class T>
     class RefPtr : public RefPtrBase
@@ -242,6 +248,8 @@ class WeakPointee;
  *
  * Basically, this class exists to promote type erasure and prevent
  * as much code duplication from template instantiations as possible.
+ *
+ * \class WeakPtrBase smart-ptr.hpp kernel/smart-ptr.hpp
  */
 class WeakPtrBase
 {
@@ -267,6 +275,8 @@ protected:
  *
  * This class is particularly useful in situations where breaking
  * up a reference cycle is necessary.
+ *
+ * \class WeakPtr smart-ptr.hpp kernel/smart-ptr.hpp
  */
 template <class T>
     class WeakPtr : public WeakPtrBase
@@ -314,6 +324,12 @@ template <class T>
         }
     };
 
+/**
+ * \brief   Base type to be inherited by objects that want to
+ *          be referenceable by WeakPtr's.
+ *
+ * \class WeakPointee smart-ptr.hpp kernel/smart-ptr.hpp
+ */
 class WeakPointee
 {
 friend class WeakPtrBase;
@@ -337,6 +353,8 @@ public:
 /**
  * \brief   Base class to be inherited by any object which wishes
  *          to be a pointee of a RefPtr
+ *
+ * \class RefCounted smart-ptr.hpp kernel/smart-ptr.hpp
  */
 class RefCounted
 {

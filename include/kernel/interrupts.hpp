@@ -30,6 +30,8 @@
  * // core.
  * SomeInterruptController instance;
  * \endcode
+ *
+ * \class InterruptController interrupts.hpp kernel/interrupts.hpp
  */
 class InterruptController
 {
@@ -49,6 +51,8 @@ public:
 /**
  * \brief   Core API for implementing device-independent interrupt
  *          controller logic.
+ *
+ * \class Interrupts interrupts.hpp kernel/interrupts.hpp
  */
 class Interrupts
 {

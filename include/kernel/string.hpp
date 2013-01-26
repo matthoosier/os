@@ -5,6 +5,11 @@
 
 #include <kernel/slaballocator.hpp>
 
+/**
+ * \brief   Basic wrapper around a null-terminated C <tt>char</tt> string
+ *
+ * \class String string.hpp kernel/string.hpp
+ */
 class String
 {
 public:

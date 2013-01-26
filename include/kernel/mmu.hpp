@@ -26,6 +26,8 @@ class SecondlevelTable;
  * The actual descriptor installed into the Translation Table Base Register
  * (on ARM) is pointed to in virtual memory by the #firstlevel_ptes field of
  * this class.
+ *
+ * \class TranslationTable mmu.hpp kernel/mmu.hpp
  */
 class TranslationTable
 {
@@ -131,6 +133,11 @@ private:
     static SyncSlabAllocator<TranslationTable> sSlab;
 };
 
+/**
+ * \brief   Wrapper for individual page descriptors
+ *
+ * \class SecondlevelTable mmu.hpp kernel/mmu.hpp
+ */
 class SecondlevelTable
 {
 public:
@@ -168,6 +175,11 @@ private:
     static SyncSlabAllocator<SecondlevelTable> sSlab;
 };
 
+/**
+ * \brief   Individual page descriptors
+ *
+ * \class SecondlevelPtes mmu.hpp kernel/mmu.hpp
+ */
 struct SecondlevelPtes
 {
 public:

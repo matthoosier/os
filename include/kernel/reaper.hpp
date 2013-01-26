@@ -6,9 +6,11 @@
 #include <kernel/smart-ptr.hpp>
 
 /**
- * A handler installed by userspace that keeps track of
- * a child process for whom the owner is willing to perform
- * deallocation.
+ * \brief   A handler installed by userspace that keeps track of
+ *          a child process for whom the owner is willing to perform
+ *          deallocation.
+ *
+ * \class Reaper reaper.hpp kernel/reaper.hpp
  */
 class Reaper : public RefCounted
 {
