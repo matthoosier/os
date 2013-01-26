@@ -1,7 +1,7 @@
 #include <assert.h>
 
-#include <sys/message.h>
-#include <sys/process.h>
+#include <muos/message.h>
+#include <muos/process.h>
 
 int main (int argc, char *argv[]) {
 

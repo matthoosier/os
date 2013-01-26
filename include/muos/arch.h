@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 #ifdef __arm__
 

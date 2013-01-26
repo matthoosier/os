@@ -1,7 +1,7 @@
 #ifndef __SYSCALL_H__
 #define __SYSCALL_H__
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 BEGIN_DECLS
 

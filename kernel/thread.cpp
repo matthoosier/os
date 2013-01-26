@@ -1,7 +1,7 @@
 #include <stdlib.h>
 
-#include <sys/arch.h>
-#include <sys/spinlock.h>
+#include <muos/arch.h>
+#include <muos/spinlock.h>
 
 #include <kernel/assert.h>
 #include <kernel/process.hpp>

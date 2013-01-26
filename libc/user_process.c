@@ -1,8 +1,8 @@
 #include <string.h>
 
-#include <sys/procmgr.h>
-#include <sys/process.h>
-#include <sys/uio.h>
+#include <muos/procmgr.h>
+#include <muos/process.h>
+#include <muos/uio.h>
 
 int GetPid (void)
 {

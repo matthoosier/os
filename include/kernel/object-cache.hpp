@@ -3,7 +3,7 @@
 
 #include <stdlib.h>
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 #include <kernel/list.hpp>
 #include <kernel/tree-map.hpp>

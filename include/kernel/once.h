@@ -3,8 +3,8 @@
 
 #include <stdbool.h>
 
-#include <sys/decls.h>
-#include <sys/spinlock.h>
+#include <muos/decls.h>
+#include <muos/spinlock.h>
 
 BEGIN_DECLS
 

@@ -1,9 +1,9 @@
 #include <new>
 #include <stdbool.h>
 
-#include <sys/arch.h>
-#include <sys/error.h>
-#include <sys/procmgr.h>
+#include <muos/arch.h>
+#include <muos/error.h>
+#include <muos/procmgr.h>
 
 #include <kernel/assert.h>
 #include <kernel/list.hpp>

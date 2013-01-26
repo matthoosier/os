@@ -1,8 +1,8 @@
 #ifndef __THREAD_H__
 #define __THREAD_H__
 
-#include <sys/arch.h>
-#include <sys/decls.h>
+#include <muos/arch.h>
+#include <muos/decls.h>
 
 #include <kernel/list.hpp>
 #include <kernel/smart-ptr.hpp>

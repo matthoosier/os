@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 #include <kernel/vm-defs.h>
 

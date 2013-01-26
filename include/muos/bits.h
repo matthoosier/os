@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 /*
 _type:      datatype of result

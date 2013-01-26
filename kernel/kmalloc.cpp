@@ -1,5 +1,5 @@
-#include <sys/arch.h>
-#include <sys/spinlock.h>
+#include <muos/arch.h>
+#include <muos/spinlock.h>
 
 #include <kernel/array.h>
 #include <kernel/kmalloc.h>

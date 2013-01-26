@@ -4,8 +4,8 @@
 #include <stddef.h>
 #include <new>
 
-#include <sys/compiler.h>
-#include <sys/decls.h>
+#include <muos/compiler.h>
+#include <muos/decls.h>
 
 /**
  * \brief   Classic AVL balanced tree implementation.

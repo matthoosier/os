@@ -4,7 +4,7 @@
 #include <new>
 #include <stdbool.h>
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 #include <kernel/assert.h>
 #include <kernel/list.hpp>

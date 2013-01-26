@@ -3,7 +3,7 @@
 
 #include <new>
 
-#include <sys/spinlock.h>
+#include <muos/spinlock.h>
 
 #include <kernel/once.h>
 #include <kernel/slaballocator.hpp>

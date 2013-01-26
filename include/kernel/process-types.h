@@ -1,7 +1,7 @@
 #ifndef __PROCESS_TYPES_H__
 #define __PROCESS_TYPES_H__
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 BEGIN_DECLS
 

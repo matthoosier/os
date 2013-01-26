@@ -1,9 +1,9 @@
 #ifndef __OBJECT_CACHE_INTERNAL_H__
 #define __OBJECT_CACHE_INTERNAL_H__
 
-#include <sys/arch.h>
-#include <sys/compiler.h>
-#include <sys/decls.h>
+#include <muos/arch.h>
+#include <muos/compiler.h>
+#include <muos/decls.h>
 
 #include <kernel/object-cache.hpp>
 

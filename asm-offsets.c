@@ -1,7 +1,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-#include <sys/spinlock.h>
+#include <muos/spinlock.h>
 
 #include <kernel/thread.hpp>
 

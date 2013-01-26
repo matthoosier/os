@@ -1,11 +1,11 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <sys/arch.h>
-#include <sys/bits.h>
-#include <sys/compiler.h>
-#include <sys/error.h>
-#include <sys/spinlock.h>
+#include <muos/arch.h>
+#include <muos/bits.h>
+#include <muos/compiler.h>
+#include <muos/error.h>
+#include <muos/spinlock.h>
 
 #include <kernel/array.h>
 #include <kernel/assert.h>

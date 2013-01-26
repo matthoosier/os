@@ -3,7 +3,7 @@
 
 /*! \file */
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 #include <kernel/vm-defs.h>
 #include <kernel/list.hpp>

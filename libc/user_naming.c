@@ -1,8 +1,8 @@
 #include <string.h>
 
-#include <sys/message.h>
-#include <sys/naming.h>
-#include <sys/procmgr.h>
+#include <muos/message.h>
+#include <muos/naming.h>
+#include <muos/procmgr.h>
 
 int NameAttach (char const full_path[])
 {

@@ -1,9 +1,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <sys/arch.h>
-#include <sys/bits.h>
-#include <sys/spinlock.h>
+#include <muos/arch.h>
+#include <muos/bits.h>
+#include <muos/spinlock.h>
 
 #include <kernel/array.h>
 #include <kernel/list.hpp>

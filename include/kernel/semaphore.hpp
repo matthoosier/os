@@ -1,7 +1,7 @@
 #ifndef __SEMAPHORE_HPP__
 #define __SEMAPHORE_HPP__
 
-#include <sys/spinlock.h>
+#include <muos/spinlock.h>
 
 #include <kernel/list.hpp>
 #include <kernel/thread.hpp>

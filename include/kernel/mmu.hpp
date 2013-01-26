@@ -6,7 +6,7 @@
 
 #include <new>
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 #include <kernel/assert.h>
 #include <kernel/list.hpp>

@@ -3,9 +3,9 @@
 
 #include <new>
 
-#include <sys/decls.h>
-#include <sys/error.h>
-#include <sys/spinlock.h>
+#include <muos/decls.h>
+#include <muos/error.h>
+#include <muos/spinlock.h>
 
 #include <kernel/assert.h>
 #include <kernel/interrupt-handler.hpp>

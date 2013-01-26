@@ -7,8 +7,8 @@
 
 #include <new>
 
-#include <sys/decls.h>
-#include <sys/message.h>
+#include <muos/decls.h>
+#include <muos/message.h>
 
 #include <kernel/assert.h>
 #include <kernel/io.hpp>

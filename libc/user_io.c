@@ -1,6 +1,6 @@
-#include <sys/io.h>
-#include <sys/message.h>
-#include <sys/procmgr.h>
+#include <muos/io.h>
+#include <muos/message.h>
+#include <muos/procmgr.h>
 
 int InterruptAttach (int connection_id,
                      int irq_number,

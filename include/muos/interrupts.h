@@ -4,10 +4,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <sys/arch.h>
-#include <sys/bits.h>
-#include <sys/compiler.h>
-#include <sys/decls.h>
+#include <muos/arch.h>
+#include <muos/bits.h>
+#include <muos/compiler.h>
+#include <muos/decls.h>
 
 BEGIN_DECLS
 

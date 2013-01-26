@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 BEGIN_DECLS
 

@@ -1,4 +1,4 @@
-#include <sys/error.h>
+#include <muos/error.h>
 
 #include <kernel/kmalloc.h>
 #include <kernel/message.hpp>

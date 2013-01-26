@@ -1,4 +1,4 @@
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 #include <kernel/assert.h>
 

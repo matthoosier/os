@@ -2,10 +2,10 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <sys/arch.h>
-#include <sys/atomic.h>
-#include <sys/message.h>
-#include <sys/spinlock.h>
+#include <muos/arch.h>
+#include <muos/atomic.h>
+#include <muos/message.h>
+#include <muos/spinlock.h>
 
 #include <kernel/array.h>
 #include <kernel/assert.h>

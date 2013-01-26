@@ -6,7 +6,7 @@
 #include <kernel/assert.h>
 #include <kernel/object-cache.hpp>
 
-#include <sys/spinlock.h>
+#include <muos/spinlock.h>
 
 /**
  * Fully functional locking mixin class for use by SlabAllocator

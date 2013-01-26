@@ -1,8 +1,8 @@
-#include <sys/procmgr.h>
-#include <sys/syscall.h>
-#include <sys/message.h>
-#include <sys/naming.h>
-#include <sys/process.h>
+#include <muos/procmgr.h>
+#include <muos/syscall.h>
+#include <muos/message.h>
+#include <muos/naming.h>
+#include <muos/process.h>
 
 #define N_ELEMENTS(_array)  \
     (                       \

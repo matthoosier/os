@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include <sys/process.h>
+#include <muos/process.h>
 
 void _start (void) __attribute__((naked));
 void sling (void);

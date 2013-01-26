@@ -3,11 +3,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <sys/bits.h>
-#include <sys/compiler.h>
-#include <sys/error.h>
-#include <sys/io.h>
-#include <sys/message.h>
+#include <muos/bits.h>
+#include <muos/compiler.h>
+#include <muos/error.h>
+#include <muos/io.h>
+#include <muos/message.h>
 
 #define VERSATILE_UART0_BASE    0x101F1000
 #define VERSATILE_UART0_IRQ     12

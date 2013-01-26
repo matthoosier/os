@@ -1,8 +1,8 @@
 #include <stdint.h>
 
-#include <sys/error.h>
-#include <sys/syscall.h>
-#include <sys/procmgr.h>
+#include <muos/error.h>
+#include <muos/syscall.h>
+#include <muos/procmgr.h>
 
 #include <kernel/kmalloc.h>
 #include <kernel/message.hpp>

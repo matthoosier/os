@@ -1,4 +1,4 @@
-#include <sys/procmgr.h>
+#include <muos/procmgr.h>
 
 #include <kernel/assert.h>
 #include <kernel/interrupt-handler.hpp>

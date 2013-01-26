@@ -1,9 +1,9 @@
 #ifndef __PROCMGR_H__
 #define __PROCMGR_H__
 
-#include <sys/compiler.h>
-#include <sys/decls.h>
-#include <sys/procmgr.h>
+#include <muos/compiler.h>
+#include <muos/decls.h>
+#include <muos/procmgr.h>
 
 #include <kernel/message.hpp>
 

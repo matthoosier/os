@@ -6,8 +6,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <sys/decls.h>
-#include <sys/uio.h>
+#include <muos/decls.h>
+#include <muos/uio.h>
 
 BEGIN_DECLS
 

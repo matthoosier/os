@@ -1,4 +1,4 @@
-#include <sys/error.h>
+#include <muos/error.h>
 
 #include <kernel/process.hpp>
 #include <kernel/procmgr.hpp>

@@ -1,4 +1,4 @@
-#include <sys/spinlock.h>
+#include <muos/spinlock.h>
 
 #include <kernel/semaphore.hpp>
 #include <kernel/thread.hpp>

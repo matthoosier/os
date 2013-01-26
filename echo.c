@@ -1,9 +1,9 @@
 #include <assert.h>
 #include <stdbool.h>
 
-#include <sys/message.h>
-#include <sys/naming.h>
-#include <sys/process.h>
+#include <muos/message.h>
+#include <muos/naming.h>
+#include <muos/process.h>
 
 typedef union
 {

@@ -1,9 +1,9 @@
 #ifndef __SPINLOCK_H__
 #define __SPINLOCK_H__
 
-#include <sys/atomic.h>
-#include <sys/decls.h>
-#include <sys/interrupts.h>
+#include <muos/atomic.h>
+#include <muos/decls.h>
+#include <muos/interrupts.h>
 
 #ifdef __KERNEL__
     #include <kernel/assert.h>

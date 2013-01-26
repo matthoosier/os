@@ -1,7 +1,7 @@
 #include <stdint.h>
 
-#include <sys/arch.h>
-#include <sys/bits.h>
+#include <muos/arch.h>
+#include <muos/bits.h>
 
 #include <kernel/array.h>
 #include <kernel/mmu-defs.h>

@@ -1,6 +1,6 @@
-#include <sys/message.h>
+#include <muos/message.h>
 
-#include <sys/syscall.h>
+#include <muos/syscall.h>
 
 int ChannelCreate ()
 {

@@ -1,5 +1,5 @@
-#include <sys/compiler.h>
-#include <sys/procmgr.h>
+#include <muos/compiler.h>
+#include <muos/procmgr.h>
 
 #include <kernel/assert.h>
 #include <kernel/exception.hpp>

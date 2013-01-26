@@ -1,7 +1,7 @@
 #ifndef __RAMFS_H__
 #define __RAMFS_H__
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 #include <kernel/image.h>
 

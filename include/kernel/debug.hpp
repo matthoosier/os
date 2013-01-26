@@ -3,7 +3,7 @@
 
 /*! \file */
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 BEGIN_DECLS
 

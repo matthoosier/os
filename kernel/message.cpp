@@ -1,7 +1,7 @@
 #include <string.h>
 
-#include <sys/error.h>
-#include <sys/message.h>
+#include <muos/error.h>
+#include <muos/message.h>
 
 #include <kernel/array.h>
 #include <kernel/assert.h>

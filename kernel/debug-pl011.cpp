@@ -2,9 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <sys/arch.h>
-#include <sys/bits.h>
-#include <sys/compiler.h>
+#include <muos/arch.h>
+#include <muos/bits.h>
+#include <muos/compiler.h>
 
 #include <kernel/debug.hpp>
 #include <kernel/mmu.hpp>

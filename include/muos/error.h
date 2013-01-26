@@ -1,7 +1,7 @@
 #ifndef __ERROR_H__
 #define __ERROR_H__
 
-#include <sys/decls.h>
+#include <muos/decls.h>
 
 BEGIN_DECLS
 

@@ -1,10 +1,10 @@
 #include <string.h>
 
-#include <sys/arch.h>
-#include <sys/atomic.h>
-#include <sys/elf.h>
-#include <sys/error.h>
-#include <sys/procmgr.h>
+#include <muos/arch.h>
+#include <muos/atomic.h>
+#include <muos/elf.h>
+#include <muos/error.h>
+#include <muos/procmgr.h>
 
 #include <kernel/array.h>
 #include <kernel/assert.h>

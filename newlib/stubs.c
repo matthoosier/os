@@ -1,7 +1,7 @@
 #if defined(__KERNEL__)
     #include <kernel/assert.h>
 #else
-    #include <sys/process.h>
+    #include <muos/process.h>
 #endif
 
 #include <errno.h>

@@ -1,7 +1,7 @@
-#include <sys/error.h>
-#include <sys/io.h>
-#include <sys/message.h>
-#include <sys/procmgr.h>
+#include <muos/error.h>
+#include <muos/io.h>
+#include <muos/message.h>
+#include <muos/procmgr.h>
 
 typedef union
 {

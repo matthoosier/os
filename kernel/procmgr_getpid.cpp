@@ -1,4 +1,4 @@
-#include <sys/procmgr.h>
+#include <muos/procmgr.h>
 
 #include <kernel/message.hpp>
 #include <kernel/process.hpp>

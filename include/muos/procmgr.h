@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-#include <sys/decls.h>
-#include <sys/message.h>
+#include <muos/decls.h>
+#include <muos/message.h>
 
 #define PROCMGR_CONNECTION_ID FIRST_CONNECTION_ID
 

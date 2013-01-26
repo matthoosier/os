@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-#include <sys/syscall.h>
+#include <muos/syscall.h>
 
 int syscall0 (unsigned int number)
 {

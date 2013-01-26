@@ -1,8 +1,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <sys/arch.h>
-#include <sys/interrupts.h>
+#include <muos/arch.h>
+#include <muos/interrupts.h>
 
 #include <kernel/array.h>
 #include <kernel/assert.h>
