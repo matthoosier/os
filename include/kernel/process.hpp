@@ -7,11 +7,11 @@
 #include <muos/error.h>
 #include <muos/spinlock.h>
 
+#include <kernel/address-space.hpp>
 #include <kernel/assert.h>
 #include <kernel/interrupt-handler.hpp>
 #include <kernel/list.hpp>
 #include <kernel/message.hpp>
-#include <kernel/mmu.hpp>
 #include <kernel/process-types.h>
 #include <kernel/reaper.hpp>
 #include <kernel/slaballocator.hpp>
@@ -22,99 +22,6 @@
 class Thread;
 
 class Process;
-
-/**
- * \brief   Loaded in-memory copy of an ELF segment
- *
- * \class Segment process.hpp kernel/process.hpp
- */
-class Segment
-{
-public:
-    /**
-     * \brief   Instances are allocated from a slab
-     */
-    void * operator new (size_t size) throw (std::bad_alloc)
-    {
-        assert(size == sizeof(Segment));
-        return sSlab.AllocateWithThrow();
-    }
-
-    /**
-     * \brief   Instances are allocated from a slab
-     */
-    void operator delete (void * mem) throw ()
-    {
-        sSlab.Free(mem);
-    }
-
-    /**
-     * \brief   Initialize a new Segment instance
-     *
-     * \param p Process to whose address space this segment
-     *          will belong
-     */
-    Segment (Process & owner);
-
-    virtual ~Segment ();
-
-private:
-    /**
-     * \brief   Allocates instances of Segment
-     */
-    static SyncSlabAllocator<Segment> sSlab;
-
-    /**
-     * \brief   Hidden to prevent allocating arrays
-     */
-    void * operator new[] (size_t);
-
-    /**
-     * \brief   Hidden to prevent allocating arrays
-     */
-    void operator delete[] (void *);
-
-    /**
-     * \brief   Virtual memory address of the first byte of this
-     *          section's payload
-     *
-     * If necessary, padded on the low end to align evenly at a #PAGE_SIZE
-     * boundary.
-     */
-    VmAddr_t base;
-
-    /**
-     * \brief   Length in bytes of this segment
-     *
-     * The original ELF-reported size of this segment, plus the number
-     * of bytes added to pad \a base down to a page boundary.
-     */
-    size_t length;
-
-    /**
-     * \brief   Contains all the backing pages that provide the
-     *          memory to hold this segment's runtime image
-     */
-    List<Page, &Page::list_link> pages_head;
-
-    /**
-     * \brief   Storage in Process::segments_head
-     *
-     * The pages are held in the list in numerically increasing
-     * order of their user virtual memory addresses. Consecutive pages
-     * in the list are neighbors in virtual address space. The first
-     * page's virtual memory starts at \a base and runs to
-     * (\a base + PAGES_SIZE - -1).
-     */
-    ListElement link;
-
-    /**
-     * \brief   Process in whose address space this segment lives
-     */
-    Process & owner;
-
-    friend class Process;
-};
 
 /**
  * \brief   Process control block implementation
@@ -144,6 +51,11 @@ public:
      * \brief   Fetches the value of the 'pagetable' field on a process object.
      */
     TranslationTable * GetTranslationTable ();
+
+    /**
+     * \brief   Fetches the address space (if any) on this process
+     */
+    AddressSpace * GetAddressSpace ();
 
     /**
      * \brief   Start up the \c procmgr thread
@@ -326,10 +238,9 @@ private:
     Spinlock_t lock;
 
     /**
-     * \brief   Pagetable implementing the MMU gymnastics for this
-     *          virtual address space
+     * \brief   All the virtual memory mappings for this process
      */
-    ScopedPtr<TranslationTable> pagetable;
+    ScopedPtr<AddressSpace> mAddressSpace;
 
     /**
      * \brief   Initial program counter for the program image loaded
@@ -341,13 +252,6 @@ private:
      * \brief   Descriptive name of this process
      */
     char comm[16];
-
-    /**
-     * \brief   Chain of all the discontiguous virtual memory blocks
-     *          loaded out of the program image, which cumulatively
-     *          form this process
-     */
-    List<Segment, &Segment::link> segments_head;
 
     /**
      * \brief   Kernel execution context for this process's system

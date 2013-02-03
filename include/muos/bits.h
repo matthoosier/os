@@ -1,5 +1,5 @@
-#ifndef __BITS_H__
-#define __BITS_H__
+#ifndef __MUOS_BITS_H__
+#define __MUOS_BITS_H__
 
 #include <stdbool.h>
 
@@ -48,4 +48,4 @@ static inline bool BitmapGet (uint8_t * bitmap_base, unsigned int index)
 
 END_DECLS
 
-#endif /* __BITS_H__ */
+#endif /* __MUOS_BITS_H__ */

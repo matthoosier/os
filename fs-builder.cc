@@ -79,9 +79,9 @@ int main (int argc, char *argv[]) {
     std::ofstream outputFile;
     outputFile.open(ptrOutputFileName->c_str(), std::ios::out);
 
+    outputFile << "#include <muos/array.h>" << std::endl << std::endl;
     outputFile << "#include <muos/compiler.h>" << std::endl << std::endl;
     outputFile << "#include <kernel/image.h>" << std::endl;
-    outputFile << "#include <kernel/array.h>" << std::endl << std::endl;
 
     outputFile << "#ifdef __cplusplus" << std::endl;
     outputFile << "\t#define C_EXTERN extern \"C\"" << std::endl;

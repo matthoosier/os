@@ -29,7 +29,7 @@ class SecondlevelTable;
  *
  * \class TranslationTable mmu.hpp kernel/mmu.hpp
  */
-class TranslationTable
+class TranslationTable : public RefCounted
 {
 public:
     typedef TreeMap<VmAddr_t, struct SecondlevelTable *> SparseSecondlevelMap_t;
@@ -48,16 +48,9 @@ public:
     }
 
     TranslationTable () throw (std::bad_alloc);
-    ~TranslationTable ();
 
     bool MapPage (
             VmAddr_t virt,
-            PhysAddr_t phys,
-            Prot_t prot
-            );
-
-    bool MapNextPage (
-            VmAddr_t * pVirt,
             PhysAddr_t phys,
             Prot_t prot
             );
@@ -123,14 +116,15 @@ public:
      */
     ScopedPtr<SparseSecondlevelMap_t> sparse_secondlevel_map;
 
-    /**
-     * Virtual address of the first byte of the first page in the virtual
-     * address space, that is not mapped.
-     */
-    VmAddr_t first_unmapped_page;
-
 private:
+    /**
+     * Only RefPtr is allowed to deallocate instances
+     */
+    virtual ~TranslationTable ();
+
     static SyncSlabAllocator<TranslationTable> sSlab;
+
+    friend class RefPtr<TranslationTable>;
 };
 
 /**

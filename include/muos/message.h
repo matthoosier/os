@@ -1,5 +1,5 @@
-#ifndef __SYS_MESSAGE_H__
-#define __SYS_MESSAGE_H__
+#ifndef __MUOS_MESSAGE_H__
+#define __MUOS_MESSAGE_H__
 
 /*! \file */
 
@@ -152,4 +152,4 @@ int MessageReplyV (int msgid,
 
 END_DECLS
 
-#endif /* __SYS_MESSAGE_H__ */
+#endif /* __MUOS_MESSAGE_H__ */

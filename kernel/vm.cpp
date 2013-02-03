@@ -2,10 +2,10 @@
 #include <stdlib.h>
 
 #include <muos/arch.h>
+#include <muos/array.h>
 #include <muos/bits.h>
 #include <muos/spinlock.h>
 
-#include <kernel/array.h>
 #include <kernel/list.hpp>
 #include <kernel/math.hpp>
 #include <kernel/once.h>

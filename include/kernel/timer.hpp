@@ -2,7 +2,9 @@
 #define __KERNEL_TIMER_HPP__
 
 /**
- * \brief   Base class on in-kernel programmable timer driver
+ * \brief   Driver model to be implemented by anything wanting
+ *          to provide a backend implementation for the main
+ *          system programmable timer.
  *
  * \class TimerDevice timer.hpp kernel/timer.hpp
  */

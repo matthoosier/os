@@ -1,5 +1,5 @@
-#ifndef __INTERRUPTS_H__
-#define __INTERRUPTS_H__
+#ifndef __MUOS_INTERRUPTS_H__
+#define __MUOS_INTERRUPTS_H__
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -111,4 +111,4 @@ static inline void InterruptsRestore (IrqSave_t saved_state)
 
 END_DECLS
 
-#endif /* __INTERRUPTS_H__ */
+#endif /* __MUOS_INTERRUPTS_H__ */

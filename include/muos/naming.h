@@ -1,5 +1,9 @@
-#ifndef __NAMING_H__
-#define __NAMING_H__
+#ifndef __MUOS_NAMING_H__
+#define __MUOS_NAMING_H__
+
+#include <muos/decls.h>
+
+BEGIN_DECLS
 
 /**
  * Open a new channel that binds to the indicated path on the
@@ -20,4 +24,6 @@ int NameAttach (char const full_path[]);
  */
 int NameOpen (char const full_path[]);
 
-#endif
+END_DECLS
+
+#endif /* __MUOS_NAMING_H__ */

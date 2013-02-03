@@ -2,9 +2,9 @@
 #include <stdlib.h>
 
 #include <muos/arch.h>
+#include <muos/array.h>
 #include <muos/interrupts.h>
 
-#include <kernel/array.h>
 #include <kernel/assert.h>
 #include <kernel/interrupt-handler.hpp>
 #include <kernel/mmu.hpp>

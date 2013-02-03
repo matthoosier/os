@@ -38,12 +38,6 @@ int _lseek (int file, int offset, int whence)
     return -1;
 }
 
-void * _sbrk (int nbytes)
-{
-    errno = ENOMEM;
-    return (void *)-1;
-}
-
 void _exit (int rc)
 {
     #if defined(__KERNEL__)

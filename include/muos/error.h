@@ -1,5 +1,5 @@
-#ifndef __ERROR_H__
-#define __ERROR_H__
+#ifndef __MUOS_ERROR_H__
+#define __MUOS_ERROR_H__
 
 #include <muos/decls.h>
 
@@ -17,4 +17,4 @@ typedef enum
 
 END_DECLS
 
-#endif /* __ERROR_H__ */
+#endif /* __MUOS_ERROR_H__ */

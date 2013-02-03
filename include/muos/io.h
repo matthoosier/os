@@ -1,5 +1,5 @@
-#ifndef __IO_H__
-#define __IO_H__
+#ifndef __MUOS_IO_H__
+#define __MUOS_IO_H__
 
 /*! \file */
 
@@ -59,4 +59,4 @@ void * MapPhysical (uintptr_t physaddr, size_t len);
 
 END_DECLS
 
-#endif /* __IO_H__ */
+#endif /* __MUOS_IO_H__ */

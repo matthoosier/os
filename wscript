@@ -13,6 +13,7 @@ CROSS   = 'cross'
 NATIVE  = 'native'
 
 kernel_sources = [
+    'kernel/address-space.cpp',
     'kernel/assert.cpp',
     'kernel/early-mmu.c',
     'kernel/debug.cpp',
@@ -35,6 +36,7 @@ kernel_sources = [
     'kernel/procmgr_interrupts.cpp',
     'kernel/procmgr_map.cpp',
     'kernel/procmgr_naming.cpp',
+    'kernel/procmgr_sbrk.cpp',
     'kernel/procmgr_spawn.cpp',
     'kernel/ramfs.cpp',
     'kernel/reaper.cpp',
@@ -56,6 +58,7 @@ kernel_sources = [
     'kernel/vector.S',
 
     'newlib/stubs.c',
+    'newlib/sbrk-kernel.c',
 ]
 
 libc_sources = [
@@ -66,13 +69,14 @@ libc_sources = [
     'libc/user_naming.c',
     'libc/user_process.c',
     'newlib/stubs.c',
+    'newlib/sbrk-user.c',
 ]
 
 user_progs = [
     ('echo',            ['echo.c'],             0x10000),
     ('echo-client',     ['echo-client.c'],      0x20000),
     ('uio',             ['uio.c'],              0x30000),
-    ('pl011',           ['pl011.c'],            0x40000),
+    ('pl011',           ['pl011.cpp'],          0x40000),
     ('crasher',         ['crasher.c'],          0x50000),
     ('init',            ['init.c'],             0x60000),
 ]

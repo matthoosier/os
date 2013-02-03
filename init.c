@@ -12,7 +12,6 @@ int main (int argc, char *argv[]) {
     int wait_id = ChildWaitAttach(coid, ANY_PID);
 
     pid = Spawn("echo");
-    pid = Spawn("uio");
     pid = Spawn("pl011");
     pid = Spawn("crasher");
 

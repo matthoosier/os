@@ -1,5 +1,5 @@
-#ifndef __SYS_UIO_H__
-#define __SYS_UIO_H__
+#ifndef __MUOS_UIO_H__
+#define __MUOS_UIO_H__
 
 #include <stddef.h>
 
@@ -9,4 +9,4 @@ struct iovec
     size_t  iov_len;
 };
 
-#endif
+#endif /* __MUOS_UIO_H__ */

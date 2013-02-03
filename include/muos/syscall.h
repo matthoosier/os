@@ -1,5 +1,5 @@
-#ifndef __SYSCALL_H__
-#define __SYSCALL_H__
+#ifndef __MUOS_SYSCALL_H__
+#define __MUOS_SYSCALL_H__
 
 #include <muos/decls.h>
 
@@ -34,4 +34,4 @@ extern int syscall5 (unsigned int number, int arg0, int arg1, int arg2, int arg3
 
 END_DECLS
 
-#endif /* __SYSCALL_H__ */
+#endif /* __MUOS_SYSCALL_H__ */

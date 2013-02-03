@@ -1,5 +1,5 @@
-#ifndef __ATOMIC_H__
-#define __ATOMIC_H__
+#ifndef __MUOS_ATOMIC_H__
+#define __MUOS_ATOMIC_H__
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -40,4 +40,4 @@ static inline void AtomicCompilerMemoryBarrier (void)
 
 END_DECLS
 
-#endif /* __ATOMIC_H__ */
+#endif /* __MUOS_ATOMIC_H__ */

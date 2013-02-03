@@ -1,5 +1,5 @@
-#ifndef __SPINLOCK_H__
-#define __SPINLOCK_H__
+#ifndef __MUOS_SPINLOCK_H__
+#define __MUOS_SPINLOCK_H__
 
 #include <muos/atomic.h>
 #include <muos/decls.h>
@@ -87,4 +87,4 @@ static inline void SpinlockUnlockNoIrqRestore (Spinlock_t * lock)
 
 END_DECLS
 
-#endif /* __SPINLOCK_H__ */
+#endif /* __MUOS_SPINLOCK_H__ */

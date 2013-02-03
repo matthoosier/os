@@ -1,9 +1,9 @@
 #include <string.h>
 
+#include <muos/array.h>
 #include <muos/error.h>
 #include <muos/message.h>
 
-#include <kernel/array.h>
 #include <kernel/assert.h>
 #include <kernel/list.hpp>
 #include <kernel/message.hpp>

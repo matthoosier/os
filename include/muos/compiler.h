@@ -1,5 +1,5 @@
-#ifndef __COMPILER_H__
-#define __COMPILER_H__
+#ifndef __MUOS_COMPILER_H__
+#define __MUOS_COMPILER_H__
 
 #define COMPILER_PREPROC_CONCAT_(a, b) a##b
 #define COMPILER_PREPROC_CONCAT(a, b) COMPILER_PREPROC_CONCAT_(a, b)
@@ -11,4 +11,4 @@
             COMPILER_PREPROC_CONCAT(assert_line, __LINE__) = 1/(!!(e))  \
         }
 
-#endif /* __COMPILER_H__ */
+#endif /* __MUOS_COMPILER_H__ */

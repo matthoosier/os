@@ -1,13 +1,14 @@
 #include <string.h>
 
 #include <muos/arch.h>
+#include <muos/array.h>
 #include <muos/atomic.h>
 #include <muos/elf.h>
 #include <muos/error.h>
 #include <muos/procmgr.h>
 
-#include <kernel/array.h>
 #include <kernel/assert.h>
+#include <kernel/math.hpp>
 #include <kernel/minmax.hpp>
 #include <kernel/process.hpp>
 #include <kernel/procmgr.hpp>
@@ -30,40 +31,10 @@ struct process_creation_context
 /** Allocates monotonically increasing process identifiers */
 static Pid_t get_next_pid (void);
 
-SyncSlabAllocator<Segment> Segment::sSlab;
-
-Segment::Segment (Process & p)
-    : base(0)
-    , length(0)
-    , owner(p)
-{
-}
-
-Segment::~Segment ()
-{
-    typedef List<Page, &Page::list_link> list_t;
-
-    VmAddr_t map_addr = this->base;
-    TranslationTable * pagetable = owner.GetTranslationTable();
-
-    for (list_t::Iterator i = this->pages_head.Begin(); i; ++i) {
-
-        Page * page = *i;
-
-        bool unmapped = pagetable->UnmapPage(map_addr);
-
-        assert(unmapped);
-        map_addr += PAGE_SIZE;
-
-        this->pages_head.Remove(page);
-        Page::Free(page);
-    }
-}
-
 SyncSlabAllocator<Process> Process::sSlab;
 
 Process::Process (char const aComm[], Process * aParent)
-    : pagetable(new TranslationTable())
+    : mAddressSpace(new AddressSpace())
     , entry(0)
     , thread(NULL)
     , next_chid(FIRST_CHANNEL_ID)
@@ -208,18 +179,11 @@ Process::~Process ()
         RefPtr<Reaper> reaper = mReapers.PopFirst();
         reaper.Reset();
     }
-    
-    /* Deallocate virtual memory of the process */
-    while (!this->segments_head.Empty()) {
-        Segment * s = this->segments_head.PopFirst();
-        delete s;
-    }
 }
 
 Process * Process::execIntoCurrent (const char executableName[],
                                     Process * aParent) throw (std::bad_alloc)
 {
-    TranslationTable *tt;
     Process * p;
     const struct ImageEntry * image;
     const Elf32_Ehdr * hdr;
@@ -260,9 +224,6 @@ Process * Process::execIntoCurrent (const char executableName[],
     p->thread = THREAD_CURRENT();
     THREAD_CURRENT()->process = p;
 
-    // Get pagetable for the new process.
-    tt = *p->pagetable;
-
     /*
     Make sure that pagetable installation is flushed out to memory before
     making any use of it. This will make sure that an inconveniently timed
@@ -272,7 +233,7 @@ Process * Process::execIntoCurrent (const char executableName[],
     AtomicCompilerMemoryBarrier();
 
     // Okay, now it's safe to use the translation table.
-    TranslationTable::SetUser(tt);
+    TranslationTable::SetUser(*p->mAddressSpace->GetPageTable());
 
     p->entry = hdr->e_entry;
 
@@ -284,45 +245,21 @@ Process * Process::execIntoCurrent (const char executableName[],
 
         if (phdr->p_type == PT_LOAD) {
 
-            Segment * segment;
-            unsigned int num_pages;
-            unsigned int j;
-
-            try {
-                segment = new Segment(*p);
-            } catch (std::bad_alloc) {
-                assert(false);
-                goto free_process;
-            }
-
             /* Handle segments that don't line up on page boundaries */
-            segment->base = phdr->p_vaddr & PAGE_MASK;
-            segment->length = phdr->p_memsz + (phdr->p_vaddr - segment->base);
+            VmAddr_t base = phdr->p_vaddr & PAGE_MASK;
+            size_t length = phdr->p_memsz + (phdr->p_vaddr - base);
 
             /* All the address space of the process must be in user memory range */
-            assert(segment->base + segment->length <= KERNEL_MODE_OFFSET);
+            assert(base + length <= KERNEL_MODE_OFFSET);
 
-            num_pages = (segment->length + PAGE_SIZE - 1) / PAGE_SIZE;
-
-            /* Map in all the memory that will hold the segment */
-            for (j = 0; j < num_pages; j++) {
-                Page * page = Page::Alloc();
-                bool mapped;
-
-                mapped = tt->MapPage(
-                        segment->base + PAGE_SIZE * j,
-                        V2P(page->base_address),
-                        PROT_USER_READWRITE
-                        );
-
-                if (!mapped) {
-                    assert(false);
-                    delete segment;
-                    segment = NULL;
-                    goto free_process;
-                }
-
-                segment->pages_head.Append(page);
+            if (!p->mAddressSpace->CreateBackedMapping(
+                    base,
+                    Math::RoundUp(length, PAGE_SIZE)))
+            {
+                // Requested address conflicted withs something already
+                // there.
+                assert(false);
+                goto free_process;
             }
 
             /* With VM configured, simple memcpy() to load the contents. */
@@ -342,8 +279,6 @@ Process * Process::execIntoCurrent (const char executableName[],
                     phdr->p_memsz - phdr->p_filesz
                     );
             }
-
-            p->segments_head.Append(segment);
         }
     }
 
@@ -582,6 +517,7 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
 
     try {
         caller_context->created = p = new Process("procmgr", NULL);
+        p->mAddressSpace.Reset();
     } catch (std::bad_alloc a) {
         assert(false);
     }
@@ -921,7 +857,17 @@ char const * Process::GetName ()
 
 TranslationTable * Process::GetTranslationTable ()
 {
-    return *this->pagetable;
+    if (this->mAddressSpace) {
+        return *this->mAddressSpace->GetPageTable();
+    }
+    else {
+        return NULL;
+    }
+}
+
+AddressSpace * Process::GetAddressSpace ()
+{
+    return *this->mAddressSpace;
 }
 
 TranslationTable * ProcessGetTranslationTable (Process * p)

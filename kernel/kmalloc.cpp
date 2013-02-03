@@ -1,7 +1,7 @@
 #include <muos/arch.h>
+#include <muos/array.h>
 #include <muos/spinlock.h>
 
-#include <kernel/array.h>
 #include <kernel/kmalloc.h>
 #include <kernel/object-cache.hpp>
 #include <kernel/once.h>

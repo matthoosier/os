@@ -1,5 +1,5 @@
-#ifndef __SYS_PROCMGR_H__
-#define __SYS_PROCMGR_H__
+#ifndef __MUOS_PROCMGR_H__
+#define __MUOS_PROCMGR_H__
 
 #include <stdint.h>
 
@@ -31,6 +31,7 @@ typedef enum
     PROC_MGR_MESSAGE_CHILD_WAIT_ATTACH,
     PROC_MGR_MESSAGE_CHILD_WAIT_DETACH,
     PROC_MGR_MESSAGE_CHILD_WAIT_ARM,
+    PROC_MGR_MESSAGE_SBRK,
 
     /**
      * Not a message. Just a count.
@@ -105,6 +106,10 @@ struct ProcMgrMessage
             unsigned int count;
         } child_wait_arm;
 
+        struct {
+            intptr_t increment;
+        } sbrk;
+
     } payload;
 };
 
@@ -158,9 +163,13 @@ struct ProcMgrReply
         struct {
         } child_wait_arm;
 
+        struct {
+            intptr_t previous;
+        } sbrk;
+
     } payload;
 };
 
 END_DECLS
 
-#endif /* __SYS_PROCMGR_H__ */
+#endif /* __MUOS_PROCMGR_H__ */

@@ -1,9 +1,9 @@
 #include <stdint.h>
 
 #include <muos/arch.h>
+#include <muos/array.h>
 #include <muos/bits.h>
 
-#include <kernel/array.h>
 #include <kernel/mmu-defs.h>
 #include <kernel/vm-defs.h>
 

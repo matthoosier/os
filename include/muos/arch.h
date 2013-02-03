@@ -1,5 +1,5 @@
-#ifndef __ARCH_H__
-#define __ARCH_H__
+#ifndef __MUOS_ARCH_H__
+#define __MUOS_ARCH_H__
 
 /*! \file */
 
@@ -110,4 +110,4 @@
 #define ALIGN(_val, _pow)                                       \
         ((((_val) + ((1 << (_pow)) - 1)) >> (_pow)) << (_pow))
 
-#endif /* __ARCH_H__ */
+#endif /* __MUOS_ARCH_H__ */

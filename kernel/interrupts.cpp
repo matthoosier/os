@@ -3,11 +3,11 @@
 #include <string.h>
 
 #include <muos/arch.h>
+#include <muos/array.h>
 #include <muos/atomic.h>
 #include <muos/message.h>
 #include <muos/spinlock.h>
 
-#include <kernel/array.h>
 #include <kernel/assert.h>
 #include <kernel/interrupt-handler.hpp>
 #include <kernel/interrupts.hpp>

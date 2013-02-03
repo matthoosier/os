@@ -1,4 +1,5 @@
-#include <kernel/array.h>
+#include <muos/array.h>
+
 #include <kernel/assert.h>
 #include <kernel/procmgr.hpp>
 

@@ -1,5 +1,5 @@
-#ifndef __DECLS_H__
-#define __DECLS_H__
+#ifndef __MUOS_DECLS_H__
+#define __MUOS_DECLS_H__
 
 #ifdef __cplusplus
 
@@ -13,4 +13,4 @@
 
 #endif
 
-#endif /* __DECLS_H__ */
+#endif /* __MUOS_DECLS_H__ */

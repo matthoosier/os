@@ -8,8 +8,6 @@
 #include <kernel/vm-defs.h>
 #include <kernel/list.hpp>
 
-BEGIN_DECLS
-
 /**
  * \brief   Data structure representing one physical page of
  *          RAM in the running system.
@@ -121,7 +119,5 @@ private:
 private:
     Page * mPointee;
 };
-
-END_DECLS
 
 #endif /* __VM_HPP__ */

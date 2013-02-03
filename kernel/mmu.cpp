@@ -2,12 +2,12 @@
 #include <string.h>
 
 #include <muos/arch.h>
+#include <muos/array.h>
 #include <muos/bits.h>
 #include <muos/compiler.h>
 #include <muos/error.h>
 #include <muos/spinlock.h>
 
-#include <kernel/array.h>
 #include <kernel/assert.h>
 #include <kernel/minmax.hpp>
 #include <kernel/mmu.hpp>
@@ -291,9 +291,6 @@ TranslationTable::TranslationTable () throw (std::bad_alloc)
     for (unsigned int i = 0; i < TRANSLATION_TABLE_SIZE / sizeof(pt_firstlevel_t); i++) {
         this->firstlevel_ptes[i] = PT_FIRSTLEVEL_MAPTYPE_UNMAPPED;
     }
-
-    /* Mark address of first unused page */
-    this->first_unmapped_page = 0;
 }
 
 /*
@@ -477,30 +474,6 @@ bool TranslationTable::UnmapSection (
     }
 }
 
-bool TranslationTable::MapNextPage (
-        VmAddr_t * pVirt,
-        PhysAddr_t phys,
-        Prot_t prot
-        )
-{
-    bool        ret;
-    VmAddr_t    vmaddr;
-
-    vmaddr = this->first_unmapped_page;
-
-    ret = this->MapPage(
-            vmaddr,
-            phys,
-            prot
-            );
-
-    if (ret) {
-        *pVirt = vmaddr;
-    }
-
-    return ret;
-}
-
 bool TranslationTable::MapPage (
         VmAddr_t virt,
         PhysAddr_t phys,
@@ -590,11 +563,6 @@ bool TranslationTable::MapPage (
 
     secondlevel_table->num_mapped_pages++;
 
-    /* Update cursor to next available page */
-    if (virt >= this->first_unmapped_page) {
-        this->first_unmapped_page = virt + PAGE_SIZE;
-    }
-
     return true;
 }
 
@@ -660,11 +628,6 @@ bool TranslationTable::UnmapPage (
         secondlevel_table = this->sparse_secondlevel_map->Remove(virt_mb_rounded);
 
         assert(secondlevel_table != NULL);
-    }
-
-    /* If this was the highest-mapped page, then decrement the next-page pointer */
-    if (this->first_unmapped_page == virt + PAGE_SIZE) {
-        this->first_unmapped_page = virt;
     }
 
     return true;

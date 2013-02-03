@@ -1,5 +1,5 @@
-#ifndef __SYS_PROCESS_H__
-#define __SYS_PROCESS_H__
+#ifndef __MUOS_PROCESS_H__
+#define __MUOS_PROCESS_H__
 
 /*! \file */
 
@@ -48,4 +48,4 @@ int ChildWaitDetach (int handler_id);
 
 END_DECLS
 
-#endif /* __SYS_PROCESS_H__ */
+#endif /* __MUOS_PROCESS_H__ */

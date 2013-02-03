@@ -46,8 +46,6 @@ static void HandleMapPhys (RefPtr<Message> message)
     PhysAddr_t          phys;
     size_t              len_to_map;
     VmAddr_t            virt;
-    bool                mapped;
-    unsigned int        i;
 
     ssize_t msg_len = PROC_MGR_MSG_LEN(map_phys);
     ssize_t actual_len = message->Read(0, &msg, msg_len);
@@ -62,72 +60,17 @@ static void HandleMapPhys (RefPtr<Message> message)
 
     if ((phys % PAGE_SIZE != 0) || (len_to_map < 0)) {
         message->Reply(ERROR_INVALID, IoBuffer::GetEmpty());
+        return;
+    }
+
+    AddressSpace * addressSpace = message->GetSender()->process->GetAddressSpace();
+
+    if (!addressSpace->CreatePhysicalMapping(phys, len_to_map, virt)) {
+        message->Reply(ERROR_NO_MEM, IoBuffer::GetEmpty());
     }
     else {
-
-        List<MappedPage, &MappedPage::link> mapped_pages;
-
-        MappedPage * page = 0;
-        Thread * sender = message->GetSender();
-
-        for (i = 0; i < len_to_map; i += PAGE_SIZE) {
-
-            try {
-                page = new MappedPage();
-            } catch (std::bad_alloc) {
-                break;
-            }
-
-            mapped = sender->process->GetTranslationTable()->MapNextPage(
-                    &virt,
-                    phys,
-                    PROT_USER_READWRITE
-                    );
-
-            /*
-            First allocation is the base address of the whole
-            thing.
-            */
-            if (i == 0 && mapped) {
-                reply.payload.map_phys.vmaddr = virt;
-            }
-
-            if (mapped) {
-                page->page_base = virt;
-                new (&page->link) ListElement();
-                mapped_pages.Append(page);
-            }
-            else if (!mapped) {
-
-                /* Back out all the existing mappings */
-                while (!mapped_pages.Empty()) {
-                    page = mapped_pages.PopFirst();
-                    sender->process->GetTranslationTable()->UnmapPage(page->page_base);
-
-                    /* Free the block hosting the list node */
-                    delete page;
-                }
-
-                break;
-            }
-        }
-
-        if (mapped_pages.Empty()) {
-            message->Reply(ERROR_INVALID, &reply, sizeof(reply));
-        } else {
-            /* List of partial pages no longer needed */
-            while (!mapped_pages.Empty()) {
-                page = mapped_pages.PopFirst();
-
-                /* Free the block hosting the list node */
-                delete page;
-            }
-
-            // No need to record this as a Segment; no VM pages
-            // were allocated to back this mapping--it's straight
-            // to physical memory.
-            message->Reply(ERROR_OK, &reply, sizeof(reply));
-        }
+        reply.payload.map_phys.vmaddr = virt;
+        message->Reply(ERROR_OK, &reply, sizeof(reply));
     }
 }
 
