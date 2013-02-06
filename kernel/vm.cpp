@@ -342,9 +342,10 @@ void Page::Free (Page * page)
     int order = get_order_allocated(page);
     assert(order != -1);
 
-    int idx = page_index_from_base_address(page->base_address);
+    int idx = page_index_from_base_address(page->base_address) >> order;
 
     // Return to freelist and clear bitmap
+    assert(BitmapGet(buddylists[order].bitmap.busy_elements, idx));
     new (&page->list_link) ListElement();
     buddylists[order].freelist_head->Prepend(page);
     BitmapClear(buddylists[order].bitmap.busy_elements, idx);
