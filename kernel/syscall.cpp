@@ -178,7 +178,7 @@ static ssize_t DoMessageSendV (
     IoBuffer * k_msgv = (IoBuffer *)kmalloc(k_msgv_sz);
     IoBuffer * k_replyv = (IoBuffer *)kmalloc(k_replyv_sz);
 
-    if (!k_msgv || !k_replyv) {
+    if ((msgv_count > 0 && !k_msgv) || (replyv_count > 0 && !k_replyv)) {
         ret = -ERROR_NO_MEM;
         goto free_bufs;
     }
@@ -271,7 +271,7 @@ static ssize_t DoMessageReceiveV (
     size_t k_msgv_sz = sizeof(IoBuffer) * msgv_count;
     IoBuffer * k_msgv = (IoBuffer *)kmalloc(k_msgv_sz);
 
-    if (!k_msgv) {
+    if (msgv_count > 0 && !k_msgv) {
         ret = -ERROR_NO_MEM;
         goto free_buffers;
     }
@@ -359,7 +359,7 @@ static ssize_t DoMessageReadV (
     k_destv_sz = sizeof(IoBuffer) * destv_count;
     k_destv = (IoBuffer *)kmalloc(k_destv_sz);
 
-    if (!k_destv) {
+    if (destv_count > 0 && !k_destv) {
         ret = -ERROR_NO_MEM;
         goto free_buffers;
     }
@@ -432,7 +432,7 @@ static ssize_t DoMessageReplyV (
     k_replyv_sz = sizeof(IoBuffer) * replyv_count;
     k_replyv = (IoBuffer *)kmalloc(k_replyv_sz);
 
-    if (!k_replyv) {
+    if (replyv_count > 0 && !k_replyv) {
         ret = -ERROR_NO_MEM;
         goto free_buffers;
     }
