@@ -79,6 +79,7 @@ user_progs = [
     ('pl011',           ['pl011.cpp'],          0x40000),
     ('crasher',         ['crasher.c'],          0x50000),
     ('init',            ['init.c'],             0x60000),
+    ('terminal',        ['terminal.c'],         0x70000),
 ]
 
 def options(opt):

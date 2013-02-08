@@ -300,7 +300,7 @@ int main (int argc, char *argv[]) {
     coid = Connect(SELF_PID, chid);
 
     Spawn("uio");
-    Spawn("dummy");
+    Spawn("terminal");
 
     uart0 = (volatile pl011_t *)MapPhysical(VERSATILE_UART0_BASE, PL011_MMAP_SIZE);
 

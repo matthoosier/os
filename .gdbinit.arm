@@ -7,3 +7,4 @@ add-symbol-file build/uio               0x30000
 add-symbol-file build/pl011             0x40000
 add-symbol-file build/crasher           0x50000
 add-symbol-file build/init              0x60000
+add-symbol-file build/terminal          0x70000
