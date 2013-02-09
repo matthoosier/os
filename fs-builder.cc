@@ -1,36 +1,50 @@
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
 #include <iostream>
 #include <memory>
+#include <stdint.h>
 #include <string>
 #include <vector>
-#include <iostream>
-#include <fstream>
 
-#include <errno.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#if defined(_WIN32)
+    /* This at least works on MinGW */
+    #include <getopt.h>
+#endif
 
 struct InputFile {
 
-    InputFile (const std::string & name) {
-        this->name = name;
-        bzero(&this->stat, sizeof(this->stat));
+    InputFile (const std::string & name)
+    {
+        this->mFullName = name;
+        this->mBaseName = name;
+
+        std::ifstream file;
+        file.open(name.c_str(), std::ios::binary | std::ios::in);
+
+        if (file.good()) {
+            mExists = true;
+            file.seekg(0, std::ios::end);
+            mSize = file.tellg();
+            file.close();
+        } else {
+            mExists = false;
+        }
     }
 
-    std::string name;
-    struct stat stat;
+    std::string mBaseName;
+    std::string mFullName;
+    size_t mSize;
+    bool mExists;
 };
 
 int main (int argc, char *argv[]) {
 
     std::auto_ptr<std::string>  ptrOutputFileName;
-    std::auto_ptr<std::string>  ptrIdentifierName;
     std::vector<InputFile *>    inputFiles;
 
     /* First handle explicit argument switches */
-    for (int whichOption; (whichOption = getopt(argc, argv, "+o:n:")) != -1;) {
+    for (int whichOption; (whichOption = getopt(argc, argv, "+o:")) != -1;) {
 
         switch (whichOption) {
 
@@ -44,16 +58,6 @@ int main (int argc, char *argv[]) {
                 }
                 break;
 
-            case 'n':
-                if (ptrIdentifierName.get()) {
-                    std::cout << "Output C identifier name already set (" << *ptrIdentifierName << ")" << std::endl;
-                    ::exit(1);
-                }
-                else {
-                    ptrIdentifierName.reset(new std::string(optarg));
-                }
-                break;
-
             default:
                 /* getopt() has already printed an error message */
                 ::exit(1);
@@ -63,7 +67,15 @@ int main (int argc, char *argv[]) {
 
     /* Collect all unprocessed arguments as a list of files to be packed */
     for (unsigned int index = optind; index < argc; index++) {
-        inputFiles.push_back(new InputFile(argv[index]));
+
+        InputFile * input = new InputFile(argv[index]);
+
+        if (input->mExists) {
+            inputFiles.push_back(input);
+        } else {
+            std::cerr << input->mFullName << " does not exist\n";
+            ::exit(1);
+        }
     }
 
     if (!ptrOutputFileName.get()) {
@@ -71,83 +83,56 @@ int main (int argc, char *argv[]) {
         ::exit(1);
     }
 
-    if (!ptrIdentifierName.get()) {
-        std::cout << "C identifier name (-n <C variable name>) required" << std::endl;
-        ::exit(1);
-    }
-
     std::ofstream outputFile;
-    outputFile.open(ptrOutputFileName->c_str(), std::ios::out);
+    outputFile.open(ptrOutputFileName->c_str(),
+                    std::ios::out | std::ios::trunc | std::ios::binary);
 
-    outputFile << "#include <muos/array.h>" << std::endl << std::endl;
-    outputFile << "#include <muos/compiler.h>" << std::endl << std::endl;
-    outputFile << "#include <kernel/image.h>" << std::endl;
-
-    outputFile << "#ifdef __cplusplus" << std::endl;
-    outputFile << "\t#define C_EXTERN extern \"C\"" << std::endl;
-    outputFile << "#else" << std::endl;
-    outputFile << "\t#define C_EXTERN /* nothing */" << std::endl;
-    outputFile << "#endif /* __cplusplus */" << std::endl;
-    outputFile << std::endl;
-    
-    /* Get size information for each file */
-    for (unsigned int i = 0; i < inputFiles.size(); i++) {
-
-        struct stat buf;
-
-        if (stat(inputFiles[i]->name.c_str(), &buf) != -1) {
-            inputFiles[i]->stat = buf;
-        }
-        else {
-            std::cout << "Can't stat " << inputFiles[i]->name << "(" << strerror(errno) << ")" << std::endl;
-        }
-    }
-
-    /* Write out individual file payloads */
+    /* Write out each file in sequence */
     for (unsigned int i = 0; i < inputFiles.size(); i++) {
         std::ifstream infile;
-        infile.open(inputFiles[i]->name.c_str(), std::ios::in | std::ios::binary);
+        infile.open(inputFiles[i]->mFullName.c_str(), std::ios::in | std::ios::binary);
 
-        outputFile << "static const uint8_t entry_" << i << "[] = {" << std::endl;
+        /* Length of file name. Save as big-endian uint32_t */
+        uint32_t name_len = inputFiles[i]->mBaseName.length();
+        uint8_t name_len_be[4] = {((name_len & 0xff000000) >> 24),
+                                  ((name_len & 0x00ff0000) >> 16),
+                                  ((name_len & 0x0000ff00) >> 8),
+                                  ((name_len & 0x000000ff) >> 0)};
+        outputFile.write((char const *)name_len_be, sizeof(name_len_be));
 
-        for (size_t j = 0; j < inputFiles[i]->stat.st_size && !infile.eof(); j++) {
-            char memblock;
-            infile.read(&memblock, 1);
-            outputFile << "\t" << static_cast<int>(memblock) << ", " << std::endl;
+        /* File name content */
+        outputFile.write(inputFiles[i]->mBaseName.c_str(),
+                         inputFiles[i]->mBaseName.length());
+
+        /* Payload length. Also is big-endian uint32_t */
+        uint32_t payload_len = inputFiles[i]->mSize;
+        uint8_t payload_len_be[4] = {((payload_len & 0xff000000) >> 24),
+                                     ((payload_len & 0x00ff0000) >> 16),
+                                     ((payload_len & 0x0000ff00) >> 8),
+                                     ((payload_len & 0x000000ff) >> 0)};
+        outputFile.write((char const *)payload_len_be, sizeof(payload_len_be));
+
+        /* Payload */
+        for (size_t remaining = inputFiles[i]->mSize;
+             remaining > 0;)
+        {
+            char buf[4096];
+            size_t transfer_size = std::min(sizeof(buf), remaining);
+
+            infile.read(&buf[0], transfer_size);
+            outputFile.write(&buf[0], transfer_size);
+
+            remaining -= transfer_size;
         }
 
-        outputFile
-                << "}; COMPILER_ASSERT(N_ELEMENTS(entry_"
-                << i
-                << ") == "
-                << inputFiles[i]->stat.st_size
-                << ");"
-                << std::endl << std::endl;
-    }
-
-    /* Write out the individual entries */
-    outputFile << "static const struct ImageEntry entries[] = {" << std::endl;
-
-    for (unsigned int i = 0; i < inputFiles.size(); i++) {
-        outputFile << "\t{ "
-                   << "&entry_" << i << "[0], "
-                   << inputFiles[i]->stat.st_size
-                   << ", "
-                   << "\"" << inputFiles[i]->name << "\""
-                   << " }, "
-                   << std::endl;
-    }
-
-    outputFile << "};" << std::endl << std::endl;
-    outputFile << "COMPILER_ASSERT(N_ELEMENTS(entries) == " << inputFiles.size() << ");"
-               << std::endl
-               << std::endl;
-
-    /* Write out the only publicly visible symbol in the file */
-    outputFile << "C_EXTERN struct Image " << *ptrIdentifierName << " = {" << std::endl;
-    outputFile << "\t" << inputFiles.size() << "," << std::endl;
-    outputFile << "\t&entries[0]" << std::endl;
-    outputFile << "};" << std::endl;
+     }
 
     outputFile.close();
+
+    for (std::vector<InputFile *>::iterator i = inputFiles.begin();
+         i != inputFiles.end(); ++i)
+    {
+        InputFile * f = *i;
+        delete f;
+    }
 }

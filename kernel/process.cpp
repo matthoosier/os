@@ -185,7 +185,8 @@ Process * Process::execIntoCurrent (const char executableName[],
                                     Process * aParent) throw (std::bad_alloc)
 {
     Process * p;
-    const struct ImageEntry * image;
+    RamFsBufferPtr image;
+    size_t image_len;
     const Elf32_Ehdr * hdr;
     unsigned int i;
     Connection_t procmgr_coid;
@@ -193,13 +194,11 @@ Process * Process::execIntoCurrent (const char executableName[],
     RefPtr<Connection> procmgr_con;
     RefPtr<Channel> procmgr_chan;
 
-    image = RamFsGetImage(executableName);
-
-    if (!image) {
+    if (!RamFsGetImage(executableName, &image, &image_len)) {
         return NULL;
     }
 
-    hdr = (const Elf32_Ehdr *)image->fileStart;
+    hdr = (const Elf32_Ehdr *)image;
 
     if(hdr->e_ident[EI_MAG0] != ELFMAG0 || hdr->e_ident[EI_MAG1] != ELFMAG1 ||
        hdr->e_ident[EI_MAG2] != ELFMAG2 || hdr->e_ident[EI_MAG3] != ELFMAG3) {
@@ -241,7 +240,7 @@ Process * Process::execIntoCurrent (const char executableName[],
         const Elf32_Phdr * phdr;
 
         phdr = (const Elf32_Phdr *)
-                    (image->fileStart + hdr->e_phoff + i * hdr->e_phentsize);
+                    (image + hdr->e_phoff + i * hdr->e_phentsize);
 
         if (phdr->p_type == PT_LOAD) {
 
@@ -267,7 +266,7 @@ Process * Process::execIntoCurrent (const char executableName[],
             /* ... first the explicitly initialized part */
             memcpy(
                 (void *)phdr->p_vaddr,
-                image->fileStart + phdr->p_offset,
+                image + phdr->p_offset,
                 phdr->p_filesz
                 );
 

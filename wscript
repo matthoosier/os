@@ -113,6 +113,7 @@ def configure(conf):
     conf.find_program('arm-none-eabi-gcc', var='CC')
     conf.find_program('arm-none-eabi-g++', var='CXX')
     conf.find_program('arm-none-eabi-ld', var='LD')
+    conf.find_program('arm-none-eabi-objcopy', var='OBJCOPY')
 
     cflags = ['-march=armv6', '-g', '-Wall', '-Werror']
     asflags = ['-march=armv6', '-g']
@@ -125,9 +126,13 @@ def configure(conf):
     conf.load('gxx')
     conf.load('gas')
 
-    # Override defaults from Waf's GCC support
-    conf.env.SHLIB_MARKER = ''
-    conf.env.STLIB_MARKER = ''
+    # Use normal Unix suffixes on MuOS
+    conf.env['cprogram_PATTERN']    = '%s'
+    conf.env['cxxprogram_PATTERN']  = '%s'
+    conf.env['cstlib_PATTERN']      = 'lib%s.a'
+    conf.env['cxxstlib_PATTERN']    = 'lib%s.a'
+    conf.env['cshlib_PATTERN']      = 'lib%s.so'
+    conf.env['cxxshlib_PATTERN']    = 'lib%s.so'
 
     conf.load('compiler_c')
     conf.load('compiler_cxx')
@@ -169,7 +174,7 @@ def build(bld):
 
     bld.add_group()
 
-    bld(target      = 'ramfs_image.c',
+    bld(target      = 'ramfs-image',
         features    = ['fs-builder'],
         progs       = [up[0] for up in user_progs])
 
@@ -190,9 +195,9 @@ def build(bld):
 
                         env             = bld.all_envs[CROSS].derive(),
 
-                        features        = ['asmoffsets', 'ramfs_source', 'ldscript', 'linkermap'],
+                        features        = ['asmoffsets', 'ramfs_image', 'ldscript', 'linkermap'],
                         asmoffsets      = 'asm-offsets.c',
-                        ramfs_source    = 'ramfs_image.c',
+                        ramfs_image     = 'ramfs-image',
                         ldscript        = 'kernel/kernel.ldscript')
 
 """
@@ -207,28 +212,44 @@ def discover_fs_builder_inputs(taskgen):
     target = taskgen.path.find_or_declare(taskgen.target)
 
     # Create task, set up its environment
-    task = taskgen.create_task('fs_builder', prognodes, target)
-    task.env.FS_BUILDER = fsbuilder_link_task.outputs[0].abspath()
+    ramfs_task = taskgen.create_task('fs_builder', prognodes, target)
+    ramfs_task.env.FS_BUILDER = fsbuilder_link_task.outputs[0].abspath()
 
     # Patch up dependencies
-    task.set_run_after(fsbuilder_link_task)
+    ramfs_task.set_run_after(fsbuilder_link_task)
     taskgen.bld.add_manual_dependency(target, fsbuilder_link_task.outputs[0])
 
     # Save reference to the task
-    taskgen.fs_builder_task = task
+    taskgen.fs_builder_task = ramfs_task
 
 class fs_builder(Task.Task):
-    run_str = '${FS_BUILDER} -o ${TGT} -n RamFsImage ${SRC}'
+    run_str = '${FS_BUILDER} -o ${TGT} ${SRC}'
 
 """
 Append the source emitted by a ram filesystem builder, to the inputs
 of a regular C/C++ compiled program
 """
-@feature('ramfs_source')
+@feature('ramfs_image')
 @before_method('process_source')
 def add_ramfs_sources(taskgen):
-    built_source = taskgen.bld.get_tgen_by_name(taskgen.ramfs_source).fs_builder_task.outputs[0]
-    taskgen.source.append(built_source)
+    ramfs_image = taskgen.bld.get_tgen_by_name(taskgen.ramfs_image).fs_builder_task.outputs[0]
+    elf_container = ramfs_image.parent.find_or_declare("%s.%d.o" % (ramfs_image.name, taskgen.idx))
+
+    elf_task = taskgen.create_task('elf_encapsulate', ramfs_image, elf_container)
+
+    # Objcopy names the ELF section encapsulating the source binary
+    # data as '.data' by default. We'll translate that into a more
+    # meaningful section name.
+    elf_task.env['RENAME_SECTION_ST'] = ['--rename-section', '.data=.ramfs']
+
+    # We can directly append the .o ELF file to the sources of the
+    # kernel. Waf is smart enough to automatically include object
+    # files declared as sources, into the link. See the 'fake_o'
+    # task over in ccroot.py.
+    taskgen.source.append(elf_container)
+
+class elf_encapsulate(Task.Task):
+    run_str = '${OBJCOPY} -I binary -O elf32-littlearm -B arm ${RENAME_SECTION_ST} ${SRC} ${TGT}'
 
 """
 Add a given linker script to the LINKFLAGS and update dependencies so that

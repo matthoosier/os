@@ -60,6 +60,9 @@ SECTIONS
         {
             *(.data .data.*)
             *(.rodata .rodata.*)
+            PROVIDE_HIDDEN(__RamFsStart = .);
+            *(.ramfs)
+            PROVIDE_HIDDEN(__RamFsEnd = .);
         }
 
     .init_array :
