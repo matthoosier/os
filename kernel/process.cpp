@@ -35,7 +35,6 @@ SyncSlabAllocator<Process> Process::sSlab;
 
 Process::Process (char const aComm[], Process * aParent)
     : mAddressSpace(new AddressSpace())
-    , entry(0)
     , thread(NULL)
     , next_chid(FIRST_CHANNEL_ID)
     , next_coid(FIRST_CONNECTION_ID)
@@ -234,8 +233,6 @@ Process * Process::execIntoCurrent (const char executableName[],
     // Okay, now it's safe to use the translation table.
     TranslationTable::SetUser(*p->mAddressSpace->GetPageTable());
 
-    p->entry = hdr->e_entry;
-
     for (i = 0; i < hdr->e_phnum; i++) {
         const Elf32_Phdr * phdr;
 
@@ -280,6 +277,17 @@ Process * Process::execIntoCurrent (const char executableName[],
             }
         }
     }
+
+    /* Make a stack */
+    VmAddr_t stack_floor;
+    size_t stack_length;
+
+    if (!p->mAddressSpace->CreateStack(PAGE_SIZE * 4, stack_floor, stack_length)) {
+        goto free_process;
+    }
+
+    p->thread->u_reg[REGISTER_INDEX_SP] = stack_floor + stack_length;
+    p->thread->u_reg[REGISTER_INDEX_PC] = hdr->e_entry;
 
     /* Establish the connection to the Process Manager's single channel. */
     procmgr = Lookup(PROCMGR_PID);
@@ -346,23 +354,20 @@ void Process::UserProcessThreadBody (void * pProcessCreationContext)
 
         /* Jump to user mode (SPSR becomes the user-mode CPSR */
         asm volatile(
+            /* Stack pointer requires gymnastics */
+            "stmfd sp!, {%[user_sp]}    \n\t"
+            "ldmfd sp, {sp}^            \n\t"
+            "nop                        \n\t"
+            "add sp, sp, #4             \n\t"
+
+            /* PC is inserted into LR for use in MOVS (below) */
             "mov lr, %[user_pc]     \n\t"
-            "mov r0, #0             \n\t"
-            "mov r1, #0             \n\t"
-            "mov r2, #0             \n\t"
-            "mov r3, #0             \n\t"
-            "mov r4, #0             \n\t"
-            "mov r5, #0             \n\t"
-            "mov r6, #0             \n\t"
-            "mov r7, #0             \n\t"
-            "mov r8, #0             \n\t"
-            "mov r9, #0             \n\t"
-            "mov r10, #0            \n\t"
-            "mov r11, #0            \n\t"
-            "mov r12, #0            \n\t"
+
+            /* Jump off the cliff */
             "movs pc, lr            \n\t"
             :
-            : [user_pc] "r" (p->entry)
+            : [user_pc] "r" (p->thread->u_reg[REGISTER_INDEX_PC]),
+              [user_sp] "r" (p->thread->u_reg[REGISTER_INDEX_SP])
         );
 
         /* Unreachable */

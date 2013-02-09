@@ -229,6 +229,13 @@ public:
     bool CreateBackedMapping (VmAddr_t aVirtualAddress, size_t aLength);
 
     /**
+     * Allocate a stack
+     */
+    bool CreateStack (size_t aLength,
+                      VmAddr_t & aBaseAddress,
+                      size_t & aAdjustedLength);
+
+    /**
      * Insert some peripheral memory into the indicated address
      * range of virtual memory
      */

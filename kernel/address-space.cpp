@@ -319,6 +319,39 @@ bool AddressSpace::CreatePhysicalMapping (PhysAddr_t aPhysicalAddress,
     }
 }
 
+bool AddressSpace::CreateStack (size_t aLength,
+                                VmAddr_t & aBaseAddress,
+                                size_t & aAdjustedLength)
+{
+    RefPtr<VmArea> area;
+    BackedMapping * map;
+
+    size_t actual_len = Math::RoundUp(aLength, PAGE_SIZE);
+
+    if (mStacksNextBase + actual_len > mStacksCeiling) {
+        return false;
+    }
+
+    try {
+        area.Reset(new VmArea(actual_len));
+        map = new BackedMapping(mStacksNextBase, PROT_USER_READWRITE, area);
+    }
+    catch (std::bad_alloc) {
+        delete map;
+        return false;
+    }
+
+    if (!map->Map(mPageTable)) {
+        delete map;
+        return false;
+    }
+
+    aBaseAddress = mStacksNextBase;
+    aAdjustedLength = actual_len;
+    mStacksNextBase += actual_len;
+    return true;
+}
+
 bool AddressSpace::ExtendHeap (size_t aAdditionalLength,
                                VmAddr_t & aOldEnd,
                                VmAddr_t & aNewEnd)

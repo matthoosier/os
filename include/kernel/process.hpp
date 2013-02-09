@@ -243,12 +243,6 @@ private:
     ScopedPtr<AddressSpace> mAddressSpace;
 
     /**
-     * \brief   Initial program counter for the program image loaded
-     *          into this process
-     */
-    VmAddr_t entry;
-
-    /**
      * \brief   Descriptive name of this process
      */
     char comm[16];

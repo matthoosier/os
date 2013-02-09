@@ -4,8 +4,6 @@
 void _start (void) __attribute__((naked));
 void sling (void);
 
-uint8_t stack[4096] __attribute__((aligned(4096))) = { 0 };
-
 typedef void (*VoidFunc) (void);
 
 void sling (void) {
@@ -36,13 +34,12 @@ void sling (void) {
 
 void _start (void) {
     asm volatile(
-        "ldr sp, =stack     \n"
-        "add sp, sp, %[sz]  \n"
         "ldr v1, =sling     \n"
         "blx v1             \n"
         "0: b 0b            \n"
         :
-        : [sz] "i" (sizeof(stack))
+        :
+        : "v1" /* clobber list */
     );
 }
 
