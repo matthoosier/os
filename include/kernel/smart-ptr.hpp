@@ -1,11 +1,8 @@
 #ifndef __SMART_PTR_HPP__
 #define __SMART_PTR_HPP__
 
-#ifdef __KERNEL__
-#   include <kernel/assert.h>
-#else
-#   include <assert.h>
-#endif
+#include <kernel/assert.h>
+#include <muos/atomic.h>
 
 #include <kernel/list.hpp>
 
@@ -111,11 +108,11 @@ protected:
 
     // Prototype only because the full signature of RefCounted is
     // required to implement this method
-    inline unsigned int IncrementReference (RefCounted & countee);
+    inline int IncrementReference (RefCounted & countee);
 
     // Prototype only because the full signature of RefCounted is
     // required to implement this method
-    inline unsigned int DecrementReference (RefCounted & countee);
+    inline int DecrementReference (RefCounted & countee);
 };
 
 /**
@@ -217,9 +214,13 @@ template <class T>
         {
             if (mPointee)
             {
-                unsigned int newCount = DecrementReference(*mPointee);
+                int newCount = DecrementReference(*mPointee);
 
-                if (newCount < 1)
+                if (newCount < 0)
+                {
+                    assert(false);
+                }
+                else if (newCount < 1)
                 {
                     delete mPointee;
                 }
@@ -375,8 +376,9 @@ public:
      * \return  The the number of references after the increment
      *          finishes.
      */
-    unsigned int Ref ()
+    int Ref ()
     {
+        return AtomicAddAndFetch(&mRefCount, 1);
         return ++mRefCount;
     }
 
@@ -387,21 +389,22 @@ public:
      * \return  The the number of references after the decrement
      *          finishes.
      */
-    unsigned int Unref ()
+    int Unref ()
     {
+        return AtomicSubAndFetch(&mRefCount, 1);
         return --mRefCount;
     }
 
 private:
-    unsigned int mRefCount;
+    int mRefCount;
 };
 
-inline unsigned int RefPtrBase::IncrementReference (RefCounted & countee)
+inline int RefPtrBase::IncrementReference (RefCounted & countee)
 {
     return countee.Ref();
 }
 
-inline unsigned int RefPtrBase::DecrementReference (RefCounted & countee)
+inline int RefPtrBase::DecrementReference (RefCounted & countee)
 {
     return countee.Unref();
 }
