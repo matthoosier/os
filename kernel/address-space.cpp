@@ -337,7 +337,6 @@ bool AddressSpace::CreateStack (size_t aLength,
         map = new BackedMapping(mStacksNextBase, PROT_USER_READWRITE, area);
     }
     catch (std::bad_alloc) {
-        delete map;
         return false;
     }
 

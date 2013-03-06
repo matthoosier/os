@@ -524,6 +524,7 @@ void Process::ManagerThreadBody (void * pProcessCreationContext)
         p->mAddressSpace.Reset();
     } catch (std::bad_alloc a) {
         assert(false);
+        return;
     }
 
     /* Allocate, assign, and record Pid */

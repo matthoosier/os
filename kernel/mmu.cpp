@@ -98,6 +98,11 @@ static inline unsigned int ap_from_prot (Prot_t prot)
         case PROT_USER_READWRITE:
             val = PT_FIRSTLEVEL_SECTION_AP_FULL;
             break;
+
+        default:
+            assert(false);
+            val = PT_FIRSTLEVEL_SECTION_AP_NONE;
+            break;
     }
 
     return (val & PT_FIRSTLEVEL_SECTION_AP_MASK) >> PT_FIRSTLEVEL_SECTION_AP_SHIFT;
@@ -725,6 +730,8 @@ ssize_t TranslationTable::CopyWithAddressSpaces (
 
                 default:
                     src_access = false;
+                    src_valid_len = dst_valid_len = 0;
+                    src_phys = 0;
                     break;
             }
 

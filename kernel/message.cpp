@@ -460,6 +460,7 @@ ssize_t Channel::ReceiveMessage (
         context.Reset();
     }
     else {
+        num_copied = 0;
         assert(false);
     }
 
